@@ -1,0 +1,2389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Desenhar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webm-muxer@3.0.1/build/webm-muxer.js"></script>
+    <style>
+        :root {
+            --bg-dark: #181818;
+            --panel-bg: #222222;
+            --text-light: #ffffff;
+            --active-blue: #007aff;
+            --border-color: #333333;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden; /* Remove barras de rolagem */
+            display: flex;
+            flex-direction: column;
+            touch-action: none; /* Evita gestos nativos do navegador */
+        }
+
+        /* --- NAVBAR SUPERIOR --- */
+        .top-bar {
+            height: 50px;
+            background-color: var(--panel-bg);
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 0 10px;
+            gap: 10px;
+            z-index: 1000;
+            overflow: visible; /* Garante que os menus suspensos não sejam cortados no tablet */
+        }
+
+        .top-left, .top-right {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .top-right {
+            margin-left: auto;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 8px;
+            transition: 0.2s;
+        }
+
+        .icon-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .icon-btn.active { color: var(--active-blue); }
+
+        .logo-menu {
+            font-family: 'Dancing Script', cursive;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .color-picker-wrapper {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            display: inline-block;
+            cursor: pointer;
+            position: relative;
+        }
+
+        /* --- SELETOR PROCREATE STYLE --- */
+        #colorPanel {
+            display: none;
+            position: absolute;
+            top: 45px;
+            right: 0;
+            background: #2a2a2a;
+            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            z-index: 2000;
+            flex-direction: column;
+            gap: 12px;
+            border: 1px solid #444;
+            width: 224px;
+        }
+        #colorPanel.show { display: flex; }
+
+        #sbSquare {
+            width: 200px;
+            height: 200px;
+            background: red;
+            position: relative;
+            cursor: crosshair;
+            border-radius: 4px;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .sb-white { position: absolute; inset: 0; background: linear-gradient(to right, #fff, transparent); }
+        .sb-black { position: absolute; inset: 0; background: linear-gradient(to top, #000, transparent); }
+        #sbCursor {
+            position: absolute;
+            width: 12px; height: 12px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        #hueSliderCustom {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%; height: 12px; border-radius: 6px;
+            background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+            outline: none; cursor: pointer;
+        }
+        #hueSliderCustom::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 18px; height: 18px;
+            appearance: none;
+            border-radius: 50%; background: #fff; border: 2px solid #222;
+        }
+
+        #nativeColorPicker {
+            width: 200%;
+            height: 200%;
+            transform: translate(-25%, -25%);
+            cursor: pointer;
+            border: none;
+            padding: 0;
+        }
+
+        /* --- SISTEMA DE CAMADAS --- */
+        .layers-menu {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .layers-dropdown {
+            display: none;
+            position: absolute;
+            top: 45px;
+            right: 0;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1001;
+            min-width: 150px;
+        }
+        .layers-dropdown.show { display: flex; }
+        .layer-item {
+            padding: 8px;
+            background: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .layer-item.active { background: var(--active-blue); color: white; }
+        #soloModeBtn.active { background: #ff9500; color: white; }
+
+        /* --- ÁREA DE TRABALHO --- */
+        .workspace {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center; /* Centraliza o canvas */
+            align-items: center;
+            background-color: #121212;
+            overflow: hidden;
+            padding: 10px; /* Ajustado para telas menores */
+        }
+
+        /* Sliders Laterais (Procreate Style) */
+        .sidebar-left {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 10;
+            background: rgba(34, 34, 34, 0.8);
+            padding: 20px 10px;
+            border-radius: 20px;
+            pointer-events: none; /* Permite que cliques passem através da área vazia da barra */
+            backdrop-filter: blur(5px);
+            margin-right: 20px; /* Garante que a folha não encoste nos sliders */
+        }
+
+        .presets-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 120px;
+            margin-right: 6px;
+        }
+
+        .preset-dot {
+            width: 6px;
+            height: 6px;
+            background: #444;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: 0.2s;
+            border: 1px solid #666;
+        }
+
+        .preset-dot:hover {
+            background: var(--active-blue);
+            transform: scale(1.5);
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+        }
+
+        .slider-value {
+            font-size: 10px;
+            color: var(--active-blue);
+            font-weight: bold;
+            margin-bottom: -2px;
+        }
+
+        .sidebar-left > * {
+            pointer-events: auto; /* Reativa interação para os sliders e botões */
+        }
+
+        .sidebar-left input[type="range"] {
+            writing-mode: bt-lr; /* IE */
+            -webkit-appearance: slider-vertical; /* WebKit */
+            appearance: slider-vertical;
+            width: 8px;
+            height: 120px;
+            cursor: pointer;
+        }
+
+        /* Controle de FPS na Top Bar */
+        .fps-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #888;
+            margin-left: 10px;
+            padding-left: 15px;
+            border-left: 1px solid var(--border-color);
+        }
+
+        #fpsSlider { cursor: pointer; width: 80px; }
+
+        /* Ajustes de Responsividade para Tablet/Telas menores */
+        @media (max-width: 1100px) {
+            .top-bar {
+                padding: 0 8px;
+                gap: 5px;
+            }
+            .top-left, .top-right {
+                gap: 5px;
+            }
+            .fps-control, .onion-control, .bucket-control {
+                padding-left: 8px;
+                margin-left: 0;
+                gap: 5px;
+                font-size: 11px;
+            }
+            #fpsSlider, #onionOpacitySlider, #bucketToleranceSlider {
+                width: 45px; /* Sliders mais curtos para economizar espaço */
+            }
+            .icon-btn { padding: 5px 3px; font-size: 18px; }
+        }
+
+        /* Destaque para o botão de seleção */
+        #selectionBtn.active { color: #ffcc00; text-shadow: 0 0 5px rgba(255,204,0,0.5); }
+        #perspectiveBtn.active { color: #ff3b30; text-shadow: 0 0 5px rgba(255,59,48,0.5); }
+        #bucketBtn { color: #ff3b30; }
+        #bucketBtn.active { background: rgba(255, 255, 255, 0.15); box-shadow: 0 0 12px rgba(255, 59, 48, 0.5); }
+        #eraserBtn.active { color: inherit; background: rgba(255, 255, 255, 0.15); box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); }
+        .selection-active { cursor: move !important; }
+
+        /* Controle de Onion Skin */
+        .onion-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #888;
+            margin-left: 10px;
+            padding-left: 15px;
+            border-left: 1px solid var(--border-color);
+        }
+        #onionOpacitySlider { cursor: pointer; width: 60px; }
+
+        /* Controle do Balde de Tinta */
+        .bucket-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #888;
+            margin-left: 10px;
+            padding-left: 15px;
+            border-left: 1px solid var(--border-color);
+        }
+        #bucketToleranceSlider { cursor: pointer; width: 60px; }
+
+        /* Controle de Background */
+        .menu-container { position: relative; display: flex; align-items: center; }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            top: 40px;
+            left: 0;
+            background-color: var(--panel-bg);
+            min-width: 160px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 1000;
+            overflow: hidden;
+        }
+        .dropdown-content.show { display: flex; flex-direction: column; }
+        .dropdown-content a {
+            padding: 12px 15px;
+            color: #ddd;
+            text-decoration: none;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .dropdown-content a:hover { background-color: #333; color: #fff; }
+
+        .bg-control {
+            display: flex;
+            align-items: center;
+        }
+
+        /* Container do Canvas */
+        .canvas-container {
+            width: 100%;
+            height: auto;
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 16 / 9;
+            background-color: #ffffff; /* Fundo do papel */
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            position: relative;
+            border-radius: 4px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+
+        #bgCanvas { z-index: 0; pointer-events: none; }
+        .layer-canvas { pointer-events: none; }
+        #layer0 { z-index: 1; }
+        #layer1 { z-index: 2; }
+        #layer2 { z-index: 3; }
+        #onionCanvas { opacity: 0.35; pointer-events: none; z-index: 10; }
+        #uiCanvas { pointer-events: none; z-index: 20; }
+        #mainCanvas { pointer-events: auto; } /* Z-index definido via JS para respeitar a ordem das camadas */
+        #playbackCanvas { display: none; z-index: 100; pointer-events: none; background: white; }
+        #drawingCanvas { display: none; } 
+
+        /* --- ANIMATION ASSIST (RODAPÉ) --- */
+        .bottom-bar {
+            height: 80px;
+            background-color: var(--panel-bg);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 15px;
+            z-index: 10;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .play-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 10px;
+        }
+
+        .timeline-container {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            height: 100%;
+            align-items: center;
+            padding-right: 20px;
+        }
+
+        .timeline-container::-webkit-scrollbar { height: 6px; }
+        .timeline-container::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+
+        .frame-thumb {
+            width: 60px;
+            height: 45px;
+            background-color: #fff;
+            border-radius: 4px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            flex-shrink: 0;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+
+        /* Botão de Deletar Frame */
+        .delete-frame-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #ff3b30;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            z-index: 5;
+        }
+        .frame-thumb:hover .delete-frame-btn { display: flex; }
+
+        /* Controles de Duração */
+        .duration-badge {
+            position: absolute;
+            bottom: 2px;
+            left: 2px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .duration-controls {
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            opacity: 0;
+            transition: 0.2s;
+            pointer-events: none;
+        }
+        .frame-thumb:hover .duration-controls, .frame-thumb:active .duration-controls { 
+            opacity: 1; 
+            bottom: 2px; 
+            pointer-events: auto; 
+        }
+        .dur-btn { 
+            background: var(--active-blue); 
+            border: 1px solid rgba(255,255,255,0.3); 
+            color: white; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            width: 24px; 
+            height: 24px; 
+            font-size: 16px; 
+            font-weight: bold;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .frame-thumb.active { border-color: var(--active-blue); }
+        .add-frame-btn {
+            width: 60px;
+            height: 45px;
+            background-color: #333;
+            color: #fff;
+            border: 2px dashed #666;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .add-frame-btn:hover { background-color: #444; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div class="top-left">
+            <div class="menu-container">
+                <span class="logo-menu" title="Menu" id="menuBtn">☰</span>
+                <div class="dropdown-content" id="menuDropdown">
+                    <a href="#" id="importImgMenu">Importar Imagem</a>
+                    <hr style="border: 0; border-top: 1px solid var(--border-color);">
+                    <a href="#" id="exportImgBackgroundMenu">Exportar Frames</a>
+                    <a href="#" id="exportImgTransparentMenu">Exportar Frames (Transparente)</a>
+                    <a href="#" id="exportPngSequenceMenu">Exportar Seq. PNG (Transparente)</a>
+                    <a href="#" id="exportVideoMenu">Exportar Vídeo</a>
+                    <a href="#" id="exportVideoTransparentMenu">Exportar Vídeo (Transparente)</a>
+                    <hr style="border: 0; border-top: 1px solid var(--border-color);">
+                    <a href="#" id="saveProjectMenu">Salvar Projeto</a>
+                    <a href="#" id="loadProjectMenu">Carregar Projeto</a>
+                </div>
+            </div>
+            <input type="file" id="importInput" accept="image/*" style="display: none;">
+            <input type="file" id="projectInput" accept=".json" style="display: none;">
+            <div class="fps-control">
+                <span>FPS: <span id="fpsValue">12</span></span>
+                <input type="range" id="fpsSlider" min="1" max="24" value="12">
+            </div>
+            <div class="onion-control">
+                <span>Onion <input type="checkbox" id="onionToggle" checked></span>
+                <input type="range" id="onionOpacitySlider" min="0" max="100" value="35">
+            </div>
+            <div class="bucket-control">
+                <button class="icon-btn" id="bucketBtn" title="Balde de Tinta">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" style="vertical-align: middle;">
+                        <path d="M19 11L11 3L2.4 11.6C1.6 12.4 1.6 13.6 2.4 14.4L7.6 19.6C8.4 20.4 9.6 20.4 10.4 19.6L19 11ZM17.6 11L11 17.6L4.4 11L11 4.4L17.6 11Z"/>
+                        <path d="M21 19C21 20.1 20.1 21 19 21C17.9 21 17 20.1 17 19C17 17.4 19 16 19 16C19 16 21 17.4 21 19Z"/>
+                    </svg>
+                </button>
+                <input type="range" id="bucketToleranceSlider" min="0" max="100" value="50" title="Tolerância">
+            </div>
+            <button class="icon-btn" id="selectionBtn" title="Seleção Lasso">◌</button>
+            <button class="icon-btn" id="selectAllBtn" title="Selecionar Tudo">⛶</button>
+            <button class="icon-btn" id="perspectiveBtn" title="Perspectiva">📐</button>
+            <button class="icon-btn" id="flipHBtn" title="Inverter Horizontal">↔️</button>
+            <button class="icon-btn" id="flipVBtn" title="Inverter Vertical">↕️</button>
+            <button class="icon-btn" id="copyBtn" title="Copiar">📑</button>
+            <button class="icon-btn" id="cutBtn" title="Recortar">✂️</button>
+            <button class="icon-btn" id="pasteBtn" title="Colar">📋</button>
+            <button class="icon-btn" id="undoBtn" title="Desfazer">↺</button>
+            <button class="icon-btn" id="redoBtn" title="Refazer">↻</button>
+            <button class="icon-btn" id="clearBtn" title="Limpar Canvas">🗑️</button>
+        </div>
+        <div class="top-right">
+            <div class="layers-menu">
+                <button class="icon-btn" id="layersBtn" title="Camadas">≡</button>
+                <div class="layers-dropdown" id="layersDropdown">
+                    <div style="font-size: 10px; color: #888; margin-bottom: 5px;">CAMADAS DO FRAME</div>
+                    <div class="layer-item" onclick="switchLayer(2)">Frente <span id="l2-stat"></span></div>
+                    <div class="layer-item active" onclick="switchLayer(1)">Meio <span id="l1-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(0)">Atrás <span id="l0-stat"></span></div>
+                    <button class="icon-btn" id="soloModeBtn" title="Modo Solo (Melhora Performance)" style="font-size: 10px; width: 100%; margin-top: 5px; border: 1px solid #444;">MODO SOLO: OFF</button>
+                </div>
+            </div>
+            <button class="icon-btn" id="eyedropperBtn" title="Conta-gotas">💧</button>
+            <div class="color-picker-wrapper" id="colorIndicator" title="Cor" style="background-color: #000000;">
+                <div id="colorPanel">
+                    <div id="sbSquare">
+                        <div class="sb-white"></div>
+                        <div class="sb-black"></div>
+                        <div id="sbCursor"></div>
+                    </div>
+                    <input type="range" id="hueSliderCustom" min="0" max="360" value="0">
+                </div>
+                <input type="color" id="nativeColorPicker" value="#000000" style="opacity: 0; position: absolute; pointer-events: none;">
+            </div>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <div class="sidebar-left">
+            <div class="slider-container" title="Tamanho do Pincel">
+                <div style="display: flex; align-items: center; gap: 5px; transform: translateX(6px);">
+                    <span class="slider-value" id="sizeValDisplay">3</span>
+                    <button onclick="setBrushSize(3)" style="background: none; border: none; color: #666; cursor: pointer; font-size: 14px; padding: 0; line-height: 1; transition: 0.2s;" onmouseover="this.style.color='#007aff'" onmouseout="this.style.color='#666'" title="Resetar Tamanho (3px)">↺</button>
+                </div>
+                <div class="slider-row">
+                    <div class="presets-container">
+                        <div class="preset-dot" title="5px" onclick="setBrushSize(5)"></div>
+                        <div class="preset-dot" title="15px" onclick="setBrushSize(15)"></div>
+                        <div class="preset-dot" title="30px" onclick="setBrushSize(30)"></div>
+                        <div class="preset-dot" title="60px" onclick="setBrushSize(60)"></div>
+                    </div>
+                    <input type="range" id="brushSize" min="1" max="100" value="3">
+                </div>
+                <span>Tam</span>
+            </div>
+
+            <button class="icon-btn active" id="brushBtn" title="Pincel">🖊️</button>
+            <button class="icon-btn" id="eraserBtn" title="Borracha">
+                <svg viewBox="0 0 24 24" width="22" height="22" style="vertical-align: middle; transform: rotate(-20deg);">
+                    <path d="M2 16L5 6H13L10 16H2Z" fill="#ff4d6d" stroke="#fff" stroke-width="1.2" stroke-linejoin="round" /> <!-- Lado Rosa/Vermelho -->
+                    <path d="M10 16L13 6H21L18 16H10Z" fill="#2b5a91" stroke="#fff" stroke-width="1.2" stroke-linejoin="round" /> <!-- Lado Azul -->
+                </svg>
+            </button>
+
+            <div class="slider-container" title="Opacidade do Pincel">
+                <span class="slider-value" id="opacityValDisplay">100%</span>
+                <div class="slider-row">
+                    <input type="range" id="brushOpacity" min="1" max="100" value="100">
+                </div>
+                <span>Opac</span>
+            </div>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="bgCanvas" width="1920" height="1080"></canvas>
+            <canvas id="layer0" class="layer-canvas" width="1920" height="1080"></canvas>
+            <canvas id="layer1" class="layer-canvas" width="1920" height="1080"></canvas>
+            <canvas id="layer2" class="layer-canvas" width="1920" height="1080"></canvas>
+            <canvas id="onionCanvas" width="1920" height="1080"></canvas>
+            <canvas id="uiCanvas" width="1920" height="1080"></canvas>
+            <canvas id="mainCanvas" width="1920" height="1080"></canvas>
+            <canvas id="playbackCanvas" width="1920" height="1080"></canvas>
+            <canvas id="drawingCanvas" width="1920" height="1080"></canvas>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <div class="bg-control">
+            <button class="play-btn" id="bgImgBtn" title="Imagem de Fundo">🖼️</button>
+            <button class="play-btn" id="clearBgBtn" title="Remover Fundo" style="font-size: 14px; margin-left: -15px; opacity: 0.6; padding: 5px; color: #ff3b30;">✕</button>
+            <input type="file" id="bgInput" accept="image/*" style="display: none;">
+        </div>
+        <div id="frameCounterDisplay" style="font-size: 11px; color: #888; min-width: 45px; text-align: center; font-family: monospace;">1/1</div>
+        <button class="add-frame-btn" id="addFrameBtn">+</button>
+        <button class="add-frame-btn" id="duplicateFrameBtn" title="Duplicar Quadro">📑+</button>
+        <button class="play-btn" id="playBtn">▶️</button>
+        <button class="play-btn" id="stopBtn" style="display:none; color: #ff3b30;">⏸️</button>
+        
+        <div class="timeline-container" id="timeline">
+            </div>
+    </div>
+
+    <script>
+        const mainCanvas = document.getElementById('mainCanvas');
+        const ctx = mainCanvas.getContext('2d', { desynchronized: false });
+        const onionCanvas = document.getElementById('onionCanvas');
+        const onionCtx = onionCanvas.getContext('2d');
+        const uiCanvas = document.getElementById('uiCanvas');
+        const uiCtx = uiCanvas.getContext('2d');
+        const playbackCanvas = document.getElementById('playbackCanvas');
+        const pCtx = playbackCanvas.getContext('2d');
+        const drawingCanvas = document.getElementById('drawingCanvas');
+        const colorIndicator = document.getElementById('colorIndicator');
+        const colorPanel = document.getElementById('colorPanel');
+        const sbSquare = document.getElementById('sbSquare');
+        const sbCursor = document.getElementById('sbCursor');
+        const hueSliderCustom = document.getElementById('hueSliderCustom');
+        const nativeColorPicker = document.getElementById('nativeColorPicker');
+        const dCtx = drawingCanvas.getContext('2d');
+        const selectionCanvas = document.createElement('canvas'); // Canvas temporário para a seleção
+        const workspace = document.querySelector('.workspace');
+        const bgCanvas = document.getElementById('bgCanvas');
+        const bgCtx = bgCanvas.getContext('2d');
+        const bgInput = document.getElementById('bgInput');
+        const clearBgBtn = document.getElementById('clearBgBtn');
+        const bgImgBtn = document.getElementById('bgImgBtn');
+        const snapshotCanvas = document.createElement('canvas'); // Foto do frame no início do traço
+        const snapCtx = snapshotCanvas.getContext('2d');
+        
+        // Função para exibir avisos sem bloquear a tela
+        function showNotification(msg) {
+            const notification = document.createElement('div');
+            notification.textContent = msg;
+            notification.style.position = 'fixed';
+            notification.style.bottom = '100px';
+            notification.style.left = '50%';
+            notification.style.transform = 'translateX(-50%)';
+            notification.style.background = 'rgba(0,0,0,0.85)';
+            notification.style.color = '#fff';
+            notification.style.padding = '10px 20px';
+            notification.style.borderRadius = '30px';
+            notification.style.zIndex = '3000';
+            notification.style.pointerEvents = 'none';
+            notification.style.fontSize = '14px';
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.style.transition = 'opacity 0.5s';
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 500);
+            }, 2500);
+        }
+
+        const menuBtn = document.getElementById('menuBtn');
+        const menuDropdown = document.getElementById('menuDropdown');
+        const importInput = document.getElementById('importInput');
+        const importImgMenu = document.getElementById('importImgMenu');
+        const exportPngSequenceMenu = document.getElementById('exportPngSequenceMenu');
+        const exportImgTransparentMenu = document.getElementById('exportImgTransparentMenu');
+        const exportImgBackgroundMenu = document.getElementById('exportImgBackgroundMenu');
+        const exportVideoMenu = document.getElementById('exportVideoMenu');
+        const exportVideoTransparentMenu = document.getElementById('exportVideoTransparentMenu');
+        const saveProjectMenu = document.getElementById('saveProjectMenu');
+        const loadProjectMenu = document.getElementById('loadProjectMenu');
+        const projectInput = document.getElementById('projectInput');
+
+        const bucketToleranceSlider = document.getElementById('bucketToleranceSlider');
+        const layersBtn = document.getElementById('layersBtn');
+        const layersDropdown = document.getElementById('layersDropdown');
+        
+        const sCtx = selectionCanvas.getContext('2d');
+        const timeline = document.getElementById('timeline');
+        const onionToggle = document.getElementById('onionToggle');
+        const onionOpacitySlider = document.getElementById('onionOpacitySlider');
+
+        // Estrutura: frames = [{ layers: [Bitmap/null, Bitmap/null, Bitmap/null] }, ...]
+        let frames = [{ layers: [null, null, null], duration: 1 }]; 
+        let currentFrameIndex = 0;
+        let activeLayerIndex = 1;
+        let undoStack = [];
+        let redoStack = [];
+        let isHistoryAction = false;
+        let soloMode = false;
+
+        // --- CONTROLE DE COR PERSONALIZADO ---
+        let curH = 0, curS = 100, curV = 0;
+        let cachedColor = "#000000";
+
+        function rgbToHex(r, g, b) {
+            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+
+        function updateColorFromHSV() {
+            const rgb = hsvToRgb(curH / 360, curS / 100, curV / 100);
+            const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+            
+            cachedColor = hex;
+            colorIndicator.style.backgroundColor = hex;
+            nativeColorPicker.value = hex;
+            sbSquare.style.backgroundColor = `hsl(${curH}, 100%, 50%)`;
+            
+            sbCursor.style.left = curS + '%';
+            sbCursor.style.top = (100 - curV) + '%';
+        }
+        updateColorFromHSV();
+
+        function hsvToRgb(h, s, v) {
+            let r, g, b, i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+            switch (i % 6) {
+                case 0: r = v, g = t, b = p; break;
+                case 1: r = q, g = v, b = p; break;
+                case 2: r = p, g = v, b = t; break;
+                case 3: r = p, g = q, b = v; break;
+                case 4: r = t, g = p, b = v; break;
+                case 5: r = v, g = p, b = q; break;
+            }
+            return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+        }
+
+        function rgbToHsv(r, g, b) {
+            r /= 255, g /= 255, b /= 255;
+            let max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, h, s = (max === 0 ? 0 : d / max), v = max;
+            if (max == min) h = 0;
+            else {
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return { h: h * 360, s: s * 100, v: v * 100 };
+        }
+
+        function handleSBSquare(e) {
+            if (!isDrawingColor && e.type !== 'pointerdown') return;
+            const rect = sbSquare.getBoundingClientRect();
+            
+            // Calcula posição relativa e limita entre 0 e 100%
+            let x = ((e.clientX - rect.left) / rect.width) * 100;
+            let y = ((e.clientY - rect.top) / rect.height) * 100;
+            
+            curS = Math.max(0, Math.min(100, x));
+            curV = Math.max(0, Math.min(100, 100 - y));
+            
+            updateColorFromHSV();
+        }
+
+        let isDrawingColor = false;
+
+        colorIndicator.onclick = (e) => {
+            // Abre/fecha se clicar no círculo, mas não fecha se clicar dentro do painel
+            if (e.target === colorIndicator) {
+                colorPanel.classList.toggle('show');
+            }
+        };
+        
+        // Impede que cliques dentro do painel fechem o próprio painel
+        colorPanel.onclick = (e) => e.stopPropagation();
+
+        hueSliderCustom.addEventListener('input', (e) => {
+            curH = parseFloat(e.target.value);
+            updateColorFromHSV();
+        });
+
+        sbSquare.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); // Importante para touch
+            isDrawingColor = true;
+            sbSquare.setPointerCapture(e.pointerId);
+            handleSBSquare(e);
+        });
+
+        sbSquare.addEventListener('pointermove', (e) => {
+            if (isDrawingColor) handleSBSquare(e);
+        });
+        
+        sbSquare.addEventListener('pointerup', (e) => {
+            isDrawingColor = false;
+            sbSquare.releasePointerCapture(e.pointerId);
+        });
+        sbSquare.addEventListener('pointercancel', () => isDrawingColor = false);
+
+        // Função para sincronizar o seletor visual quando a cor muda externamente (ex: conta-gotas)
+        function syncCustomPicker(hex) {
+            const rgb = hexToRgb(hex);
+            const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+            curH = hsv.h; curS = hsv.s; curV = hsv.v;
+            hueSliderCustom.value = curH;
+            updateColorFromHSV();
+        }
+
+        const originalSample = sampleColor;
+        sampleColor = (x, y) => {
+            originalSample(x, y);
+            syncCustomPicker(nativeColorPicker.value);
+        };
+
+        let isDrawing = false;
+        let lastX = 0, lastY = 0;
+        let lastMidX = 0, lastMidY = 0;
+        let isPlaying = false;
+        let playInterval;
+        let fps = 12;
+        let currentTool = 'brush'; // 'brush' ou 'eraser'
+        
+        // Cache de configurações para performance
+        let cachedSize = 3;
+        let cachedOpacity = 100;
+
+        // Estado da Seleção
+        let clipboardCanvas = null;
+        let clipboardBox = null;
+        let clipboardCorners = null;
+        let selectionPath = [];
+        let isTransforming = false;
+        let selectionImage = null; // Canvas contendo apenas a área recortada
+        let selectionBox = { x: 0, y: 0, w: 0, h: 0, angle: 0, scale: 1 };
+        let selectionCorners = []; // Para perspectiva [tl, tr, br, bl]
+        let transformMode = null; // 'move', 'rotate', 'scale'
+        let dragStart = { x: 0, y: 0 };
+
+        // Ferramentas UI
+        const brushBtn = document.getElementById('brushBtn');
+        const eraserBtn = document.getElementById('eraserBtn');
+        const selectionBtn = document.getElementById('selectionBtn');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const perspectiveBtn = document.getElementById('perspectiveBtn');
+        const flipHBtn = document.getElementById('flipHBtn');
+        const flipVBtn = document.getElementById('flipVBtn');
+        const bucketBtn = document.getElementById('bucketBtn');
+        const eyedropperBtn = document.getElementById('eyedropperBtn');
+
+        brushBtn.onclick = () => { finishSelection(); currentTool = 'brush'; updateToolUI(); };
+        eraserBtn.onclick = () => { finishSelection(); currentTool = 'eraser'; updateToolUI(); };
+        bucketBtn.onclick = () => { finishSelection(); currentTool = 'bucket'; updateToolUI(); };
+        eyedropperBtn.onclick = () => { finishSelection(); currentTool = 'eyedropper'; updateToolUI(); };
+        selectionBtn.onclick = () => { 
+            if(currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'bucket') finishSelection();
+            currentTool = 'lasso'; 
+            updateToolUI(); 
+        };
+        perspectiveBtn.onclick = () => {
+            if(currentTool === 'lasso' || currentTool === 'perspective') finishSelection();
+            currentTool = 'perspective';
+            updateToolUI();
+        };
+
+        function flipCanvas(canvas, horizontal = true) {
+            const temp = document.createElement('canvas');
+            temp.width = canvas.width;
+            temp.height = canvas.height;
+            const tCtx = temp.getContext('2d');
+            tCtx.drawImage(canvas, 0, 0);
+
+            const canvasCtx = canvas.getContext('2d');
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            canvasCtx.save();
+            if (horizontal) {
+                canvasCtx.translate(canvas.width, 0);
+                canvasCtx.scale(-1, 1);
+            } else {
+                canvasCtx.translate(0, canvas.height);
+                canvasCtx.scale(1, -1);
+            }
+            canvasCtx.drawImage(temp, 0, 0);
+            canvasCtx.restore();
+        }
+
+        function handleFlip(horizontal) {
+            if (isPlaying) return;
+            if (isTransforming) {
+                flipCanvas(selectionCanvas, horizontal);
+                drawTransformUI();
+            } else {
+                flipCanvas(mainCanvas, horizontal);
+                saveFrameState(currentFrameIndex);
+            }
+        }
+
+        flipHBtn.onclick = () => handleFlip(true);
+        flipVBtn.onclick = () => handleFlip(false);
+
+        selectAllBtn.onclick = () => {
+            if (isPlaying) return;
+            finishSelection();
+            currentTool = 'lasso';
+            updateToolUI();
+            
+            const w = mainCanvas.width;
+            const h = mainCanvas.height;
+            // Define o caminho como os quatro cantos do canvas
+            selectionPath = [
+                { x: 0, y: 0 }, { x: w, y: 0 },
+                { x: w, y: h }, { x: 0, y: h }
+            ];
+            createSelection();
+        };
+
+        function updateToolUI() {
+            brushBtn.classList.toggle('active', currentTool === 'brush');
+            eraserBtn.classList.toggle('active', currentTool === 'eraser');
+            selectionBtn.classList.toggle('active', currentTool === 'lasso');
+            perspectiveBtn.classList.toggle('active', currentTool === 'perspective');
+            bucketBtn.classList.toggle('active', currentTool === 'bucket');
+            eyedropperBtn.classList.toggle('active', currentTool === 'eyedropper');
+        }
+
+        async function switchLayer(index) {
+            if (!isHistoryAction) {
+                const old = frames[currentFrameIndex].layers[activeLayerIndex];
+                frames[currentFrameIndex].layers[activeLayerIndex] = await createImageBitmap(mainCanvas);
+                if (old && old.close) old.close();
+            }
+            
+            // Atualiza UI
+            activeLayerIndex = index;
+            
+            // Limpa o canvas principal e carrega o conteúdo da nova camada
+            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            const currentLayer = frames[currentFrameIndex].layers[activeLayerIndex];
+            if (currentLayer) ctx.drawImage(currentLayer, 0, 0);
+            
+            // Atualiza a visualização das camadas estáticas (as que você não está editando)
+            refreshLayerDisplay();
+        }
+
+        layersBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            layersDropdown.classList.toggle('show');
+        });
+
+        document.getElementById('soloModeBtn').onclick = (e) => {
+            soloMode = !soloMode;
+            e.target.classList.toggle('active', soloMode);
+            e.target.textContent = soloMode ? "MODO SOLO: ON" : "MODO SOLO: OFF";
+            refreshLayerDisplay();
+        };
+
+        // Garante que o canvas seja transparente inicialmente (fundo branco vem do CSS)
+        ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+        refreshLayerDisplay();
+        saveFrameState(0);
+
+        // Desativa o menu de contexto (clique direito/toque longo) para evitar o "Salvar Imagem"
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // --- Mapeamento de Coordenadas com Resolução Flexível ---
+        function getMousePos(evt) {
+            const rect = mainCanvas.getBoundingClientRect();
+            
+            // Calcula a escala real baseado no tamanho redimensionado pelo CSS
+            const scaleX = mainCanvas.width / rect.width;
+            const scaleY = mainCanvas.height / rect.height;
+
+            return {
+                x: (evt.clientX - rect.left) * scaleX,
+                y: (evt.clientY - rect.top) * scaleY
+            };
+        }
+
+        function hexToRgba(hex, opacity) {
+            let r = parseInt(hex.slice(1, 3), 16),
+                g = parseInt(hex.slice(3, 5), 16),
+                b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+        }
+
+        // --- Lógica de Desenho ---
+        function startDrawing(e) {
+            if (isPlaying) return;
+            isDrawing = true;
+            layersDropdown.classList.remove('show'); // Fecha o menu ao começar a desenhar para limpar a visão
+            
+            // Tira um snapshot do frame atual para renderização live sem beading
+            snapshotCanvas.width = mainCanvas.width;
+            snapshotCanvas.height = mainCanvas.height;
+            snapCtx.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+            snapCtx.drawImage(mainCanvas, 0, 0);
+
+            const pos = getMousePos(e); 
+            
+            if (currentTool === 'eyedropper') {
+                sampleColor(pos.x, pos.y);
+                isDrawing = false;
+                return;
+            }
+            
+            if (currentTool === 'lasso' || currentTool === 'perspective') {
+                if (isTransforming) {
+                    const hit = getTransformHit(pos);
+                    if (hit) {
+                        transformMode = hit;
+                        dragStart = { 
+                            x: pos.x, 
+                            y: pos.y, 
+                            startAngle: selectionBox.angle,
+                            startScale: selectionBox.scale,
+                            startBoxX: selectionBox.x,
+                            startBoxY: selectionBox.y,
+                            startCorners: selectionCorners.map(c => ({...c}))
+                        };
+                        return;
+                    }
+                }
+                selectionPath = [pos];
+                return;
+            }
+            
+            if (currentTool === 'bucket') {
+                const color = nativeColorPicker.value;
+                const opacity = document.getElementById('brushOpacity').value;
+                const rgb = hexToRgb(color);
+                floodFill(pos.x, pos.y, { r: rgb.r, g: rgb.g, b: rgb.b, a: Math.floor(opacity * 2.55) }, bucketToleranceSlider.value);
+                saveFrameState(currentFrameIndex);
+                isDrawing = false;
+                return;
+            }
+
+            lastX = pos.x; lastY = pos.y;
+            lastMidX = pos.x; lastMidY = pos.y;
+
+            // Cacheia os valores no início do traço para não pesar o processamento no movimento
+            cachedSize = parseFloat(document.getElementById('brushSize').value);
+            cachedOpacity = parseFloat(document.getElementById('brushOpacity').value);
+            cachedColor = nativeColorPicker.value;
+
+            dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            
+            dCtx.beginPath();
+            dCtx.arc(lastX, lastY, cachedSize / 2, 0, Math.PI * 2);
+            
+            if (currentTool === 'eraser') {
+                dCtx.globalCompositeOperation = 'source-over';
+                dCtx.fillStyle = '#000'; // Cor interna do buffer não importa, apenas a forma
+            } else {
+                dCtx.globalCompositeOperation = 'source-over';
+                dCtx.fillStyle = cachedColor; // Desenha 100% opaco no buffer
+            }
+            
+            dCtx.fill();
+            renderLiveStroke();
+        }
+
+        function draw(e) {
+            if (!isDrawing || isPlaying) return;
+
+            // Captura múltiplos pontos entre quadros de atualização (essencial para mesas digitalizadoras)
+            const events = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0) 
+                ? e.getCoalescedEvents() 
+                : [e];
+            
+            if (currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'bucket') {
+                const pos = getMousePos(e);
+                if (isTransforming && transformMode) {
+                    if (transformMode === 'move') {
+                        const dx = pos.x - dragStart.x;
+                        const dy = pos.y - dragStart.y;
+                        selectionCorners.forEach((c, i) => {
+                            c.x = dragStart.startCorners[i].x + dx;
+                            c.y = dragStart.startCorners[i].y + dy;
+                        });
+                        selectionBox.x = dragStart.startBoxX + (pos.x - dragStart.x);
+                        selectionBox.y = dragStart.startBoxY + (pos.y - dragStart.y);
+                    } 
+                    else if (transformMode === 'rotate') {
+                        const centerX = selectionBox.x + selectionBox.w / 2;
+                        const centerY = selectionBox.y + selectionBox.h / 2;
+                        const angle = Math.atan2(pos.y - centerY, pos.x - centerX);
+                        const startAngle = Math.atan2(dragStart.y - centerY, dragStart.x - centerX);
+                        selectionBox.angle = dragStart.startAngle + (angle - startAngle);
+                    }
+                    else if (transformMode === 'scale') {
+                        const centerX = selectionBox.x + selectionBox.w / 2;
+                        const centerY = selectionBox.y + selectionBox.h / 2;
+                        const dist = Math.hypot(pos.x - centerX, pos.y - centerY);
+                        const startDist = Math.hypot(dragStart.x - centerX, dragStart.y - centerY);
+                        selectionBox.scale = Math.max(0.1, dragStart.startScale * (dist / startDist));
+                    }
+                    else if (transformMode.startsWith('corner')) {
+                        const idx = parseInt(transformMode.replace('corner', ''));
+                        selectionCorners[idx].x = dragStart.startCorners[idx].x + (pos.x - dragStart.x);
+                        selectionCorners[idx].y = dragStart.startCorners[idx].y + (pos.y - dragStart.y);
+                    }
+                    
+                    drawTransformUI();
+                } else {
+                    selectionPath.push(pos);
+                    drawLassoPath();
+                }
+                return;
+            }
+
+            // Inicia o caminho para o lote de eventos atuais
+            dCtx.beginPath();
+            dCtx.lineCap = 'round';
+            dCtx.lineJoin = 'round';
+            dCtx.globalCompositeOperation = 'source-over';
+            dCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
+            dCtx.lineWidth = cachedSize; // Tamanho fixo para melhor performance
+
+            // Processa todos os pontos acumulados desde o último movimento processado
+            for (const event of events) {
+                const pos = getMousePos(event);
+                
+                // Filtro de ruído: ignora movimentos irrelevantes (menores que 0.5px)
+                if (Math.hypot(pos.x - lastX, pos.y - lastY) < 0.5) continue;
+
+                const streamline = 1.0;
+                const targetX = lastX + (pos.x - lastX) * streamline;
+                const targetY = lastY + (pos.y - lastY) * streamline;
+                
+                const midX = (lastX + targetX) / 2;
+                const midY = (lastY + targetY) / 2;
+
+                dCtx.moveTo(lastMidX, lastMidY);
+                dCtx.quadraticCurveTo(lastX, lastY, midX, midY);
+
+                lastX = targetX;
+                lastY = targetY;
+                lastMidX = midX;
+                lastMidY = midY;
+            }
+            dCtx.stroke();
+
+            renderLiveStroke();
+        }
+
+        // Renderiza o traço do buffer para o canvas principal em tempo real
+        function renderLiveStroke() {
+            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            ctx.drawImage(snapshotCanvas, 0, 0); // Restaura o frame original
+            
+            ctx.save();
+            ctx.globalAlpha = cachedOpacity / 100;
+            if (currentTool === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+            }
+            ctx.drawImage(drawingCanvas, 0, 0); // Aplica o buffer (sem beading)
+            ctx.restore();
+        }
+
+        function stopDrawing(e) {
+            if (isDrawing) {
+                if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'bucket' && e) {
+                    const pos = getMousePos(e);
+                    dCtx.beginPath();
+                    dCtx.moveTo(lastMidX, lastMidY);
+                    dCtx.quadraticCurveTo(lastX, lastY, pos.x, pos.y);
+                    dCtx.stroke();
+                    renderLiveStroke(); // Última renderização
+                }
+                
+                dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                isDrawing = false;
+                if ((currentTool === 'lasso' || currentTool === 'perspective') && !isTransforming && selectionPath.length > 3) {
+                    createSelection();
+                } else if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'bucket') {
+                    transformMode = null;
+                    saveFrameState(currentFrameIndex);
+                }
+            }
+        }
+
+        function drawLassoPath() {
+            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+            uiCtx.setLineDash([5, 5]);
+            uiCtx.strokeStyle = "#007aff";
+            uiCtx.lineWidth = 2;
+            uiCtx.beginPath();
+            uiCtx.moveTo(selectionPath[0].x, selectionPath[0].y);
+            selectionPath.forEach(p => uiCtx.lineTo(p.x, p.y));
+            uiCtx.stroke();
+            uiCtx.setLineDash([]);
+        }
+
+        function sampleColor(x, y) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = mainCanvas.width;
+            tempCanvas.height = mainCanvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            // Composição para amostragem fiel ao que o usuário vê (achata as camadas)
+            tCtx.fillStyle = 'white';
+            tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(bgCanvas, 0, 0);
+
+            for (let i = 0; i < 3; i++) {
+                if (i === activeLayerIndex) {
+                    tCtx.drawImage(mainCanvas, 0, 0);
+                } else {
+                    const lCanvas = document.getElementById(`layer${i}`);
+                    tCtx.drawImage(lCanvas, 0, 0);
+                }
+            }
+
+            const pixel = tCtx.getImageData(x, y, 1, 1).data;
+            const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+            nativeColorPicker.value = hex;
+            cachedColor = hex;
+            currentTool = 'brush'; // Retorna ao pincel após capturar a cor
+            updateToolUI();
+        }
+
+        function createSelection() {
+            // Calcula Bounding Box
+            const xs = selectionPath.map(p => p.x);
+            const ys = selectionPath.map(p => p.y);
+            const minX = Math.min(...xs), maxX = Math.max(...xs);
+            const minY = Math.min(...ys), maxY = Math.max(...ys);
+            
+            selectionBox = { x: minX, y: minY, w: maxX - minX, h: maxY - minY, angle: 0, scale: 1 };
+            
+            // Inicializa cantos para a ferramenta de perspectiva
+            selectionCorners = [
+                { x: minX, y: minY }, { x: maxX, y: minY },
+                { x: maxX, y: maxY }, { x: minX, y: maxY }
+            ];
+            
+            // Prepara canvas de seleção
+            selectionCanvas.width = selectionBox.w;
+            selectionCanvas.height = selectionBox.h;
+            
+            // Recorta o conteúdo do canvas principal
+            sCtx.save();
+            sCtx.translate(-minX, -minY);
+            sCtx.beginPath();
+            sCtx.moveTo(selectionPath[0].x, selectionPath[0].y);
+            selectionPath.forEach(p => sCtx.lineTo(p.x, p.y));
+            sCtx.clip();
+            sCtx.drawImage(mainCanvas, 0, 0);
+            sCtx.restore();
+
+            // Apaga do original
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(selectionPath[0].x, selectionPath[0].y);
+            selectionPath.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.clip();
+            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            ctx.restore();
+
+            isTransforming = true;
+            saveFrameState(currentFrameIndex); // Salva o frame atual sem os pixels recortados
+            drawTransformUI();
+        }
+
+        function drawTransformUI() {
+            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+            const b = selectionBox;
+
+            if (currentTool === 'perspective') {
+                renderDistorted(uiCtx, selectionCanvas, selectionCorners);
+                uiCtx.strokeStyle = "#ff3b30";
+                uiCtx.setLineDash([5, 5]);
+                uiCtx.beginPath();
+                uiCtx.moveTo(selectionCorners[0].x, selectionCorners[0].y);
+                selectionCorners.forEach(c => uiCtx.lineTo(c.x, c.y));
+                uiCtx.closePath();
+                uiCtx.stroke();
+
+                // Gizmos de Perspectiva (Cantos)
+                uiCtx.setLineDash([]);
+                uiCtx.fillStyle = "#fff";
+                selectionCorners.forEach(c => {
+                    uiCtx.beginPath();
+                    uiCtx.arc(c.x, c.y, 8, 0, Math.PI * 2);
+                    uiCtx.fill();
+                    uiCtx.stroke();
+                });
+                return;
+            }
+            
+            uiCtx.save();
+            uiCtx.translate(b.x + b.w/2, b.y + b.h/2);
+            uiCtx.rotate(b.angle);
+            uiCtx.scale(b.scale, b.scale);
+            
+            // Desenha o conteúdo recortado
+            uiCtx.drawImage(selectionCanvas, -b.w/2, -b.h/2);
+            
+            // Desenha a moldura de seleção
+            uiCtx.strokeStyle = "#007aff";
+            uiCtx.setLineDash([5, 5]);
+            uiCtx.strokeRect(-b.w/2, -b.h/2, b.w, b.h);
+            
+            // Gizmos (Alças de Escala - 8 pontos)
+            uiCtx.fillStyle = "#fff";
+            uiCtx.setLineDash([]);
+
+            const scalePoints = [
+                { x: -b.w/2, y: -b.h/2 }, { x: b.w/2, y: -b.h/2 }, // Cantos superiores
+                { x: -b.w/2, y: b.h/2 },  { x: b.w/2, y: b.h/2 },  // Cantos inferiores
+                { x: -b.w/2, y: 0 },       { x: b.w/2, y: 0 },       // Meio laterais
+                { x: 0, y: -b.h/2 },       { x: 0, y: b.h/2 }        // Meio topo/baixo
+            ];
+
+            scalePoints.forEach(p => {
+                uiCtx.fillRect(p.x - 8, p.y - 8, 16, 16);
+                uiCtx.strokeRect(p.x - 8, p.y - 8, 16, 16);
+            });
+
+            // Alças de Rotação (4 lados)
+            const hOff = 30 * (1/b.scale), lOff = 22 * (1/b.scale);
+            const rotationHandles = [
+                { x: 0, y: -b.h/2, lx: 0, ly: -b.h/2 - lOff, hx: 0, hy: -b.h/2 - hOff }, // Topo
+                { x: 0, y: b.h/2, lx: 0, ly: b.h/2 + lOff, hx: 0, hy: b.h/2 + hOff },    // Baixo
+                { x: -b.w/2, y: 0, lx: -b.w/2 - lOff, ly: 0, hx: -b.w/2 - hOff, hy: 0 }, // Esquerda
+                { x: b.w/2, y: 0, lx: b.w/2 + lOff, ly: 0, hx: b.w/2 + hOff, hy: 0 }    // Direita
+            ];
+
+            rotationHandles.forEach(h => {
+                uiCtx.beginPath();
+                uiCtx.arc(h.hx, h.hy, 8, 0, Math.PI * 2);
+                uiCtx.fill();
+                uiCtx.stroke();
+                
+                uiCtx.beginPath();
+                uiCtx.moveTo(h.x, h.y);
+                uiCtx.lineTo(h.lx, h.ly);
+                uiCtx.stroke();
+            });
+            
+            uiCtx.restore();
+        }
+
+        // Algoritmo de Balde de Tinta (Flood Fill)
+        function floodFill(startX, startY, fillRGBA, tolerance) {
+            if (isTransforming) finishSelection();
+            const width = mainCanvas.width;
+            const height = mainCanvas.height;
+            const imgData = ctx.getImageData(0, 0, width, height, { colorSpace: 'srgb' });
+            const data = imgData.data;
+            const uint32Data = new Uint32Array(data.buffer);
+
+            const x = Math.floor(startX);
+            const y = Math.floor(startY);
+            if (x < 0 || x >= width || y < 0 || y >= height) return;
+
+            const baseIdx = (y * width + x);
+            const startColor32 = uint32Data[baseIdx];
+            
+            // Extração para caso de tolerância
+            const startR = data[baseIdx];
+            const startG = data[baseIdx + 1];
+            const startB = data[baseIdx + 2];
+            const startA = data[baseIdx + 3];
+
+            // Se a cor clicada já for muito próxima da cor de preenchimento, cancela para evitar loop
+            if (Math.abs(startR - fillRGBA.r) < 2 && Math.abs(startG - fillRGBA.g) < 2 && 
+                Math.abs(startB - fillRGBA.b) < 2 && Math.abs(startA - fillRGBA.a) < 2) return;
+
+            const stack = [[x, y]];
+            const visited = new Uint8Array(width * height);
+            const fill32 = (fillRGBA.a << 24) | (fillRGBA.b << 16) | (fillRGBA.g << 8) | fillRGBA.r;
+
+            while (stack.length > 0) {
+                const [currX, currY] = stack.pop();
+                const posIdx = currY * width + currX;
+                
+                if (currX < 0 || currX >= width || currY < 0 || currY >= height || visited[posIdx]) continue;
+                visited[posIdx] = 1;
+
+                const color32 = uint32Data[posIdx];
+                const idx = posIdx * 4;
+                
+                const isMatch = tolerance == 0 ? 
+                                color32 === startColor32 :
+                                Math.abs(data[idx] - startR) <= tolerance &&
+                                Math.abs(data[idx+1] - startG) <= tolerance &&
+                                Math.abs(data[idx+2] - startB) <= tolerance &&
+                                Math.abs(data[idx+3] - startA) <= tolerance;
+
+                if (isMatch) {
+                    uint32Data[posIdx] = fill32;
+                    stack.push([currX + 1, currY]);
+                    stack.push([currX - 1, currY]);
+                    stack.push([currX, currY + 1]);
+                    stack.push([currX, currY - 1]);
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function hexToRgb(hex) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return { r, g, b };
+        }
+
+        // Função matemática para distorcer a imagem usando triângulos (Affine Transformation)
+        function renderDistorted(targetCtx, img, p) {
+            const w = img.width;
+            const h = img.height;
+            
+            const drawTriangle = (p0, p1, p2, u0, v0, u1, v1, u2, v2) => {
+                targetCtx.save();
+                targetCtx.beginPath();
+                targetCtx.moveTo(p0.x, p0.y);
+                targetCtx.lineTo(p1.x, p1.y);
+                targetCtx.lineTo(p2.x, p2.y);
+                targetCtx.closePath();
+                targetCtx.clip();
+
+                const delta = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
+                const a = (p0.x * (v1 - v2) + p1.x * (v2 - v0) + p2.x * (v0 - v1)) / delta;
+                const b = (p0.y * (v1 - v2) + p1.y * (v2 - v0) + p2.y * (v0 - v1)) / delta;
+                const c = (p0.x * (u2 - u1) + p1.x * (u0 - u2) + p2.x * (u1 - u0)) / delta;
+                const d = (p0.y * (u2 - u1) + p1.y * (u0 - u2) + p2.y * (u1 - u0)) / delta;
+                const e = (p0.x * (u1 * v2 - u2 * v1) + p1.x * (u2 * v0 - u0 * v2) + p2.x * (u0 * v1 - u1 * v0)) / delta;
+                const f = (p0.y * (u1 * v2 - u2 * v1) + p1.y * (u2 * v0 - u0 * v2) + p2.y * (u0 * v1 - u1 * v0)) / delta;
+
+                targetCtx.transform(a, b, c, d, e, f);
+                targetCtx.drawImage(img, 0, 0);
+                targetCtx.restore();
+            };
+
+            drawTriangle(p[0], p[1], p[3], 0, 0, w, 0, 0, h);
+            drawTriangle(p[1], p[2], p[3], w, 0, w, h, 0, h);
+        }
+
+        function getTransformHit(pos) {
+            if (currentTool === 'perspective') {
+                for (let i = 0; i < selectionCorners.length; i++) {
+                    if (Math.hypot(pos.x - selectionCorners[i].x, pos.y - selectionCorners[i].y) < 20) return 'corner' + i;
+                }
+                if (isPointInPoly(pos, selectionCorners)) return 'move';
+                return null;
+            }
+
+            const b = selectionBox;
+            const centerX = b.x + b.w / 2;
+            const centerY = b.y + b.h / 2;
+            
+            // Converter clique para coordenadas locais do box (rotacionadas)
+            const dx = pos.x - centerX;
+            const dy = pos.y - centerY;
+            const cos = Math.cos(-b.angle);
+            const sin = Math.sin(-b.angle);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+
+            const s = b.scale;
+            const hDist = 30 * s;
+
+            // Checar alças de rotação (4 lados)
+            if (Math.hypot(localX, localY + (b.h/2 * s + hDist)) < 15) return 'rotate'; // Topo
+            if (Math.hypot(localX, localY - (b.h/2 * s + hDist)) < 15) return 'rotate'; // Baixo
+            if (Math.hypot(localX + (b.w/2 * s + hDist), localY) < 15) return 'rotate'; // Esquerda
+            if (Math.hypot(localX - (b.w/2 * s + hDist), localY) < 15) return 'rotate'; // Direita
+
+            // Checar alças de escala (8 pontos)
+            const sPoints = [
+                { x: -b.w/2 * s, y: -b.h/2 * s }, { x: b.w/2 * s, y: -b.h/2 * s },
+                { x: -b.w/2 * s, y: b.h/2 * s },  { x: b.w/2 * s, y: b.h/2 * s },
+                { x: -b.w/2 * s, y: 0 },           { x: b.w/2 * s, y: 0 },
+                { x: 0, y: -b.h/2 * s },           { x: 0, y: b.h/2 * s }
+            ];
+            for (let p of sPoints) {
+                if (Math.abs(localX - p.x) < 15 && Math.abs(localY - p.y) < 15) return 'scale';
+            }
+
+            // Checar se está dentro para mover
+            if (Math.abs(localX) < (b.w/2 * s) && Math.abs(localY) < (b.h/2 * s)) return 'move';
+            
+            return null;
+        }
+
+        function isPointInPoly(pt, poly) {
+            let inside = false;
+            for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                if (((poly[i].y > pt.y) !== (poly[j].y > pt.y)) &&
+                    (pt.x < (poly[j].x - poly[i].x) * (pt.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)) inside = !inside;
+            }
+            return inside;
+        }
+
+        // --- Funções de Clipboard ---
+        function handleCopy() {
+            if (!isTransforming) return;
+            clipboardCanvas = document.createElement('canvas');
+            clipboardCanvas.width = selectionCanvas.width;
+            clipboardCanvas.height = selectionCanvas.height;
+            const cbCtx = clipboardCanvas.getContext('2d');
+            cbCtx.drawImage(selectionCanvas, 0, 0);
+            // Salva a posição e metadados da transformação
+            clipboardBox = { ...selectionBox };
+            clipboardCorners = selectionCorners.map(c => ({...c}));
+        }
+
+        function handleCut() {
+            if (!isTransforming) return;
+            handleCopy();
+            // Simplesmente encerra sem aplicar o desenho de volta ao ctx
+            isTransforming = false;
+            transformMode = null;
+            selectionPath = [];
+            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+            saveFrameState(currentFrameIndex);
+        }
+
+        function handlePaste() {
+            if (!clipboardCanvas) return;
+            finishSelection(); // Garante que a seleção anterior seja aplicada
+
+            // Prepara a nova seleção baseada no clipboard
+            selectionCanvas.width = clipboardCanvas.width;
+            selectionCanvas.height = clipboardCanvas.height;
+            sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+            sCtx.drawImage(clipboardCanvas, 0, 0);
+
+            // Restaura a posição exata de onde foi copiado
+            selectionBox = { ...clipboardBox };
+            selectionCorners = clipboardCorners.map(c => ({...c}));
+
+            isTransforming = true;
+            currentTool = 'lasso';
+            updateToolUI();
+            drawTransformUI();
+        }
+
+        function finishSelection() {
+            if (isTransforming) {
+                if (currentTool === 'perspective') {
+                    renderDistorted(ctx, selectionCanvas, selectionCorners);
+                } else {
+                    const b = selectionBox;
+                    ctx.save();
+                    ctx.translate(b.x + b.w/2, b.y + b.h/2);
+                    ctx.rotate(b.angle);
+                    ctx.scale(b.scale, b.scale);
+                    ctx.drawImage(selectionCanvas, -b.w/2, -b.h/2);
+                    ctx.restore();
+                }
+                
+                isTransforming = false;
+                transformMode = null;
+                selectionPath = [];
+                uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+                saveFrameState(currentFrameIndex);
+            }
+        }
+
+        mainCanvas.addEventListener('pointerdown', startDrawing);
+        window.addEventListener('pointermove', draw); // Escuta no window para capturar movimentos fora do canvas
+        window.addEventListener('pointerup', stopDrawing);
+
+        // Clique fora da seleção para confirmar
+        workspace.addEventListener('mousedown', (e) => { if(e.target === workspace) finishSelection(); });
+
+        // --- Gerenciamento de Frames ---
+        async function saveFrameState(index) {
+            if (isHistoryAction || !frames[index]) return;
+            
+            const oldData = frames[index].layers[activeLayerIndex];
+            const newData = await createImageBitmap(mainCanvas);
+            
+            undoStack.push({ index: index, layer: activeLayerIndex, data: oldData });
+            
+            // LIMPEZA CRÍTICA: Fecha os bitmaps que estavam no Redo antes de limpar a stack
+            redoStack.forEach(action => { if (action.data && action.data.close) action.data.close(); });
+            redoStack = [];
+            
+            if (undoStack.length > 30) {
+                const discarded = undoStack.shift();
+                if (discarded.data && discarded.data.close) discarded.data.close();
+            }
+
+            frames[index].layers[activeLayerIndex] = newData;
+            updateSingleThumbnail(index);
+            updateLayerIndicators();
+        }
+
+        // --- Atalhos de Tamanho e Exibição ---
+        const brushSizeInput = document.getElementById('brushSize');
+        const brushOpacityInput = document.getElementById('brushOpacity');
+        const sizeValDisplay = document.getElementById('sizeValDisplay');
+        const opacityValDisplay = document.getElementById('opacityValDisplay');
+
+        brushSizeInput.oninput = () => sizeValDisplay.textContent = brushSizeInput.value;
+        brushOpacityInput.oninput = () => opacityValDisplay.textContent = brushOpacityInput.value + '%';
+
+        function setBrushSize(val) {
+            brushSizeInput.value = val;
+            sizeValDisplay.textContent = val;
+        }
+        window.setBrushSize = setBrushSize; // Torna acessível globalmente para o onclick
+
+        async function undo() {
+            if (undoStack.length === 0) return;
+            isHistoryAction = true;
+            finishSelection();
+            const lastAction = undoStack.pop();
+            redoStack.push({ index: lastAction.index, layer: lastAction.layer, data: frames[lastAction.index].layers[lastAction.layer] });
+            
+            frames[lastAction.index].layers[lastAction.layer] = lastAction.data;
+            activeLayerIndex = lastAction.layer;
+            await loadFrame(lastAction.index);
+            isHistoryAction = false;
+        }
+
+        async function redo() {
+            if (redoStack.length === 0) return;
+            isHistoryAction = true;
+            finishSelection();
+            const nextAction = redoStack.pop();
+            
+            // Antes de sobrescrever o frame atual com o redo, guardamos o estado atual no undo
+            const currentData = frames[nextAction.index].layers[nextAction.layer];
+            
+            undoStack.push({ index: nextAction.index, layer: nextAction.layer, data: frames[nextAction.index].layers[nextAction.layer] });
+            
+            frames[nextAction.index].layers[nextAction.layer] = nextAction.data;
+            activeLayerIndex = nextAction.layer;
+            await loadFrame(nextAction.index);
+            isHistoryAction = false;
+        }
+
+        async function deleteFrame(index) {
+            finishSelection(); // Aplica qualquer transformação pendente antes de alterar a estrutura
+            if (frames.length <= 1) {
+                frames[0].layers.forEach(l => l && l.close && l.close());
+                ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                frames = [{ layers: [null, null, null] }];
+                currentFrameIndex = 0;
+                renderTimeline(true);
+                updateLayerIndicators();
+                return;
+            }
+
+            frames[index].layers.forEach(l => l && l.close && l.close());
+            const wasActive = (index === currentFrameIndex);
+            frames.splice(index, 1);
+            
+            if (wasActive) {
+                // Se deletou o frame que estava aberto, seleciona o vizinho sem salvar o estado anterior
+                currentFrameIndex = Math.min(index, frames.length - 1);
+                isHistoryAction = true; // Flag para impedir que loadFrame sobrescreva dados incorretamente
+                loadFrame(currentFrameIndex);
+                isHistoryAction = false;
+            } else {
+                // Se deletou um frame que não era o ativo, ajusta o índice se ele estava antes do atual
+                if (index < currentFrameIndex) currentFrameIndex--;
+            updateOnionSkin();
+                renderTimeline();
+            }
+        }
+
+        async function loadFrame(index) {
+            finishSelection(); // Confirma qualquer seleção pendente no frame atual antes de trocar
+            
+            if (!isHistoryAction && frames[currentFrameIndex]) {
+                const old = frames[currentFrameIndex].layers[activeLayerIndex];
+                frames[currentFrameIndex].layers[activeLayerIndex] = await createImageBitmap(mainCanvas);
+                if (old && old.close) old.close();
+            }
+
+            currentFrameIndex = index;
+            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            const activeData = frames[index].layers[activeLayerIndex];
+            if (activeData) ctx.drawImage(activeData, 0, 0);
+
+            updateOnionSkin();
+            refreshLayerDisplay();
+            renderTimeline();
+
+            // Centraliza o frame atual na linha do tempo automaticamente (Scroll)
+            const activeThumb = document.getElementById(`thumb-${index}`);
+            if (activeThumb) {
+                activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+        }
+
+        function updateLayerIndicators() {
+            for (let i = 0; i < 3; i++) {
+                const stat = document.getElementById(`l${i}-stat`);
+                stat.textContent = frames[currentFrameIndex].layers[i] ? "●" : "○";
+            }
+        }
+
+        function refreshLayerDisplay() {
+            // Ajusta a profundidade do canvas de desenho para a posição da camada ativa
+            mainCanvas.style.zIndex = activeLayerIndex + 1;
+            
+            // Modo Solo: Se ligado, esconde o fundo para economizar processamento
+            bgCanvas.style.visibility = (soloMode) ? 'hidden' : 'visible';
+            canvasContainer.style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
+
+            // Atualiza o destaque visual (cor azul) no menu de camadas para a camada ativa
+            document.querySelectorAll('.layer-item').forEach((el, i) => {
+                el.classList.toggle('active', (2 - i) === activeLayerIndex);
+            });
+
+            // Limpa e redesenha os canvases de visualização de camadas (exceto a ativa)
+            for (let i = 0; i < 3; i++) {
+                const lCanvas = document.getElementById(`layer${i}`);
+                const lCtx = lCanvas.getContext('2d');
+                
+                // No modo solo, escondemos as outras camadas
+                if (i === activeLayerIndex || (soloMode && i !== activeLayerIndex)) {
+                    lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
+                } else if (!soloMode && frames[currentFrameIndex].layers[i]) {
+                    lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
+                    lCtx.drawImage(frames[currentFrameIndex].layers[i], 0, 0);
+                } else {
+                    lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
+                }
+            }
+            updateLayerIndicators();
+        }
+
+        async function addBlankFrame() {
+            if (isPlaying) return;
+            finishSelection();
+            await saveFrameState(currentFrameIndex);
+            
+            frames.splice(currentFrameIndex + 1, 0, { layers: [null, null, null], duration: 1 });
+            await loadFrame(currentFrameIndex + 1);
+        }
+
+        async function duplicateFrame() {
+            if (isPlaying) return;
+            finishSelection();
+            await saveFrameState(currentFrameIndex);
+            
+            // Clona as camadas criando novos Bitmaps para evitar problemas de referência compartilhada
+            const newLayers = await Promise.all(frames[currentFrameIndex].layers.map(async (l) => {
+                return l ? await createImageBitmap(l) : null;
+            }));
+
+            frames.splice(currentFrameIndex + 1, 0, { 
+                layers: newLayers, 
+                duration: frames[currentFrameIndex].duration || 1 
+            });
+            await loadFrame(currentFrameIndex + 1);
+        }
+
+        onionToggle.addEventListener('change', updateOnionSkin);
+        onionOpacitySlider.addEventListener('input', (e) => {
+            onionCanvas.style.opacity = e.target.value / 100;
+        });
+
+        function updateOnionSkin() {
+            onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
+            if (onionToggle.checked && currentFrameIndex > 0 && !isPlaying) {
+                // Onion skin agora mostra a união das camadas do frame anterior
+                const prevFrame = frames[currentFrameIndex - 1];
+                prevFrame.layers.forEach(layerData => {
+                    if (layerData) onionCtx.drawImage(layerData, 0, 0);
+                });
+            }
+        }
+
+        // --- Lógica de Background ---
+        bgImgBtn.onclick = () => bgInput.click();
+        clearBgBtn.onclick = () => {
+            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+            bgInput.value = ""; 
+            showNotification("Imagem de fundo removida");
+        };
+        bgInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+                    // Desenha a imagem preenchendo o canvas proporcionalmente (cover)
+                    const scale = Math.max(bgCanvas.width / img.width, bgCanvas.height / img.height);
+                    const x = (bgCanvas.width / 2) - (img.width / 2) * scale;
+                    const y = (bgCanvas.height / 2) - (img.height / 2) * scale;
+                    bgCtx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // --- Menu Arquivo e Importação ---
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menuDropdown.classList.toggle('show');
+            layersDropdown.classList.remove('show');
+        });
+
+        window.addEventListener('click', (e) => {
+            // O menu principal fecha se clicar fora dele
+            if (!menuBtn.contains(e.target) && !menuDropdown.contains(e.target)) {
+                menuDropdown.classList.remove('show');
+            }
+            // O menu de camadas NÃO fecha ao clicar na timeline ou nos botões de controle
+        });
+
+        importImgMenu.onclick = (e) => {
+            e.preventDefault();
+            importInput.click();
+        };
+
+        exportPngSequenceMenu.onclick = (e) => { e.preventDefault(); exportPngSequence(); };
+        exportImgTransparentMenu.onclick = (e) => { e.preventDefault(); exportFrames(false); };
+        exportImgBackgroundMenu.onclick = (e) => { e.preventDefault(); exportFrames(true); };
+        exportVideoMenu.onclick = (e) => { e.preventDefault(); exportVideo(false); };
+        exportVideoTransparentMenu.onclick = (e) => { e.preventDefault(); exportVideo(true); };
+
+        async function exportFrames(withBackground) {
+            finishSelection();
+            saveFrameState(currentFrameIndex);
+
+            const zip = new JSZip();
+            const imgFolder = zip.folder("frames");
+            
+            // Canvas temporário para compor as camadas antes de exportar
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = mainCanvas.width;
+            tempCanvas.height = mainCanvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            for (let i = 0; i < frames.length; i++) {
+                tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                
+                if (withBackground) {
+                    // Preenche com branco (folha) e depois desenha o cenário (bgCanvas)
+                    tCtx.fillStyle = '#ffffff';
+                    tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    tCtx.drawImage(bgCanvas, 0, 0);
+                }
+
+                for(let l = 0; l < 3; l++) {
+                    const layerData = frames[i].layers[l];
+                    if(layerData) tCtx.drawImage(layerData, 0, 0);
+                }
+
+                const base64Data = tempCanvas.toDataURL('image/png').split(',')[1];
+                imgFolder.file(`frame_${String(i + 1).padStart(3, '0')}.png`, base64Data, {base64: true});
+            }
+
+            const content = await zip.generateAsync({type: "blob"});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = withBackground ? "animacao_com_fundo.zip" : "animacao_transparente.zip";
+            link.click();
+            showNotification("ZIP gerado com sucesso!");
+        }
+
+        async function exportPngSequence() {
+            if (frames.length === 0) {
+                showNotification("Nenhum frame para exportar");
+                return;
+            }
+            finishSelection();
+            saveFrameState(currentFrameIndex);
+
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                
+                const exportFps = 24;
+                // Calcula a duração total da animação baseada no FPS atual da linha do tempo
+                const animationDuration = frames.length / fps;
+                // Define o total de frames necessários para uma saída de 24 FPS
+                const totalExportFrames = Math.max(1, Math.floor(animationDuration * exportFps));
+
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = mainCanvas.width;
+                tempCanvas.height = mainCanvas.height;
+                const tCtx = tempCanvas.getContext('2d');
+
+                for (let i = 0; i < totalExportFrames; i++) {
+                    // Mapeia o frame de exportação atual para o frame correspondente na animação original
+                    const frameIdx = Math.floor((i / exportFps) * fps);
+                    const targetFrame = Math.min(frameIdx, frames.length - 1);
+
+                    tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    
+                    for(let l = 0; l < 3; l++) {
+                        const layerData = frames[targetFrame].layers[l];
+                        if(layerData) tCtx.drawImage(layerData, 0, 0);
+                    }
+
+                    const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
+                    const fileName = `frame_${String(i + 1).padStart(5, '0')}.png`;
+                    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                }
+                showNotification(`Exportação concluída: ${totalExportFrames} frames`);
+            } catch (e) {
+                if (e.name !== 'AbortError') showNotification("Erro: " + e.message);
+            }
+        }
+
+        async function exportVideo(withTransparency = false) {
+            if (frames.length === 0) {
+                showNotification("Nenhum frame para exportar");
+                return;
+            }
+            finishSelection();
+            saveFrameState(currentFrameIndex);
+
+            // Prepara canvas de composição (1080p)
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = mainCanvas.width;
+            tempCanvas.height = mainCanvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            // Inicializa o Muxer (VP9)
+            const muxer = new WebMMuxer.Muxer({
+                target: new WebMMuxer.ArrayBufferTarget(),
+                video: {
+                    codec: withTransparency ? 'V_VP8' : 'V_VP9',
+                    width: tempCanvas.width,
+                    height: tempCanvas.height,
+                    frameRate: parseInt(fps)
+                }
+            });
+
+            // Configura o VideoEncoder (WebCodecs)
+            const encoder = new VideoEncoder({
+                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                error: (e) => console.error(e)
+            });
+
+            encoder.configure({
+                codec: withTransparency ? 'vp8' : 'vp09.00.10.08', // VP8 é necessário para exportar canal Alpha corretamente
+                width: tempCanvas.width,
+                height: tempCanvas.height,
+                bitrate: 5e6, // 5 Mbps para alta qualidade
+            });
+
+            const frameDuration = 1000000 / fps; // microssegundos
+
+            for (let i = 0; i < frames.length; i++) {
+                // Composição do frame
+                tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+                if (!withTransparency) {
+                    tCtx.fillStyle = '#ffffff';
+                    tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    tCtx.drawImage(bgCanvas, 0, 0);
+                }
+
+                for(let l = 0; l < 3; l++) {
+                    const layerData = frames[i].layers[l];
+                    if(layerData) tCtx.drawImage(layerData, 0, 0);
+                }
+
+                // Cria o VideoFrame a partir do canvas composto
+                const frame = new VideoFrame(tempCanvas, { timestamp: i * frameDuration });
+                encoder.encode(frame);
+                frame.close(); // Libera memória imediatamente
+            }
+
+            await encoder.flush();
+            muxer.finalize();
+
+            // Download do resultado
+            const { buffer } = muxer.target;
+            const blob = new Blob([buffer], { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = withTransparency ? "animacao_transparente.webm" : "animacao_vp9.webm";
+            a.click();
+            URL.revokeObjectURL(url);
+            showNotification("Vídeo exportado!");
+        }
+
+        // --- Salvar e Carregar Projeto ---
+        saveProjectMenu.onclick = async (e) => {
+            e.preventDefault();
+            finishSelection();
+            await saveFrameState(currentFrameIndex);
+
+            // Converte Bitmaps e Duração para o salvamento
+            const serializedFrames = await Promise.all(frames.map(async f => {
+                const layers = await Promise.all(f.layers.map(async l => {
+                    if (!l) return null;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = mainCanvas.width;
+                    canvas.height = mainCanvas.height;
+                    canvas.getContext('2d').drawImage(l, 0, 0);
+                    return canvas.toDataURL();
+                }));
+                return { layers, duration: f.duration || 1 };
+            }));
+
+            const projectData = {
+                fps: fps,
+                frames: serializedFrames,
+                background: bgCanvas.toDataURL()
+            };
+
+            const blob = new Blob([JSON.stringify(projectData)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "meu_projeto_animacao.json";
+            a.click();
+            URL.revokeObjectURL(url);
+            showNotification("Projeto salvo com sucesso!");
+        };
+
+        loadProjectMenu.onclick = (e) => {
+            e.preventDefault();
+            projectInput.click();
+        };
+
+        projectInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const data = JSON.parse(event.target.result);
+                
+                fps = data.fps || 12;
+                document.getElementById('fpsSlider').value = fps;
+                document.getElementById('fpsValue').textContent = fps;
+
+                const bgImg = new Image();
+                bgImg.onload = () => {
+                    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+                    bgCtx.drawImage(bgImg, 0, 0);
+                };
+                bgImg.src = data.background;
+
+                // Converter Base64 de volta para Bitmaps para performance
+                frames = await Promise.all(data.frames.map(async f => {
+                    const layers = await Promise.all(f.layers.map(async l => {
+                        if (!l) return null;
+                        const img = new Image();
+                        img.src = l;
+                        await new Promise(res => img.onload = res);
+                        const bmp = await createImageBitmap(img);
+                        return bmp;
+                    }));
+                    return { layers, duration: f.duration || 1 };
+                }));
+
+                undoStack = [];
+                redoStack = [];
+                isHistoryAction = true; // Impede que o canvas atual sobrescreva o primeiro frame do projeto carregado
+                loadFrame(0);
+                isHistoryAction = false;
+            };
+            reader.readAsText(file);
+        };
+
+        importInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    finishSelection(); // Aplica qualquer seleção anterior
+                    selectionCanvas.width = img.width;
+                    selectionCanvas.height = img.height;
+                    sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+                    sCtx.drawImage(img, 0, 0);
+
+                    const x = mainCanvas.width / 2 - img.width / 2;
+                    const y = mainCanvas.height / 2 - img.height / 2;
+                    selectionBox = { x, y, w: img.width, h: img.height, angle: 0, scale: 1 };
+                    selectionCorners = [{x,y}, {x:x+img.width,y}, {x:x+img.width,y:y+img.height}, {x,y:y+img.height}];
+                    isTransforming = true;
+                    currentTool = 'lasso';
+                    updateToolUI();
+                    drawTransformUI();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        function renderTimeline(full = false) {
+            // Atualiza o contador numérico de frames
+            const counter = document.getElementById('frameCounterDisplay');
+            if (counter) counter.textContent = `${currentFrameIndex + 1}/${frames.length}`;
+
+            if (!full && timeline.children.length === frames.length) {
+                // Se o número de frames não mudou, apenas atualizamos o destaque visual (borda azul)
+                Array.from(timeline.children).forEach((thumb, index) => {
+                    thumb.classList.toggle('active', index === currentFrameIndex);
+                });
+                updateSingleThumbnail(currentFrameIndex);
+                return;
+            }
+
+            timeline.innerHTML = '';
+            frames.forEach((frameData, index) => {
+                const thumb = document.createElement('div');
+                thumb.className = `frame-thumb ${index === currentFrameIndex ? 'active' : ''}`;
+                thumb.id = `thumb-${index}`;
+                thumb.draggable = true;
+                
+                thumb.onclick = () => { if (!isPlaying) loadFrame(index); };
+
+                // Handlers para Arrastar e Soltar
+                thumb.ondragstart = (e) => {
+                    if (isPlaying) return e.preventDefault();
+                    e.dataTransfer.setData('text/plain', index);
+                    setTimeout(() => thumb.style.opacity = '0.5', 0);
+                };
+
+                thumb.ondragend = () => {
+                    thumb.style.opacity = '1';
+                };
+
+                thumb.ondragover = (e) => {
+                    e.preventDefault(); // Necessário para permitir o drop
+                };
+
+                thumb.ondrop = (e) => {
+                    e.preventDefault();
+                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                    const toIndex = index;
+                    if (fromIndex !== toIndex) {
+                        moveFrame(fromIndex, toIndex);
+                    }
+                };
+
+                timeline.appendChild(thumb);
+                updateSingleThumbnail(index);
+
+                // Adiciona interface de duração
+                const badge = document.createElement('div');
+                badge.className = 'duration-badge';
+                badge.textContent = `${frameData.duration || 1}x`;
+                thumb.appendChild(badge);
+
+                const controls = document.createElement('div');
+                controls.className = 'duration-controls';
+                
+                const minus = document.createElement('button');
+                minus.className = 'dur-btn'; minus.textContent = '-';
+                minus.onclick = (e) => {
+                    e.stopPropagation();
+                    frameData.duration = Math.max(1, (frameData.duration || 1) - 1);
+                    badge.textContent = `${frameData.duration}x`; // Atualiza apenas o texto
+                };
+                const plus = document.createElement('button');
+                plus.className = 'dur-btn'; plus.textContent = '+';
+                plus.onclick = (e) => {
+                    e.stopPropagation();
+                    frameData.duration = (frameData.duration || 1) + 1;
+                    badge.textContent = `${frameData.duration}x`; // Atualiza apenas o texto
+                };
+                controls.append(minus, plus);
+                thumb.appendChild(controls);
+            });
+        }
+
+        async function moveFrame(from, to) {
+            finishSelection();
+            await saveFrameState(currentFrameIndex); // Garante que o desenho atual foi salvo antes de mover
+
+            const activeFrameObj = frames[currentFrameIndex];
+            const movedFrame = frames.splice(from, 1)[0];
+            frames.splice(to, 0, movedFrame);
+            
+            // Encontra a nova posição do frame que estávamos editando
+            const newIndex = frames.indexOf(activeFrameObj);
+            
+            // Carrega o frame na nova posição e atualiza toda a interface
+            isHistoryAction = true; // Impede salvamento redundante durante o recarregamento
+            await loadFrame(newIndex);
+            isHistoryAction = false;
+        }
+
+        async function updateSingleThumbnail(index) {
+            const thumb = document.getElementById(`thumb-${index}`);
+            if (!thumb) return;
+            
+            const lastFilledLayer = [...frames[index].layers].reverse().find(l => l !== null);
+            if (lastFilledLayer) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 160; canvas.height = 90;
+                canvas.getContext('2d').drawImage(lastFilledLayer, 0, 0, 160, 90);
+                thumb.style.backgroundImage = `url(${canvas.toDataURL()})`;
+            } else {
+                thumb.style.backgroundImage = 'none';
+            }
+
+            if (!thumb.querySelector('.delete-frame-btn')) {
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-frame-btn';
+                deleteBtn.innerHTML = '×';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation(); // Evita carregar o frame ao clicar no X
+                    deleteFrame(index);
+                };
+                thumb.appendChild(deleteBtn);
+            }
+        }
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            saveFrameState(currentFrameIndex);
+        });
+
+        document.getElementById('addFrameBtn').addEventListener('click', addBlankFrame);
+        document.getElementById('duplicateFrameBtn').addEventListener('click', duplicateFrame);
+
+        // Eventos de Clipboard
+        document.getElementById('copyBtn').onclick = handleCopy;
+        document.getElementById('cutBtn').onclick = handleCut;
+        document.getElementById('pasteBtn').onclick = handlePaste;
+        document.getElementById('undoBtn').onclick = undo;
+        document.getElementById('redoBtn').onclick = redo;
+
+        // Atalhos de Teclado
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'c' || e.key === 'C') handleCopy();
+                if (e.key === 'v' || e.key === 'V') handlePaste();
+                if (e.key === 'x' || e.key === 'X') handleCut();
+                if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
+                if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); redo(); }
+            }
+            if (e.key === 'Enter') finishSelection();
+            if (e.key === 'Delete' || e.key === 'Backspace') if(isTransforming) handleCut(); // Delete funciona como cut sem salvar
+        });
+
+        // Controle de FPS
+        document.getElementById('fpsSlider').addEventListener('input', (e) => {
+            fps = e.target.value;
+            document.getElementById('fpsValue').textContent = fps;
+            if (isPlaying) {
+                toggleAnimation(); // Reinicia para aplicar a nova velocidade
+                toggleAnimation();
+            }
+        });
+
+        // --- Player de Animação ---
+        let playSessionId = 0;
+
+        function toggleAnimation() {
+            if (frames.length <= 1) return;
+            finishSelection(); // Garante que não haja nada flutuando ao dar play
+            
+            if (!isPlaying) {
+                saveFrameState(currentFrameIndex);
+                playSessionId++;
+            }
+
+            isPlaying = !isPlaying;
+            
+            document.getElementById('playBtn').style.display = isPlaying ? 'none' : 'block';
+            document.getElementById('stopBtn').style.display = isPlaying ? 'block' : 'none';
+            playbackCanvas.style.display = isPlaying ? 'block' : 'none';
+
+            if (isPlaying) {
+                const currentSession = playSessionId;
+                toggleStaticLayersVisibility(false);
+                mainCanvas.style.visibility = 'hidden'; 
+                onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
+                
+                let playIndex = 0;
+
+                const runPlayback = async () => {
+                    if (!isPlaying || currentSession !== playSessionId) return;
+
+                    // Composição off-screen para evitar piscadas (flicker)
+                    const offscreen = document.createElement('canvas');
+                    offscreen.width = playbackCanvas.width;
+                    offscreen.height = playbackCanvas.height;
+                    const offCtx = offscreen.getContext('2d');
+                    
+                    offCtx.fillStyle = 'white'; offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+                    offCtx.drawImage(bgCanvas, 0, 0);
+
+                    for (const layerData of frames[playIndex].layers) {
+                        if (layerData) offCtx.drawImage(layerData, 0, 0);
+                    }
+
+                    if (isPlaying && currentSession === playSessionId) {
+                        pCtx.clearRect(0, 0, playbackCanvas.width, playbackCanvas.height);
+                        pCtx.drawImage(offscreen, 0, 0);
+                        const hold = frames[playIndex].duration || 1;
+                        playIndex = (playIndex + 1) % frames.length;
+                        setTimeout(runPlayback, (1000 / fps) * hold);
+                    }
+                };
+
+                runPlayback();
+            } else {
+                playSessionId++; // Invalida callbacks de imagens que ainda estejam carregando
+                mainCanvas.style.visibility = 'visible';
+                toggleStaticLayersVisibility(true);
+                isHistoryAction = true; // Impede que o loadFrame salve a imagem mesclada do playback sobre a sua camada original
+                loadFrame(currentFrameIndex);
+                isHistoryAction = false;
+            }
+        }
+
+        function toggleStaticLayersVisibility(visible) {
+            const display = visible ? 'block' : 'none';
+            document.getElementById('layer0').style.display = display;
+            document.getElementById('layer1').style.display = display;
+            document.getElementById('layer2').style.display = display;
+            const onion = document.getElementById('onionCanvas');
+            if (onion) onion.style.display = display;
+        }
+
+        document.getElementById('playBtn').addEventListener('click', toggleAnimation);
+        document.getElementById('stopBtn').addEventListener('click', toggleAnimation);
+
+    </script>
+</body>
+</html>

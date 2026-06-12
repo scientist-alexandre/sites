@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mochila Digital</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            background-color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: -webkit-fill-available;
+            margin: 0;
+            padding: 40px 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Estilos da Mochila (Página Inicial) */
+        #mochilaView {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1000px;
+            padding: 20px;
+        }
+
+        .mochila-header {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .notebook-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 25px;
+            width: 100%;
+        }
+
+        .notebook-card {
+            background: #fff;
+            height: 280px;
+            border-radius: 10px 20px 20px 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 20px;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 15px solid #2c3e50; /* Lombada do caderno */
+            position: relative;
+        }
+
+        .notebook-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 8px 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .notebook-card h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.2rem;
+            word-wrap: break-word;
+        }
+
+        .notebook-page {
+            width: 95vw;
+            max-width: 800px;
+            min-height: 1000px;
+            background-color: #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            position: relative;
+            padding-top: 40px;
+            padding-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        /* Linha Vertical (Margem) */
+        .notebook-page::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 80px;
+            width: 2px;
+            background-color: #ffb3b3; /* Vermelho suave da margem */
+        }
+
+        .header {
+            margin-left: 100px;
+            margin-right: 40px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            color: #777;
+            font-size: 14px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .content {
+            width: 100%;
+            height: auto;
+            /* Criação das linhas azuis horizontais */
+            background-image: linear-gradient(transparent, transparent 30px, #add8e6 30px);
+            background-size: 100% 31px;
+            line-height: 31px;
+            padding-left: 100px;
+            padding-right: 40px;
+            box-sizing: border-box;
+            color: #333;
+            font-size: 18px;
+            outline: none;
+            min-height: 893px; /* Aumentado para 893px (+3 linhas no total) */
+            word-wrap: break-word;
+        }
+
+        /* Camada para escrita manual */
+        #writingCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 5;
+            cursor: crosshair;
+            touch-action: none; /* Desabilita o scroll para não atrapalhar o desenho */
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background: #f0f0f0; }
+        
+        /* Menu Arquivo */
+        .menu-container {
+            position: relative;
+        }
+
+        #fileMenu {
+            display: none;
+            position: absolute;
+            top: 45px;
+            left: 0;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-radius: 8px;
+            width: 200px;
+            overflow: hidden;
+            z-index: 101;
+        }
+
+        #fileMenu button {
+            width: 100%;
+            padding: 12px 15px;
+            border: none;
+            background: none;
+            text-align: left;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        #fileMenu button:hover { background: #f5f5f5; }
+
+        .btn.active {
+            background: #e0e0e0;
+            border-color: #888;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .color-picker-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #colorPicker {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 60px;
+            height: 60px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        #colorPicker::-webkit-color-swatch {
+            border-radius: 50%;
+            border: 4px solid white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        #colorPicker::-moz-color-swatch {
+            border-radius: 50%;
+            border: 4px solid white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .btn-reset {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: transform 0.2s;
+        }
+        .btn-reset:hover { transform: rotate(-90deg); background: #f8f8f8; }
+
+        /* Estilos para manipulação de imagem */
+        #imageTransformLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: none;
+        }
+
+        .image-box {
+            position: absolute;
+            border: 2px dashed #0078d7;
+            cursor: move;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border: 2px solid #0078d7;
+            border-radius: 50%;
+        }
+
+        .handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+        .handle.rot { top: -30px; left: 50%; transform: translateX(-50%); cursor: grab; background: #0078d7; }
+        .handle.rot::after { content: ''; position: absolute; top: 12px; left: 50%; width: 2px; height: 15px; background: #0078d7; transform: translateX(-50%); }
+
+        .img-confirm-btn {
+            position: absolute;
+            bottom: -50px;
+            left: calc(50% - 50px);
+            transform: translateX(-50%);
+            background: #27ae60;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .img-cancel-btn {
+            position: absolute;
+            bottom: -50px;
+            left: calc(50% + 50px);
+            transform: translateX(-50%);
+            background: #e74c3c;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: none;
+            cursor: pointer;
+        }
+
+        /* Ajuste para quando imprimir */
+        @media print {
+            body { background-color: white; padding: 0; display: block; }
+            .notebook-page { box-shadow: none; width: 100%; }
+            .controls, .color-picker-container, .page-navigation { display: none; }
+        }
+
+        /* Ajustes para Celulares e Tablets (Mobile First) */
+        @media (max-width: 850px) {
+            body { padding: 10px 0; }
+            
+            .controls {
+                top: 10px;
+                left: 10px;
+                gap: 5px;
+            }
+
+            .btn {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+
+            .color-picker-container {
+                top: 10px;
+                right: 10px;
+            }
+
+            #colorPicker {
+                width: 45px;
+                height: 45px;
+            }
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .page-navigation {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- VISÃO DA MOCHILA -->
+    <div id="mochilaView">
+        <div class="mochila-header">
+            <h1>🎒 Minha Mochila</h1>
+            <p>Selecione um caderno para estudar ou crie um novo.</p>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                <button class="btn" onclick="createNewNotebook()" style="background: #2c3e50; color: white;">+ Novo Caderno</button>
+                <button class="btn" onclick="exportMochila()">💾 Salvar Mochila</button>
+                <button class="btn" onclick="importMochila()">📂 Abrir Mochila</button>
+            </div>
+        </div>
+        <div class="notebook-grid" id="notebookGrid"></div>
+    </div>
+
+    <!-- VISÃO DO CADERNO (SOFTWARE) -->
+    <div id="notebookView" style="display: none; width: 100%;">
+        <div class="controls">
+            <div class="menu-container">
+                <button class="btn" id="menuBtn" onclick="toggleMenu()">☰ Arquivo</button>
+                <div id="fileMenu">
+                    <button onclick="goToMochila()">🎒 Voltar para a Mochila</button>
+                    <button onclick="exportMochila()">💾 Salvar Mochila</button>
+                    <button onclick="importMochila()">📂 Abrir Mochila</button>
+                    <button onclick="exportNotebookToPDF()">📄 Exportar como PDF</button>
+                </div>
+            </div>
+        <button class="btn active" id="penBtn" onclick="setPen()">🖋️ Caneta</button>
+        <button class="btn" id="eraserBtn" onclick="setEraser()">🧽 Borracha</button>
+        <button class="btn" id="highlighterBtn" onclick="setHighlighter()">🖍️ Marcador</button>
+        <button class="btn" onclick="addNewPage()">📄 Nova Folha</button>
+        <button class="btn" onclick="deleteCurrentPage()">🗑️ Deletar Folha</button>
+        <button class="btn" onclick="triggerImageImport()">🖼️ Imagem</button>
+        <button class="btn" onclick="undo()">↩️ Desfazer</button>
+        <button class="btn" onclick="redo()">↪️ Refazer</button>
+        <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageImport(event)">
+    </div>
+
+    <div class="color-picker-container">
+        <input type="color" id="colorPicker" value="#00008b" oninput="updateToolColor(this.value)">
+        <button class="btn-reset" onclick="resetColors()" title="Resetar Cores">🔄</button>
+    </div>
+
+    <div class="main-container">
+        <div class="notebook-page">
+            <canvas id="writingCanvas"></canvas>
+            <div id="imageTransformLayer">
+                <div class="image-box" id="activeImageBox">
+                    <img id="previewImg" style="width: 100%; height: 100%; user-select: none; pointer-events: none;">
+                    <div class="handle se" onmousedown="startResize(event)" ontouchstart="startResize(event)"></div>
+                    <div class="handle rot" onmousedown="startRotate(event)" ontouchstart="startRotate(event)"></div>
+                    <button class="img-confirm-btn" onclick="confirmImagePlacement()">✅ Confirmar</button>
+                    <button class="img-cancel-btn" onclick="cancelImagePlacement()">🗑️ Cancelar</button>
+                </div>
+            </div>
+            <div class="content"></div>
+        </div>
+
+        <div class="page-navigation">
+            <button class="btn" onclick="prevPage()">⬅️ Anterior</button>
+            <span id="pageInfo">Página 1 / 1</span>
+            <button class="btn" onclick="nextPage()">Próxima ➡️</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('writingCanvas');
+        const ctx = canvas.getContext('2d');
+        const page = document.querySelector('.notebook-page');
+        const penBtn = document.getElementById('penBtn');
+        const eraserBtn = document.getElementById('eraserBtn');
+        const highlighterBtn = document.getElementById('highlighterBtn');
+        const colorPicker = document.getElementById('colorPicker');
+        
+        // Gerenciamento de Dados e Estado
+        let allNotebooks = [];
+        let activeIdx = -1;
+        let drawing = false;
+        let currentTool = 'pen'; // 'pen', 'eraser', 'highlighter'
+        let penColor = '#00008b';
+        let highlighterHex = '#ffff00';
+        let highlighterColor = 'rgba(255, 255, 0, 0.5)'; // Cor inicial amarela
+        
+        let undoStack = [];
+        let redoStack = [];
+        let currentPage = 0;
+
+        // Estado da Imagem
+        let imgState = {
+            active: false,
+            x: 100, y: 100,
+            w: 200, h: 200,
+            rotation: 0,
+            imgObj: null
+        };
+
+        // Inicialização
+        window.addEventListener('load', () => {
+            renderMochila();
+            resizeCanvas();
+        });
+
+        // Ajusta o tamanho do canvas para preencher a folha
+        function resizeCanvas() {
+            const tempContent = canvas.toDataURL(); // Salva estado atual antes de redimensionar
+            canvas.width = page.offsetWidth;
+            canvas.height = page.offsetHeight;
+            
+            // Restaura configurações de contexto que são resetadas no resize
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            if (currentTool === 'pen') setPen();
+            else if (currentTool === 'eraser') setEraser();
+            else if (currentTool === 'highlighter') setHighlighter();
+
+            // Restaura o desenho
+            const img = new Image();
+            img.onload = () => {
+                const op = ctx.globalCompositeOperation;
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.drawImage(img, 0, 0);
+                ctx.globalCompositeOperation = op;
+            };
+            img.src = tempContent;
+            updatePageInfo();
+        }
+
+        // --- Lógica de Importação e Transformação de Imagem ---
+        function triggerImageImport() { document.getElementById('imageInput').click(); }
+
+        function handleImageImport(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    imgState.imgObj = img;
+                    imgState.active = true;
+                    imgState.w = img.width > 400 ? 400 : img.width;
+                    imgState.h = (img.height / img.width) * imgState.w;
+                    imgState.x = (canvas.width / 2) - (imgState.w / 2);
+                    imgState.y = (canvas.height / 2) - (imgState.h / 2);
+                    imgState.rotation = 0;
+                    showImageEditor();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showImageEditor() {
+            const layer = document.getElementById('imageTransformLayer');
+            const box = document.getElementById('activeImageBox');
+            const preview = document.getElementById('previewImg');
+            layer.style.display = 'block';
+            preview.src = imgState.imgObj.src;
+            updateImageBox();
+
+            // Drag mover
+            box.onmousedown = startMove;
+            box.ontouchstart = startMove;
+        }
+
+        function updateImageBox() {
+            const box = document.getElementById('activeImageBox');
+            box.style.width = imgState.w + 'px';
+            box.style.height = imgState.h + 'px';
+            box.style.left = imgState.x + 'px';
+            box.style.top = imgState.y + 'px';
+            box.style.transform = `rotate(${imgState.rotation}deg)`;
+        }
+
+        let currentAction = null;
+        let startX, startY, startW, startH, startRot, startMouseX, startMouseY, centerX, centerY;
+
+        function startMove(e) {
+            if(e.target.classList.contains('handle') || e.target.tagName === 'BUTTON') return;
+            if (e.cancelable) e.preventDefault(); // Previne o drag nativo apenas se não for botão ou alça
+            currentAction = 'move';
+            initInteraction(e);
+        }
+
+        function startResize(e) {
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+            currentAction = 'resize';
+            initInteraction(e);
+        }
+
+        function startRotate(e) {
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+            currentAction = 'rotate';
+            initInteraction(e);
+        }
+
+        function initInteraction(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            startX = imgState.x; startY = imgState.y;
+            startW = imgState.w; startH = imgState.h;
+            startRot = imgState.rotation;
+            startMouseX = clientX; startMouseY = clientY;
+
+            // Calcula o centro exato da imagem para a rotação (melhora performance)
+            const rect = document.getElementById('activeImageBox').getBoundingClientRect();
+            centerX = rect.left + rect.width / 2;
+            centerY = rect.top + rect.height / 2;
+
+            document.addEventListener('mousemove', doInteraction);
+            document.addEventListener('touchmove', doInteraction, {passive: false});
+            document.addEventListener('mouseup', stopInteraction);
+            document.addEventListener('touchend', stopInteraction);
+        }
+
+        function doInteraction(e) {
+            if (!currentAction) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const dx = clientX - startMouseX;
+            const dy = clientY - startMouseY;
+
+            if (currentAction === 'move') {
+                imgState.x = startX + dx;
+                imgState.y = startY + dy;
+            } else if (currentAction === 'resize') {
+                imgState.w = Math.max(20, startW + dx);
+                imgState.h = Math.max(20, startH + (dx * (startH/startW))); // Mantém proporção
+            } else if (currentAction === 'rotate') {
+                const angle = Math.atan2(clientY - centerY, clientX - centerX);
+                imgState.rotation = angle * (180 / Math.PI) + 90;
+            }
+            updateImageBox();
+            if (e.cancelable) e.preventDefault();
+        }
+
+        function stopInteraction() {
+            currentAction = null;
+            document.removeEventListener('mousemove', doInteraction);
+            document.removeEventListener('touchmove', doInteraction);
+            document.removeEventListener('mouseup', stopInteraction);
+            document.removeEventListener('touchend', stopInteraction);
+        }
+
+        function confirmImagePlacement() {
+            saveState();
+            ctx.save();
+            ctx.translate(imgState.x + imgState.w / 2, imgState.y + imgState.h / 2);
+            ctx.rotate(imgState.rotation * Math.PI / 180);
+            ctx.drawImage(imgState.imgObj, -imgState.w / 2, -imgState.h / 2, imgState.w, imgState.h);
+            ctx.restore();
+            
+            document.getElementById('imageTransformLayer').style.display = 'none';
+            imgState.active = false;
+            document.getElementById('imageInput').value = ''; // Limpa input
+        }
+
+        function cancelImagePlacement() {
+            document.getElementById('imageTransformLayer').style.display = 'none';
+            imgState.active = false;
+            document.getElementById('imageInput').value = '';
+        }
+
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(resizeCanvas, 200);
+        });
+
+        // Lógica da Mochila
+        function renderMochila() {
+            const grid = document.getElementById('notebookGrid');
+            grid.innerHTML = '';
+            allNotebooks.forEach((nb, index) => {
+                const card = document.createElement('div');
+                card.className = 'notebook-card';
+                card.style.borderLeftColor = nb.color || '#2c3e50';
+                
+                // Impede abrir o caderno se estiver editando o nome
+                card.onclick = (e) => {
+                    if (e.target.tagName !== 'H3') openNotebook(index);
+                };
+
+                const title = document.createElement('h3');
+                title.contentEditable = true;
+                title.innerText = nb.name;
+                title.spellcheck = false;
+                
+                // Salva ao sair ou apertar Enter
+                title.onblur = () => {
+                    allNotebooks[index].name = title.innerText.trim() || "Sem nome";
+                };
+                title.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        title.blur();
+                    }
+                };
+
+                card.appendChild(title);
+                grid.appendChild(card);
+            });
+        }
+
+        function createNewNotebook() {
+            const colors = ['#2c3e50', '#c0392b', '#27ae60', '#2980b9', '#8e44ad', '#f39c12'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            allNotebooks.push({ name: "Novo Caderno", pages: [null], color: randomColor });
+            renderMochila();
+
+            // Foca no nome do novo caderno automaticamente para renomear
+            const titles = document.querySelectorAll('.notebook-card h3');
+            const lastTitle = titles[titles.length - 1];
+            lastTitle.focus();
+            document.execCommand('selectAll', false, null); // Seleciona o texto para facilitar a troca
+        }
+
+        function openNotebook(index) {
+            activeIdx = index;
+            currentPage = 0;
+            mochilaView.style.display = 'none';
+            notebookView.style.display = 'block';
+            loadPage(0);
+            resizeCanvas();
+        }
+
+        function goToMochila() {
+            saveCurrentPage();
+            notebookView.style.display = 'none';
+            mochilaView.style.display = 'flex';
+            toggleMenu(); // Fecha o menu
+            renderMochila();
+        }
+
+        function exportMochila() {
+            saveCurrentPage(); // Garante que a página atual seja incluída no backup
+            const dataStr = JSON.stringify(allNotebooks);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'minha_mochila_digital.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function exportNotebookToPDF() {
+            if (activeIdx === -1) return;
+            const { jsPDF } = window.jspdf;
+            saveCurrentPage(); // Salva o progresso da página atual antes de exportar
+            const nb = allNotebooks[activeIdx];
+            
+            // Cria o PDF com as dimensões do canvas
+            const pdf = new jsPDF({
+                orientation: 'p',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            for (let i = 0; i < nb.pages.length; i++) {
+                if (i > 0) pdf.addPage([canvas.width, canvas.height], 'p');
+
+                // 1. Fundo Branco
+                tCtx.fillStyle = '#ffffff';
+                tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+                // 2. Margem Vermelha
+                tCtx.strokeStyle = '#ffb3b3';
+                tCtx.lineWidth = 2;
+                tCtx.beginPath(); tCtx.moveTo(80, 0); tCtx.lineTo(80, tempCanvas.height); tCtx.stroke();
+
+                // 3. Linhas Azuis (Simulando o estilo Tilibra)
+                tCtx.strokeStyle = '#add8e6';
+                tCtx.lineWidth = 1;
+                const startY = 95; 
+                for (let y = startY; y < tempCanvas.height; y += 31) {
+                    tCtx.beginPath(); tCtx.moveTo(0, y); tCtx.lineTo(tempCanvas.width, y); tCtx.stroke();
+                }
+
+                // 4. Desenho do usuário
+                if (nb.pages[i]) {
+                    const img = await new Promise(resolve => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.src = nb.pages[i];
+                    });
+                    tCtx.drawImage(img, 0, 0);
+                }
+                pdf.addImage(tempCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, canvas.width, canvas.height);
+            }
+
+            pdf.save(`${nb.name.replace(/\s+/g, '_')}.pdf`);
+            toggleMenu();
+        }
+
+        function importMochila() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        if (Array.isArray(importedData)) {
+                            allNotebooks = importedData;
+                            activeIdx = -1;
+                            notebookView.style.display = 'none';
+                            mochilaView.style.display = 'flex';
+                            const menu = document.getElementById('fileMenu');
+                            if (menu.style.display === 'block') toggleMenu();
+                            renderMochila();
+                        }
+                    } catch (err) {
+                        console.error("Erro ao importar o arquivo:", err);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function toggleMenu() {
+            const menu = document.getElementById('fileMenu');
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function updatePageInfo() {
+            if (activeIdx === -1) return;
+            const nb = allNotebooks[activeIdx];
+            document.getElementById('pageInfo').innerText = `${nb.name} - Página ${currentPage + 1} / ${nb.pages.length}`;
+        }
+
+        // Lógica de Desenho e Ferramentas (mantida)
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function start(e) {
+            if (imgState.active) return; // Não desenha se estiver transformando uma imagem
+            saveState();
+            drawing = true;
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        }
+
+        function move(e) {
+            if (!drawing) return;
+            const pos = getPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            if (e.cancelable) e.preventDefault(); // Evita scroll em dispositivos touch
+        }
+
+        function stop() { drawing = false; }
+
+        // Eventos de Mouse e Touch
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', stop);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        canvas.addEventListener('touchend', stop);
+
+        function setPen() {
+            currentTool = 'pen';
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.lineWidth = 1.1;
+            ctx.strokeStyle = penColor;
+            colorPicker.value = penColor;
+            penBtn.classList.add('active');
+            eraserBtn.classList.remove('active');
+            highlighterBtn.classList.remove('active');
+            canvas.style.cursor = 'crosshair';
+        }
+
+        function setEraser() {
+            currentTool = 'eraser';
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = 20;
+            eraserBtn.classList.add('active');
+            penBtn.classList.remove('active');
+            highlighterBtn.classList.remove('active');
+            canvas.style.cursor = 'cell';
+        }
+
+        function setHighlighter() {
+            currentTool = 'highlighter';
+            ctx.globalCompositeOperation = 'multiply';
+            ctx.lineWidth = 30;
+            ctx.strokeStyle = highlighterColor;
+            colorPicker.value = highlighterHex;
+            highlighterBtn.classList.add('active');
+            penBtn.classList.remove('active');
+            eraserBtn.classList.remove('active');
+            canvas.style.cursor = 'crosshair';
+        }
+
+        function updateToolColor(hex) {
+            if (currentTool === 'pen') {
+                penColor = hex;
+                ctx.strokeStyle = penColor;
+            } else if (currentTool === 'highlighter') {
+                highlighterHex = hex;
+                // Converte hex para RGBA com transparência para o marcador
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                highlighterColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
+                ctx.strokeStyle = highlighterColor;
+            }
+        }
+
+        function resetColors() {
+            penColor = '#00008b';
+            highlighterHex = '#ffff00';
+            highlighterColor = 'rgba(255, 255, 0, 0.5)';
+            
+            if (currentTool === 'pen') {
+                ctx.strokeStyle = penColor;
+                colorPicker.value = penColor;
+            } else if (currentTool === 'highlighter') {
+                ctx.strokeStyle = highlighterColor;
+                colorPicker.value = highlighterHex;
+            }
+        }
+
+        function saveCurrentPage() {
+            if (activeIdx !== -1) {
+                allNotebooks[activeIdx].pages[currentPage] = canvas.toDataURL();
+            }
+        }
+
+        function loadPage(index) {
+            const nb = allNotebooks[activeIdx];
+            const img = new Image();
+            img.onload = () => {
+                const op = ctx.globalCompositeOperation;
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                ctx.globalCompositeOperation = op;
+            };
+            if (nb.pages[index]) {
+                img.src = nb.pages[index];
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            currentPage = index;
+            updatePageInfo();
+            undoStack = [];
+            redoStack = [];
+        }
+
+        function addNewPage() {
+            saveCurrentPage();
+            allNotebooks[activeIdx].pages.push(null);
+            loadPage(allNotebooks[activeIdx].pages.length - 1);
+        }
+
+        function deleteCurrentPage() {
+            if (activeIdx === -1) return;
+            const nb = allNotebooks[activeIdx];
+            
+            if (nb.pages.length <= 1) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                nb.pages[currentPage] = null;
+                return;
+            }
+
+            nb.pages.splice(currentPage, 1);
+            // Ajusta o índice se deletarmos a última página
+            if (currentPage >= nb.pages.length) {
+                currentPage = nb.pages.length - 1;
+            }
+            loadPage(currentPage);
+        }
+
+        function prevPage() {
+            if (currentPage > 0) { saveCurrentPage(); loadPage(currentPage - 1); }
+        }
+
+        function nextPage() {
+            if (currentPage < allNotebooks[activeIdx].pages.length - 1) { saveCurrentPage(); loadPage(currentPage + 1); }
+        }
+
+        // Sistema de Undo/Redo
+        function saveState() {
+            undoStack.push(canvas.toDataURL());
+            if (undoStack.length > 30) undoStack.shift(); // Limita o histórico
+            redoStack = []; // Limpa o redo ao realizar uma nova ação
+        }
+
+        function applyState(state) {
+            const img = new Image();
+            img.onload = () => {
+                ctx.save();
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                ctx.restore();
+            };
+            img.src = state;
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            redoStack.push(canvas.toDataURL());
+            const state = undoStack.pop();
+            applyState(state);
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            undoStack.push(canvas.toDataURL());
+            const state = redoStack.pop();
+            applyState(state);
+        }
+
+        // Atalhos de teclado
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z') undo();
+            if (e.ctrlKey && e.key === 'y') redo();
+        });
+
+        // Lembrete de salvamento de 10 em 10 minutos
+        setInterval(() => {
+            if (allNotebooks.length > 0) {
+                if (confirm("Deseja salvar a mochila agora para não perder seu progresso?")) {
+                    exportMochila();
+                }
+            }
+        }, 10 * 60 * 1000); // 10 minutos em milissegundos
+    </script>
+</body>
+</html>

@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caneta 3D Digital</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            touch-action: none; /* Impede gestos do sistema como scroll e zoom */
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            cursor: move;
+        }
+
+        /* UI Estilo Feather 3D */
+        .panel {
+            position: absolute;
+            background: #252525;
+            border: 1px solid #444;
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 10;
+            color: white;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Ajustes de Pincel (Inferior) */
+        #brush-panel {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            flex-direction: row;
+            align-items: center;
+        }
+
+        /* Configurações de Cena (Topo Direita) */
+        #settings-panel {
+            top: 20px;
+            right: 20px;
+        }
+
+        button {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 10px 15px; /* Aumentado para facilitar o toque */
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background: #555;
+        }
+
+        button.active {
+            background: #007aff;
+            box-shadow: 0 0 10px rgba(0, 122, 255, 0.5);
+        }
+
+        .step-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .step-btn {
+            padding: 8px 12px; /* Maior para dedos */
+            font-size: 16px;
+            min-width: 35px;
+        }
+
+        /* Estilo para o seletor de cores customizado */
+        #color-swatch {
+            width: 45px; /* Aumentado */
+            height: 45px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            background-color: #000000;
+        }
+
+        #color-picker-container {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none; /* Escondido por padrão */
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            z-index: 100;
+        }
+
+        .reset-small {
+            padding: 5px 8px;
+            font-size: 11px;
+            background: #555;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+            height: 35px; /* Área de toque do slider maior */
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Ajustes do Pincel -->
+    <div id="brush-panel" class="panel">
+        <div class="control-group">
+            <label style="font-size: 9px;">TAMANHO: <span id="size-value" style="color: #007aff; font-weight: bold;">0.05</span></label>
+            <div class="step-control">
+                <button class="step-btn" data-target="size-slider" data-step="-0.01">-</button>
+                <input type="range" id="size-slider" min="0.01" max="0.5" step="0.01" value="0.05">
+                <button class="step-btn" data-target="size-slider" data-step="0.01">+</button>
+                <button class="reset-small" data-target="size-slider">R</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Cor</label>
+            <div id="color-swatch"></div>
+        </div>
+    </div>
+    
+    <!-- Container do Disco de Cores (Movido para fora para evitar bugs de clipping em tablets) -->
+    <div id="color-picker-container">
+        <div id="iro-picker"></div>
+    </div>
+
+    <div id="depth-control" class="panel" style="bottom: 20px; left: 20px;">
+        <div class="control-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+            <label style="color: #007aff;">PAREDE</label>
+            <div class="step-control">
+                <span style="font-size: 9px; min-width: 45px;">PROFUND.</span>
+                <button class="step-btn" data-target="depth-slider" data-step="-0.5">-</button>
+                <input type="range" id="depth-slider" min="-30" max="30" step="0.5" value="0">
+                <button class="step-btn" data-target="depth-slider" data-step="0.5">+</button>
+                <button class="reset-small" data-target="depth-slider">R</button>
+            </div>
+            <div class="step-control">
+                <span style="font-size: 9px; min-width: 45px;">INC. VER</span>
+                <button class="step-btn" data-target="pitch-slider" data-step="-0.5">-</button>
+                <input type="range" id="pitch-slider" min="-180" max="180" step="0.5" value="0">
+                <button class="step-btn" data-target="pitch-slider" data-step="0.5">+</button>
+                <button class="reset-small" data-target="pitch-slider">R</button>
+            </div>
+            <div class="step-control">
+                <span style="font-size: 9px; min-width: 45px;">GIRO HOR</span>
+                <button class="step-btn" data-target="wall-yaw-slider" data-step="-0.5">-</button>
+                <input type="range" id="wall-yaw-slider" min="-180" max="180" step="0.5" value="0">
+                <button class="step-btn" data-target="wall-yaw-slider" data-step="0.5">+</button>
+                <button class="reset-small" data-target="wall-yaw-slider">R</button>
+            </div>
+        </div>
+        <div class="control-group" style="padding-top: 5px;">
+            <label style="color: #00ff7a;">CHÃO</label>
+            <div class="step-control">
+                <span style="font-size: 9px; min-width: 45px;">ALTURA</span>
+                <button class="step-btn" data-target="floor-height-slider" data-step="-0.5">-</button>
+                <input type="range" id="floor-height-slider" min="-30" max="30" step="0.5" value="0">
+                <button class="step-btn" data-target="floor-height-slider" data-step="0.5">+</button>
+                <button class="reset-small" data-target="floor-height-slider">R</button>
+            </div>
+            <div class="step-control">
+                <span style="font-size: 9px; min-width: 45px;">INC. FRT</span>
+                <button class="step-btn" data-target="yaw-slider" data-step="-0.5">-</button>
+                <input type="range" id="yaw-slider" min="-180" max="180" step="0.5" value="0">
+                <button class="step-btn" data-target="yaw-slider" data-step="0.5">+</button>
+                <button class="reset-small" data-target="yaw-slider">R</button>
+            </div>
+            <div class="step-control">
+                <span style="font-size: 9px; min-width: 45px;">INC. LAT</span>
+                <button class="step-btn" data-target="floor-roll-slider" data-step="-0.5">-</button>
+                <input type="range" id="floor-roll-slider" min="-180" max="180" step="0.5" value="0">
+                <button class="step-btn" data-target="floor-roll-slider" data-step="0.5">+</button>
+                <button class="reset-small" data-target="floor-roll-slider">R</button>
+            </div>
+        </div>
+        <div class="control-group" style="flex-direction: row; gap: 5px; margin-top: 5px;">
+            <button id="rotate-grid-btn" style="flex: 1; font-size: 10px; padding: 6px;">Alinhar Grade</button>
+            <button id="reset-view-btn" style="flex: 1; font-size: 10px; padding: 6px;">Resetar Visão</button>
+        </div>
+        <div class="control-group" style="flex-direction: row; gap: 5px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 5px;">
+            <button id="draw-btn" style="flex: 1;">Pincel</button>
+            <button id="erase-btn" style="flex: 1;">Borracha</button>
+            <button id="picker-btn" style="flex: 1;">C. Gotas</button>
+            <button id="camera-btn" class="active" style="flex: 1;">Câmera</button>
+        </div>
+    </div>
+
+    <!-- Configurações Globais -->
+    <div id="settings-panel" class="panel">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="grid-main-toggle" checked>
+            <label for="grid-toggle">Mostrar Grades</label>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="floor-mode-toggle">
+            <label for="floor-mode-toggle">Desenhar no Chão</label>
+        </div>
+        <div class="control-group">
+            <label>Ângulos da Câmera</label>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+                <button class="view-btn" data-view="front" style="font-size: 10px; padding: 6px 2px;">Frente</button>
+                <button class="view-btn" data-view="back" style="font-size: 10px; padding: 6px 2px;">Trás</button>
+                <button class="view-btn" data-view="right" style="font-size: 10px; padding: 6px 2px;">Direita</button>
+                <button class="view-btn" data-view="left" style="font-size: 10px; padding: 6px 2px;">Esquerda</button>
+                <button class="view-btn" data-view="top" style="font-size: 10px; padding: 6px 2px;">Cima</button>
+                <button class="view-btn" data-view="bottom" style="font-size: 10px; padding: 6px 2px;">Baixo</button>
+            </div>
+        </div>
+        <div class="control-group" style="flex-direction: row; gap: 5px;">
+            <button id="undo-btn" style="flex: 1; background: #dc3545;">Desfazer</button>
+            <button id="clear-btn" style="flex: 1;">Limpar Tudo</button>
+        </div>
+        <div class="control-group" style="flex-direction: row; gap: 5px; margin-top: 5px;">
+            <button id="export-png-btn" style="flex: 1; font-size: 10px; background: #28a745;">PNG</button>
+            <button id="export-3d-btn" style="flex: 1; font-size: 10px; background: #6f42c1;">Modelo 3D</button>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+
+    <script>
+        // Configuração Básica do Cenário
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // Iniciamos a câmera na altura 0 para que a visão inicial seja reta
+        camera.position.set(0, 0, 40);
+
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            preserveDrawingBuffer: true // Necessário para exportação de imagem PNG
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        // Controles de Câmera (Orbit Controls)
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // Suaviza o movimento
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true; // Essencial para Tablet: arrasta o objeto na direção do dedo
+        
+        // Configuração específica para Touch
+        controls.touches = {
+            ONE: THREE.TOUCH.ROTATE,     // Um dedo: Girar
+            TWO: THREE.TOUCH.DOLLY_PAN  // Dois dedos: Zoom (pinça) e Pan (arrastar)
+        };
+        controls.enabled = true; // Começa ativado
+
+        // Adiciona uma grade de referência (Grid) no chão
+        const gridHelper = new THREE.GridHelper(60, 60, 0xcccccc, 0xeeeeee); 
+        gridHelper.position.y = -0.01; // Evita conflito visual com o plano exato zero
+        scene.add(gridHelper);
+
+        // Adiciona uma grade vertical de referência (Plano XY)
+        const verticalGridHelper = new THREE.GridHelper(60, 60, 0xcccccc, 0xeeeeee); 
+        verticalGridHelper.rotation.x = Math.PI / 2;
+        verticalGridHelper.visible = true; 
+        scene.add(verticalGridHelper);
+
+        // Iluminação básica
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7.5);
+        scene.add(dirLight);
+
+        // Estado do Aplicativo
+        let currentMode = 'camera'; // Inicia no modo camera
+        let isDrawing = false;
+        let brushSize = 0.05;
+        let brushColor = "#000000"; // Mudado para string para maior compatibilidade
+        let isFloorMode = false;
+        let planeDepth = 0;
+        let floorHeight = 0;
+        let wallRotationX = 0; // Inclinação da Parede
+        let wallRotationY = 0; // Giro da Parede
+        let floorRotationX = 0; // Inclinação do Chão
+        let floorRotationZ = 0; // Inclinação Lateral do Chão
+        let currentPlaneNormal = new THREE.Vector3(0, 0, 1);
+        let currentPlanePoint = new THREE.Vector3(0, 0, 0);
+
+        let currentStroke = null;
+        let lastPoint = null;
+        let allLines = [];
+
+        // Plano invisível interceptor para capturar as coordenadas do mouse no espaço 3D
+        // Por padrão, vamos desenhar em um plano vertical virado para a câmera inicial (Z = 0)
+        const drawPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Elementos da Interface
+        const drawBtn = document.getElementById('draw-btn');
+        const cameraBtn = document.getElementById('camera-btn');
+        const eraseBtn = document.getElementById('erase-btn');
+        const pickerBtn = document.getElementById('picker-btn');
+        const undoBtn = document.getElementById('undo-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const gridMainToggle = document.getElementById('grid-main-toggle');
+        const floorModeToggle = document.getElementById('floor-mode-toggle');
+        const sizeSlider = document.getElementById('size-slider');
+        const sizeValueDisplay = document.getElementById('size-value');
+        const depthSlider = document.getElementById('depth-slider');
+        const floorHeightSlider = document.getElementById('floor-height-slider');
+        const pitchSlider = document.getElementById('pitch-slider');
+        const wallYawSlider = document.getElementById('wall-yaw-slider');
+        const yawSlider = document.getElementById('yaw-slider');
+        const floorRollSlider = document.getElementById('floor-roll-slider');
+        const rotateGridBtn = document.getElementById('rotate-grid-btn');
+        const resetViewBtn = document.getElementById('reset-view-btn');
+        const viewBtns = document.querySelectorAll('.view-btn');
+
+        // Alternar modos
+        drawBtn.addEventListener('click', () => {
+            currentMode = 'draw';
+            controls.enabled = false;
+            drawBtn.classList.add('active');
+            cameraBtn.classList.remove('active');
+            eraseBtn.classList.remove('active');
+            pickerBtn.classList.remove('active');
+            container.style.cursor = 'crosshair';
+        });
+
+        eraseBtn.addEventListener('click', () => {
+            currentMode = 'erase';
+            controls.enabled = false;
+            eraseBtn.classList.add('active');
+            drawBtn.classList.remove('active');
+            cameraBtn.classList.remove('active');
+            pickerBtn.classList.remove('active');
+            container.style.cursor = 'cell'; // Cursor de precisão para borracha
+        });
+
+        pickerBtn.addEventListener('click', () => {
+            currentMode = 'picker';
+            controls.enabled = false;
+            pickerBtn.classList.add('active');
+            drawBtn.classList.remove('active');
+            eraseBtn.classList.remove('active');
+            cameraBtn.classList.remove('active');
+            container.style.cursor = 'copy'; // Cursor indicando seleção
+        });
+
+        cameraBtn.addEventListener('click', () => {
+            currentMode = 'camera';
+            controls.enabled = true;
+            cameraBtn.classList.add('active');
+            drawBtn.classList.remove('active');
+            eraseBtn.classList.remove('active');
+            pickerBtn.classList.remove('active');
+            container.style.cursor = 'move';
+        });
+
+        // Atalho de teclado: Tecla Espaço para alternar modos
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.code === 'Space') {
+                e.preventDefault(); // Impede o scroll da página
+                
+                // Tira o foco de qualquer botão ou slider para o Espaço não "clicar" neles
+                if (document.activeElement) document.activeElement.blur();
+
+                if (currentMode === 'camera') drawBtn.click();
+                else if (currentMode === 'draw') eraseBtn.click();
+                else if (currentMode === 'erase') pickerBtn.click();
+                else cameraBtn.click();
+            }
+        });
+
+        // Configuração do Seletor de Cores (Estilo Procreate)
+        const colorSwatch = document.getElementById('color-swatch');
+        const colorPickerContainer = document.getElementById('color-picker-container');
+        
+        // Inicializa swatch com preto
+        colorSwatch.style.backgroundColor = "#000000";
+
+        const colorPicker = new iro.ColorPicker("#iro-picker", {
+            width: 180,
+            color: "#000000",
+            layout: [
+                { component: iro.ui.Wheel },
+                { component: iro.ui.Slider, options: { sliderType: 'value' } }
+            ]
+        });
+
+        // Abre/Fecha o seletor ao clicar na cor
+        colorSwatch.addEventListener('click', (e) => {
+            const isVisible = colorPickerContainer.style.display === 'block';
+            colorPickerContainer.style.display = isVisible ? 'none' : 'block';
+            e.stopPropagation();
+        });
+
+        // Fecha se clicar fora
+        document.addEventListener('click', () => {
+            colorPickerContainer.style.display = 'none';
+        });
+        colorPickerContainer.addEventListener('click', (e) => e.stopPropagation());
+
+        // Atualiza a cor do pincel
+        colorPicker.on('color:change', function(color) {
+            brushColor = color.hexString; // Pega a string "#RRGGBB" diretamente
+            colorSwatch.style.backgroundColor = brushColor;
+        });
+
+        // Função para limpar memória ao remover objetos
+        function disposeObject(obj) {
+            obj.traverse((child) => {
+                if (child.isMesh) {
+                    child.geometry.dispose();
+                    child.material.dispose();
+                }
+            });
+        }
+
+        clearBtn.addEventListener('click', () => {
+            allLines.forEach(line => {
+                scene.remove(line);
+                disposeObject(line);
+            });
+            allLines = [];
+        });
+
+        undoBtn.addEventListener('click', () => {
+            if (allLines.length > 0) {
+                const lastLine = allLines.pop();
+                scene.remove(lastLine);
+                disposeObject(lastLine);
+            }
+        });
+
+        gridMainToggle.addEventListener('change', (e) => {
+            const isVisible = e.target.checked;
+            gridHelper.visible = isVisible;
+            verticalGridHelper.visible = isVisible;
+        });
+
+        floorModeToggle.addEventListener('change', (e) => {
+            isFloorMode = e.target.checked;
+        });
+
+        sizeSlider.addEventListener('input', (e) => {
+            brushSize = parseFloat(e.target.value);
+            sizeValueDisplay.textContent = brushSize.toFixed(2);
+        });
+
+        function updatePlaneTransform() {
+            // CHÃO: Inclinação estilo rampa (Eixo X)
+            const floorRotRad = THREE.MathUtils.degToRad(floorRotationX);
+            const floorRollRad = THREE.MathUtils.degToRad(floorRotationZ);
+            gridHelper.position.set(0, floorHeight, 0);
+            gridHelper.rotation.set(floorRotRad, 0, floorRollRad);
+
+            // PAREDE: Inclinação Vertical (X) e Giro Horizontal (Y)
+            const wallRotRad = THREE.MathUtils.degToRad(wallRotationX);
+            const wallYawRad = THREE.MathUtils.degToRad(wallRotationY);
+            
+            currentPlaneNormal.set(0, 0, 1)
+                .applyAxisAngle(new THREE.Vector3(1, 0, 0), wallRotRad)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), wallYawRad)
+                .normalize();
+            currentPlanePoint.set(0, 0, planeDepth);
+            // A profundidade agora segue a direção da normal da parede
+            currentPlanePoint.copy(currentPlaneNormal).multiplyScalar(planeDepth);
+
+            // Atualiza Grade Visual da Parede
+            verticalGridHelper.position.copy(currentPlanePoint);
+            const targetLook = currentPlanePoint.clone().add(currentPlaneNormal);
+            verticalGridHelper.lookAt(targetLook);
+            verticalGridHelper.rotateX(Math.PI / 2);
+        }
+
+        depthSlider.addEventListener('input', (e) => {
+            planeDepth = parseFloat(e.target.value);
+            updatePlaneTransform();
+        });
+
+        floorHeightSlider.addEventListener('input', (e) => {
+            floorHeight = parseFloat(e.target.value);
+            updatePlaneTransform();
+        });
+
+        pitchSlider.addEventListener('input', (e) => {
+            wallRotationX = parseFloat(e.target.value);
+            updatePlaneTransform();
+        });
+
+        wallYawSlider.addEventListener('input', (e) => {
+            wallRotationY = parseFloat(e.target.value);
+            updatePlaneTransform();
+        });
+
+        yawSlider.addEventListener('input', (e) => {
+            floorRotationX = parseFloat(e.target.value);
+            updatePlaneTransform();
+        });
+
+        floorRollSlider.addEventListener('input', (e) => {
+            floorRotationZ = parseFloat(e.target.value);
+            updatePlaneTransform();
+        });
+
+        // Botão para rotacionar a grade em 90 graus (Virar lado)
+        rotateGridBtn.addEventListener('click', () => {
+            // Agora afeta apenas a parede, permitindo girar o "cavalete" vertical
+            // Arredonda para o próximo múltiplo de 90 para garantir alinhamento perfeito
+            let currentStep = Math.round(wallRotationY / 90);
+            wallRotationY = (currentStep + 1) * 90;
+            
+            if (wallRotationY > 180) wallRotationY -= 360;
+            if (wallRotationY < -180) wallRotationY += 360;
+            
+            wallYawSlider.value = wallRotationY;
+            updatePlaneTransform();
+        });
+
+        // Botão para resetar visualização e profundidades
+        resetViewBtn.addEventListener('click', () => {
+            // Reset dos estados
+            planeDepth = 0;
+            floorHeight = 0;
+            wallRotationX = 0;
+            wallRotationY = 0;
+            floorRotationX = 0;
+            floorRotationZ = 0;
+            
+            // Reset dos Sliders
+            depthSlider.value = 0;
+            floorHeightSlider.value = 0;
+            pitchSlider.value = 0;
+            wallYawSlider.value = 0;
+            yawSlider.value = 0;
+            floorRollSlider.value = 0;
+            
+            // Reset da Câmera
+            camera.position.set(0, 0, 40);
+            controls.target.set(0, 0, 0);
+            controls.update();
+            
+            updatePlaneTransform();
+        });
+
+        viewBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const view = btn.dataset.view;
+                controls.enabled = true;
+
+                // Ao mudar a visão, alinhamos a grade para ficar de frente para a câmera
+                // Mantém a distância atual (zoom) e o ponto focal (pan)
+                // Se a distância for zero, usamos 40 como padrão
+                const distance = camera.position.distanceTo(controls.target) || 40;
+                const target = controls.target;
+
+                if (view === 'front') {
+                    camera.position.set(0, 0, 40);
+                    wallRotationY = 0; wallRotationX = 0;
+                    camera.position.set(target.x, target.y, target.z + distance);
+                } else if (view === 'back') {
+                    camera.position.set(0, 0, -40);
+                    wallRotationY = 180; wallRotationX = 0;
+                    camera.position.set(target.x, target.y, target.z - distance);
+                } else if (view === 'right') {
+                    camera.position.set(40, 0, 0);
+                    wallRotationY = 90; wallRotationX = 0;
+                    camera.position.set(target.x + distance, target.y, target.z);
+                } else if (view === 'left') {
+                    camera.position.set(-40, 0, 0);
+                    wallRotationY = -90; wallRotationX = 0;
+                    camera.position.set(target.x - distance, target.y, target.z);
+                } else if (view === 'top') {
+                    camera.position.set(0, 40, 0);
+                    isFloorMode = true; floorModeToggle.checked = true;
+                    floorRotationX = 0; floorRotationZ = 0;
+                    camera.position.set(target.x, target.y + distance, target.z);
+                } else if (view === 'bottom') {
+                    camera.position.set(0, -40, 0);
+                    isFloorMode = true; floorModeToggle.checked = true;
+                    floorRotationX = 180; floorRotationZ = 0;
+                    camera.position.set(target.x, target.y - distance, target.z);
+                }
+
+                // Atualiza os sliders para refletir a nova posição sincronizada
+                wallYawSlider.value = wallRotationY;
+                pitchSlider.value = wallRotationX;
+                yawSlider.value = floorRotationX;
+                floorRollSlider.value = floorRotationZ;
+
+                controls.target.set(0, 0, 0);
+                camera.lookAt(0, 0, 0);
+                controls.update();
+                updatePlaneTransform();
+                if (currentMode === 'draw') controls.enabled = false;
+            });
+        });
+
+        // Lógica do Desenho 3D
+        function get3DMousePosition(e) {
+            // Converte a posição do mouse para coordenadas normalizadas (-1 a +1)
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // LÓGICA DE ESCULTURA:
+            // Verifica se o mouse está sobre o que já foi desenhado anteriormente.
+            // Se estiver, o ponto 3D será a superfície do objeto, permitindo "empilhar" volume.
+            if (allLines.length > 0) {
+                // Ignora o traço que está sendo desenhado no momento para evitar "pular" em si mesmo
+                const currentGroup = currentStroke ? allLines[allLines.length - 1] : null;
+                const targets = currentGroup ? allLines.filter(l => l !== currentGroup) : allLines;
+                const intersects = raycaster.intersectObjects(targets, true);
+                if (intersects.length > 0) {
+                    return intersects[0].point;
+                }
+            }
+            
+            const intersectionPoint = new THREE.Vector3();
+            
+            const normal = new THREE.Vector3();
+
+            if (isFloorMode) {
+                // Modo Chão: O plano é horizontal na altura definida pelo slider
+                const floorRotRad = THREE.MathUtils.degToRad(floorRotationX);
+                const floorRollRad = THREE.MathUtils.degToRad(floorRotationZ);
+                const floorNormal = new THREE.Vector3(0, 1, 0)
+                    .applyAxisAngle(new THREE.Vector3(1, 0, 0), floorRotRad)
+                    .applyAxisAngle(new THREE.Vector3(0, 0, 1), floorRollRad);
+                drawPlane.setFromNormalAndCoplanarPoint(floorNormal, new THREE.Vector3(0, floorHeight, 0));
+            } else {
+                // Modo Parede: Usa a normal e ponto calculados manualmente
+                drawPlane.setFromNormalAndCoplanarPoint(currentPlaneNormal, currentPlanePoint);
+            }
+
+            raycaster.ray.intersectPlane(drawPlane, intersectionPoint);
+            return intersectionPoint;
+        }
+
+        // Função auxiliar para apagar traços
+        function eraseAtMouse(e) {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            // Intersecciona apenas com as linhas desenhadas
+            const intersects = raycaster.intersectObjects(allLines, true);
+            
+            if (intersects.length > 0) {
+                let object = intersects[0].object;
+                // Se o objeto for parte de um grupo (o traço), pegamos o grupo pai
+                while(object.parent && !allLines.includes(object)) object = object.parent;
+                
+                scene.remove(object);
+                allLines = allLines.filter(line => line !== object);
+            }
+        }
+
+        // Função para selecionar cor de um traço existente
+        function pickColorAtMouse(e) {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(allLines, true);
+            
+            if (intersects.length > 0) {
+                let object = intersects[0].object;
+                // Busca o grupo pai que contém a informação da cor original
+                while(object.parent && !allLines.includes(object)) object = object.parent;
+                
+                brushColor = object.userData.color || "#" + intersects[0].object.material.color.getHexString();
+                colorPicker.color.set(brushColor); // Atualiza o seletor visualmente
+            }
+        }
+
+        // Desativa menu de contexto ao segurar o toque (long press)
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        window.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return; 
+            
+            // Bloqueia o desenho se clicar em qualquer parte da interface (painéis ou seletor)
+            if (e.target.closest('.panel') || e.target.closest('#color-picker-container')) return;
+            
+            if (currentMode === 'erase') {
+                isDrawing = true; // Reutilizando a flag para apagar continuamente
+                eraseAtMouse(e);
+                return;
+            }
+
+            if (currentMode === 'picker') {
+                pickColorAtMouse(e);
+                return;
+            }
+
+            if (currentMode !== 'draw') return;
+
+            isDrawing = true;
+            const startPoint = get3DMousePosition(e);
+            lastPoint = startPoint;
+
+            // Criamos um grupo para conter o tubo e as tampas (esferas)
+            const strokeGroup = new THREE.Group();
+            const material = new THREE.MeshStandardMaterial({ color: brushColor });
+            strokeGroup.userData.color = brushColor; // Salva a cor no grupo
+            const sphereGeom = new THREE.SphereGeometry(brushSize, 16, 12);
+
+            // Ponta Inicial
+            const startCap = new THREE.Mesh(sphereGeom, material);
+            startCap.position.copy(startPoint);
+            strokeGroup.add(startCap);
+
+            // Ponta Final (que vai se mover com o mouse)
+            const endCap = new THREE.Mesh(sphereGeom, material);
+            endCap.position.copy(startPoint);
+            strokeGroup.add(endCap);
+
+            // Corpo do Tubo
+            const tubeMesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+            strokeGroup.add(tubeMesh);
+
+            currentStroke = {
+                mesh: tubeMesh,
+                endCap: endCap,
+                points: [startPoint],
+            };
+            
+            scene.add(strokeGroup);
+            allLines.push(strokeGroup);
+            
+            if (container.setPointerCapture) container.setPointerCapture(e.pointerId);
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isDrawing) return;
+
+            if (currentMode === 'erase') {
+                eraseAtMouse(e);
+                return;
+            }
+
+            if (currentMode !== 'draw') return;
+
+            const newPoint = get3DMousePosition(e);
+            // Sensibilidade do movimento: evita criar pontos demais muito próximos
+            if (newPoint.distanceTo(lastPoint) < 0.1) return;
+
+            currentStroke.points.push(newPoint);
+            currentStroke.endCap.position.copy(newPoint); // Move a "cabeça" da minhoca
+
+            if (currentStroke.points.length > 1) {
+                // Cria uma curva suave baseada nos pontos coletados
+                const curve = new THREE.CatmullRomCurve3(currentStroke.points);
+                
+                // Gera a geometria do tubo: (caminho, segmentos_ao_longo, raio, segmentos_redondos, fechado)
+                const geometry = new THREE.TubeGeometry(curve, currentStroke.points.length * 2, brushSize, 8, false);
+                
+                if (currentStroke.mesh.geometry) currentStroke.mesh.geometry.dispose();
+                currentStroke.mesh.geometry = geometry;
+            }
+            
+            lastPoint = newPoint;
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            isDrawing = false;
+            currentStroke = null;
+        });
+
+        // Responsividade da tela
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Inicializa a posição das grades no carregamento
+        updatePlaneTransform();
+
+        // Loop de Renderização Continuo (Animação)
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (currentMode === 'camera') controls.update();
+            
+            renderer.render(scene, camera);
+        }
+
+        // Função auxiliar para disparar o download automático e seguro
+        function triggerDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.style.display = 'none';
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // Pequeno delay para garantir o download antes de limpar a memória
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+        }
+
+        // Função para Exportar PNG (Foto)
+        document.getElementById('export-png-btn').addEventListener('click', () => {
+            // Esconde as grades temporariamente para uma imagem limpa
+            const gv = gridHelper.visible;
+            const vgv = verticalGridHelper.visible;
+            gridHelper.visible = false;
+            verticalGridHelper.visible = false;
+
+            renderer.render(scene, camera);
+            renderer.domElement.toBlob((blob) => {
+                triggerDownload(blob, 'meudesenho3d.png');
+                
+                // Restaura as grades após capturar
+                gridHelper.visible = gv;
+                verticalGridHelper.visible = vgv;
+                renderer.render(scene, camera);
+            }, 'image/png');
+        });
+
+        // Função para Exportar Modelo 3D (GLB)
+        document.getElementById('export-3d-btn').addEventListener('click', () => {
+            const exporter = new THREE.GLTFExporter();
+            const exportScene = new THREE.Group();
+            allLines.forEach(line => exportScene.add(line.clone()));
+
+            exporter.parse(exportScene, (gltf) => {
+                const blob = new Blob([gltf], { type: 'application/octet-stream' });
+                triggerDownload(blob, 'modelo3d.glb');
+            }, { binary: true });
+        });
+
+        animate();
+
+        // Lógica dos botões de incremento (+/- 1)
+        document.querySelectorAll('.step-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const slider = document.getElementById(btn.dataset.target);
+                const stepValue = parseFloat(btn.dataset.step);
+                
+                // Atualiza tanto a variável de estado quanto o valor do slider
+                // Usamos toFixed(1) para evitar erros de precisão do JS (ex: 0.1 + 0.2 = 0.300004)
+                if (btn.dataset.target === 'depth-slider') {
+                    planeDepth = parseFloat((planeDepth + stepValue).toFixed(1));
+                    slider.value = planeDepth;
+                } else if (btn.dataset.target === 'floor-height-slider') {
+                    floorHeight = parseFloat((floorHeight + stepValue).toFixed(1));
+                    slider.value = floorHeight;
+                } else if (btn.dataset.target === 'pitch-slider') {
+                    wallRotationX = parseFloat((wallRotationX + stepValue).toFixed(1));
+                    slider.value = wallRotationX;
+                } else if (btn.dataset.target === 'wall-yaw-slider') {
+                    wallRotationY = parseFloat((wallRotationY + stepValue).toFixed(1));
+                    slider.value = wallRotationY;
+                } else if (btn.dataset.target === 'yaw-slider') {
+                    floorRotationX = parseFloat((floorRotationX + stepValue).toFixed(1));
+                    slider.value = floorRotationX;
+                } else if (btn.dataset.target === 'floor-roll-slider') {
+                    floorRotationZ = parseFloat((floorRotationZ + stepValue).toFixed(1));
+                    slider.value = floorRotationZ;
+                } else if (btn.dataset.target === 'size-slider') {
+                    brushSize = Math.max(0.01, Math.min(0.5, brushSize + stepValue));
+                    slider.value = brushSize;
+                    sizeValueDisplay.textContent = brushSize.toFixed(2);
+                }
+                
+                updatePlaneTransform();
+            });
+        });
+
+        // Lógica dos resets individuais (Botões 'R')
+        document.querySelectorAll('.reset-small').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.dataset.target;
+                const slider = document.getElementById(targetId);
+                slider.value = 0;
+                if (targetId === 'depth-slider') planeDepth = 0;
+                else if (targetId === 'floor-height-slider') floorHeight = 0;
+                else if (targetId === 'pitch-slider') wallRotationX = 0;
+                else if (targetId === 'wall-yaw-slider') wallRotationY = 0;
+                else if (targetId === 'yaw-slider') floorRotationX = 0;
+                else if (targetId === 'floor-roll-slider') floorRotationZ = 0;
+                else if (targetId === 'size-slider') {
+                    brushSize = 0.05;
+                    slider.value = 0.05;
+                    sizeValueDisplay.textContent = "0.05";
+                }
+                updatePlaneTransform();
+            });
+        });
+    </script>
+</body>
+</html>

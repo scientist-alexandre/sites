@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Player</title>
+    <style>
+        /* Reset e Estilos de Base */
+        :root {
+            --primary-color: #007bff;
+            --accent-color: #28a745;
+            --bg-overlay: rgba(0, 0, 0, 0.6);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        /* Container do Player */
+        .video-container {
+            position: relative;
+            width: 90%;
+            max-width: 1000px;
+            aspect-ratio: 16 / 9;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            cursor: pointer;
+        }
+
+        /* Overlay de Controles */
+        .controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, var(--bg-overlay));
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            transition: opacity 0.3s;
+            opacity: 0;
+        }
+
+        .video-container:hover .controls {
+            opacity: 1;
+        }
+
+        /* Ocultar cursor e controles por inatividade */
+        .video-container.hide-controls {
+            cursor: none !important;
+        }
+
+        .video-container.hide-controls .controls {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+
+        .controls.active {
+            opacity: 1;
+        }
+
+        /* Barra de Progresso */
+        .progress-area {
+            height: 5px;
+            width: 100%;
+            background: rgba(255,255,255,0.3);
+            cursor: pointer;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--primary-color);
+            border-radius: 5px;
+            position: relative;
+        }
+
+        /* Botões e Inputs */
+        .buttons-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #fff;
+        }
+
+        .main-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.1);
+            opacity: 0.8;
+        }
+
+        button.active {
+            color: var(--accent-color);
+            filter: drop-shadow(0 0 12px var(--accent-color));
+            background: rgba(40, 167, 69, 0.2);
+            border-radius: 4px;
+        }
+
+        select {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            padding: 2px 5px;
+            cursor: pointer;
+            outline: none;
+            font-size: 12px;
+        }
+
+        select option {
+            background: #1a1a1a;
+        }
+
+        .time-display {
+            font-size: 14px;
+            font-variant-numeric: tabular-nums;
+            min-width: 100px;
+        }
+
+        input[type="range"] {
+            cursor: pointer;
+            width: 80px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="video-container" id="videoContainer">
+    <video id="mainVideo"></video>
+    
+    <div class="controls">
+        <div class="progress-area" id="progressArea">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div class="buttons-container">
+            <div class="main-controls">
+                <button id="playPauseBtn">▶</button>
+                <div class="time-display">
+                    <span id="currentTime">0:00</span> / <span id="duration">0:00</span>
+                </div>
+                <button id="muteBtn">🔊</button>
+                <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1">
+            </div>
+            
+            <div class="right-controls" style="display: flex; align-items: center; gap: 10px;">
+                <input type="file" id="fileInput" accept="video/*" style="display: none;">
+                <button id="loadBtn" title="Abrir vídeo">📂</button>
+                <button id="loopBtn" title="Repetir">🔁</button>
+                <select id="speedSelect" title="Velocidade">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                </select>
+                <button id="fullScreenBtn">⛶</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById('mainVideo');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const progressArea = document.getElementById('progressArea');
+    const progressBar = document.getElementById('progressBar');
+    const currentTimeEl = document.getElementById('currentTime');
+    const durationEl = document.getElementById('duration');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const muteBtn = document.getElementById('muteBtn');
+    const fullScreenBtn = document.getElementById('fullScreenBtn');
+    const fileInput = document.getElementById('fileInput');
+    const loadBtn = document.getElementById('loadBtn');
+    const loopBtn = document.getElementById('loopBtn');
+    const speedSelect = document.getElementById('speedSelect');
+    const videoContainer = document.getElementById('videoContainer');
+    let controlsTimer;
+
+    // Gerenciamento de exibição dos controles (Inatividade)
+    function resetControlsTimer() {
+        videoContainer.classList.remove('hide-controls');
+        clearTimeout(controlsTimer);
+        // Só inicia o timer para esconder se o vídeo estiver rodando
+        if (!video.paused) {
+            controlsTimer = setTimeout(() => {
+                videoContainer.classList.add('hide-controls');
+            }, 3000);
+        }
+    }
+
+    videoContainer.addEventListener('mousemove', resetControlsTimer);
+
+    video.addEventListener('pause', () => {
+        videoContainer.classList.remove('hide-controls');
+        clearTimeout(controlsTimer);
+    });
+
+    // Monitorar entrada e saída de tela cheia para esconder controles imediatamente
+    document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement) {
+            // Se entrou em tela cheia e o vídeo está rodando, inicia o timer
+            resetControlsTimer();
+        } else {
+            // Ao sair do modo maximizado, garante que os controles voltem
+            videoContainer.classList.remove('hide-controls');
+            clearTimeout(controlsTimer);
+        }
+    });
+
+    // Toggle Play/Pause
+    function togglePlay() {
+        if (video.paused) {
+            video.play();
+        } else {
+            video.pause();
+        }
+    }
+
+    playPauseBtn.addEventListener('click', togglePlay);
+    video.addEventListener('click', togglePlay);
+
+    // Sincronizar ícone de Play/Pause automaticamente
+    video.addEventListener('play', () => playPauseBtn.textContent = '⏸');
+    video.addEventListener('pause', () => playPauseBtn.textContent = '▶');
+
+    // Atualizar Barra de Progresso
+    video.addEventListener('timeupdate', () => {
+        const percentage = (video.currentTime / video.duration) * 100;
+        progressBar.style.width = `${percentage}%`;
+        
+        // Atualizar tempo formatado
+        currentTimeEl.textContent = formatTime(video.currentTime);
+    });
+
+    // Carregar Duração
+    video.addEventListener('loadedmetadata', () => {
+        durationEl.textContent = formatTime(video.duration);
+    });
+
+    // Seek (Pular para parte do vídeo)
+    progressArea.addEventListener('click', (e) => {
+        const areaWidth = progressArea.clientWidth;
+        const clickX = e.offsetX;
+        const duration = video.duration;
+        video.currentTime = (clickX / areaWidth) * duration;
+    });
+
+    // Volume
+    volumeSlider.addEventListener('input', (e) => {
+        video.volume = e.target.value;
+        muteBtn.textContent = video.volume === 0 ? '🔇' : '🔊';
+    });
+
+    // Abrir arquivo local
+    loadBtn.addEventListener('click', () => fileInput.click());
+    
+    fileInput.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            video.src = url;
+            // Garante que o estado do loop seja aplicado ao novo vídeo
+            video.loop = loopBtn.classList.contains('active');
+            video.playbackRate = parseFloat(speedSelect.value);
+            video.play();
+            playPauseBtn.textContent = '⏸';
+        }
+    });
+
+    // Controle de Velocidade
+    speedSelect.addEventListener('change', () => {
+        video.playbackRate = parseFloat(speedSelect.value);
+    });
+
+    // Toggle Loop
+    loopBtn.addEventListener('click', () => {
+        video.loop = !video.loop;
+        loopBtn.classList.toggle('active', video.loop);
+        loopBtn.title = video.loop ? "Repetir: Ligado" : "Repetir: Desligado";
+        
+        // Feedback imediato: se o vídeo acabou e ligou o loop, ele recomeça
+        if (video.loop && video.ended) {
+            video.play();
+            playPauseBtn.textContent = '⏸';
+        }
+    });
+
+    // Fullscreen
+    fullScreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            videoContainer.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    });
+
+    // Suporte à tecla ESC para sair do modo tela cheia
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.fullscreenElement) {
+            document.exitFullscreen();
+        }
+    });
+
+    // Formatar Segundos em MM:SS
+    function formatTime(time) {
+        const minutes = Math.floor(time / 60);
+        const seconds = Math.floor(time % 60);
+        return `${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+    }
+</script>
+
+</body>
+</html>

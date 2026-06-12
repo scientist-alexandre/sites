@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Estúdio 3D</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webm-muxer@3.0.1/build/webm-muxer.js"></script>
+    <style>
+        :root { 
+            --accent: #00f2ff; 
+            --bg: #020406; 
+            --panel: rgba(15, 20, 30, 0.7); 
+            --glass: rgba(255, 255, 255, 0.05);
+            --camera-kf: #ffcc00;
+            --danger: #ff3e3e; 
+        }
+        
+        body { margin: 0; background: var(--bg); font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; color: #fff; display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+        .a-enter-vr, .a-enter-ar { display: none !important; }
+
+        /* Viewport e Efeito de Imersão */
+        #viewport { 
+            flex: 1; position: relative; width: 100%; min-height: 0;
+            background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center;
+        }
+        
+        #scene-wrapper { 
+            position: relative; width: 100%; height: 100%; transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; justify-content: center; align-items: center;
+        }
+        
+        /* Interface Glassmorphism */
+        #ui-layer { 
+            position: relative; width: 100%; height: auto; flex-shrink: 0;
+            background: var(--panel); border-top: 1px solid rgba(255,255,255,0.1); 
+        }
+
+        .header { 
+            padding: 8px 25px; display: flex; justify-content: space-between; align-items: center; 
+            font-size: 11px; letter-spacing: 3px; font-weight: 300; color: var(--accent);
+            background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .track { 
+            position: relative; padding: 0; margin: 10px 0; min-height: 60px;
+            overflow-x: auto; overflow-y: hidden;
+            background: #0a0e14;
+            background-image: linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 50px 100%; /* 50px = 1 segundo */
+            display: flex; align-items: center;
+        }
+
+        .track::before {
+            content: ''; position: absolute; left: 0; right: 0; top: 50%;
+            height: 1px; background: rgba(255,255,255,0.1); z-index: 1;
+        }
+        
+        .kf-node { 
+            position: absolute; top: 50%; width: 18px; height: 18px; 
+            background: var(--camera-kf); border: 2px solid #fff;
+            cursor: pointer; transition: all 0.2s;
+            z-index: 5; transform: translate(-50%, -50%) rotate(45deg);
+        }
+        .kf-node:hover { transform: translate(-50%, -50%) rotate(45deg) scale(1.4); }
+        .kf-node.selected { background: #fff; box-shadow: 0 0 15px var(--camera-kf); transform: translate(-50%, -50%) rotate(45deg) scale(1.4); }
+
+        .kf-del {
+            position: absolute; top: -12px; right: -12px; width: 18px; height: 18px;
+            background: var(--danger); border: 1px solid #fff; border-radius: 50%;
+            color: #fff; font-size: 10px; display: flex; align-items: center; 
+            justify-content: center; cursor: pointer; font-family: sans-serif;
+            transform: rotate(-45deg); /* Compensa a rotação do pai */
+            transition: 0.2s; opacity: 0;
+        }
+        .kf-node:hover .kf-del, .kf-node.selected .kf-del { opacity: 1; }
+        .kf-del:hover { transform: rotate(-45deg) scale(1.2); background: #ff0000; }
+
+        .controls { 
+            padding: 15px 25px; display: flex; gap: 12px; align-items: center; 
+            background: rgba(0,0,0,0.4);
+            overflow-x: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent) transparent;
+            -webkit-overflow-scrolling: touch;
+        }
+        .controls::-webkit-scrollbar { height: 4px; }
+        .controls::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+
+        .btn { 
+            background: var(--glass); border: 1px solid rgba(255,255,255,0.1); color: #fff; 
+            padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 11px; 
+            font-weight: 600; text-transform: uppercase; transition: all 0.2s;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .btn:hover { background: rgba(255,255,255,0.15); transform: translateY(-2px); }
+        .btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+        
+        .btn-render { background: linear-gradient(45deg, #ff3e3e, #ff0055); border: none; padding: 12px 25px; }
+
+        /* Controles Touchscreen */
+        #touch-controls {
+            position: fixed; top: 0; left: 0; width: 100%; bottom: 200px;
+            pointer-events: none; z-index: 1500; user-select: none !important; -webkit-touch-callout: none !important;
+        }
+        .joystick-zone {
+            position: absolute; bottom: 15px; left: 15px; width: 80px; height: 80px;
+            background: rgba(255,255,255,0.02); border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 50%; pointer-events: auto; backdrop-filter: blur(8px);
+            touch-action: none; opacity: 0.6; transition: opacity 0.3s;
+        }
+        .joystick-zone:active { opacity: 1; }
+        .joystick-handle {
+            position: absolute; top: 50%; left: 50%; width: 30px; height: 30px;
+            background: var(--accent); border-radius: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px var(--accent);
+        }
+        .touch-button-stack {
+            position: absolute; bottom: 20px; right: 20px; display: flex;
+            flex-direction: column; gap: 8px; pointer-events: auto;
+        }
+        .touch-btn {
+            width: 50px; height: 50px; background: rgba(0, 242, 255, 0.05); border: 1.5px solid var(--accent);
+            color: var(--accent); border-radius: 20px; display: flex; align-items: center;
+            justify-content: center; font-size: 20px; backdrop-filter: blur(8px);
+            transition: 0.1s; touch-action: none; user-select: none !important;
+            -webkit-user-select: none !important; -webkit-touch-callout: none !important;
+            opacity: 0.6;
+        }
+        .touch-btn:active { background: var(--accent); color: #000; transform: scale(0.9); opacity: 1; }
+
+        /* Responsividade para Tablets e Telas Menores */
+        @media (max-width: 1100px) {
+            #touch-controls { display: block; }
+            .controls .btn { padding: 8px 12px; gap: 8px; font-size: 11px; white-space: nowrap; min-height: 48px; flex-shrink: 0; }
+            .controls .btn span:not(:first-child) { font-size: 8px; }
+            .controls { padding: 10px 15px; gap: 10px; overflow-x: auto; }
+            .header { padding: 6px 15px; font-size: 10px; }
+            #ui-layer { min-height: 180px; }
+            .track { margin: 5px 0; min-height: 50px; }
+            #objects-panel { width: 140px; top: 10px; left: 10px; max-height: 35vh; }
+            #png-panel { width: 260px; right: 10px; top: 10px; padding: 15px; max-height: 70vh; overflow-y: auto; }
+            .btn-render { padding: 10px 15px; }
+        }
+
+        /* Curte de Render */
+        #render-curtain { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: radial-gradient(circle at center, #0a0e14, #000); 
+            z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        .loader { width: 400px; height: 2px; background: rgba(255,255,255,0.05); margin-top: 30px; border-radius: 2px; }
+        .loader-bar { width: 0%; height: 100%; background: var(--accent); box-shadow: 0 0 15px var(--accent); }
+
+        /* Painel de Controle de PNG */
+        #png-panel {
+            position: absolute; right: 20px; top: 20px; width: 280px; 
+            background: var(--panel); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1);
+            padding: 20px; border-radius: 15px; z-index: 1001; display: none; flex-direction: column; gap: 15px;
+        }
+        #png-panel label { font-size: 10px; color: var(--accent); letter-spacing: 1px; display: block; margin-bottom: 5px; }
+        #png-panel input[type=range] { width: 100%; cursor: pointer; accent-color: var(--accent); }
+        .panel-close { align-self: flex-end; cursor: pointer; font-size: 18px; opacity: 0.5; padding: 5px; }
+        .panel-close:hover { opacity: 1; }
+
+        /* Painel de Lista de Objetos */
+        #objects-panel { 
+            position: absolute; left: 20px; top: 20px; width: 160px; 
+            background: var(--panel); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1);
+            padding: 15px; border-radius: 15px; z-index: 1001; display: flex; flex-direction: column; gap: 10px;
+            max-height: 50vh; overflow-y: auto;
+        }
+        #objects-panel::-webkit-scrollbar { width: 4px; }
+        #objects-panel::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+        
+        .obj-item {
+            padding: 8px; background: var(--glass); border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px; font-size: 10px; cursor: pointer; transition: 0.2s;
+            display: flex; align-items: center; gap: 8px; color: #fff;
+        }
+        .obj-item:hover { background: rgba(255,255,255,0.1); border-color: var(--accent); }
+        .obj-item.selected { border-color: var(--accent); background: rgba(0, 242, 255, 0.1); }
+
+        .btn-reset { 
+            background: rgba(255, 62, 62, 0.1); 
+            border: 1px solid var(--danger); 
+            color: var(--danger); 
+            padding: 5px 10px; 
+            font-size: 9px; 
+            border-radius: 4px; 
+            cursor: pointer;
+            margin-top: 5px;
+            transition: 0.2s;
+        }
+        .btn-reset:hover { background: var(--danger); color: #fff; }
+
+        .kf-info {
+            position: absolute; top: -25px; left: 50%; transform: translateX(-50%) rotate(-45deg);
+            font-size: 9px; white-space: nowrap; color: var(--camera-kf); pointer-events: none;
+            font-weight: bold; opacity: 0; transition: 0.2s;
+        }
+        .kf-node:hover .kf-info, .kf-node.selected .kf-info { opacity: 1; top: -30px; }
+
+        .time-marker {
+            position: absolute; top: 5px; font-size: 9px; color: rgba(255,255,255,0.3);
+            border-left: 1px solid rgba(255,255,255,0.1); height: 100%; padding-left: 4px;
+            pointer-events: none;
+        }
+
+        #playhead {
+            position: absolute; top: 0; bottom: 0; width: 2px; background: #ff0000;
+            z-index: 10; pointer-events: none; display: block;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="render-curtain">
+        <h2 style="letter-spacing: 15px; font-weight: 300; margin: 0;">Foto 3D</h2>
+        <div id="render-status" style="color: #666; font-size: 12px; margin-top: 15px; font-family: monospace;">Iniciando motor de renderização...</div>
+        <div class="loader"><div class="loader-bar" id="bar"></div></div>
+    </div>
+
+    <div id="objects-panel">
+        <div style="font-weight: bold; font-size: 10px; letter-spacing: 1px; color: var(--accent); margin-bottom: 5px;">OBJETOS NA CENA</div>
+        <button class="btn-reset" onclick="resetProject()">LIMPAR TUDO</button>
+        <div id="objects-list"></div>
+    </div>
+
+    <div id="png-panel">
+        <div class="panel-close" onclick="deselectPng()">×</div>
+        <div style="margin-top: -20px; font-weight: bold; font-size: 12px; margin-bottom: 10px;">AJUSTE DE MÍDIA</div>
+        
+        <div>
+            <label>TAMANHO (REdimensionar)</label>
+            <input type="range" id="sld-scale" min="0.001" max="10" step="0.001" value="1">
+        </div>
+        <div>
+            <label>ROTAÇÃO (X / Y / Z)</label>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display:flex; align-items:center; gap:5px"><span style="font-size:8px; width:10px; opacity:0.5">X</span><input type="range" id="sld-rot-x" min="-360" max="360" step="0.1" value="0"></div>
+                <div style="display:flex; align-items:center; gap:5px"><span style="font-size:8px; width:10px; opacity:0.5">Y</span><input type="range" id="sld-rot-y" min="-360" max="360" step="0.1" value="0"></div>
+                <div style="display:flex; align-items:center; gap:5px"><span style="font-size:8px; width:10px; opacity:0.5">Z</span><input type="range" id="sld-rot-z" min="-360" max="360" step="0.1" value="0"></div>
+            </div>
+        </div>
+        <div>
+            <label>POSIÇÃO (X / Y / Z)</label>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display:flex; align-items:center; gap:5px"><span style="font-size:8px; width:10px; opacity:0.5">X</span><input type="range" id="sld-pos-x" min="-15" max="15" step="0.005" value="0"></div>
+                <div style="display:flex; align-items:center; gap:5px"><span style="font-size:8px; width:10px; opacity:0.5">Y</span><input type="range" id="sld-pos-y" min="-10" max="15" step="0.005" value="1.6"></div>
+                <div style="display:flex; align-items:center; gap:5px"><span style="font-size:8px; width:10px; opacity:0.5">Z</span><input type="range" id="sld-pos-z" min="-40" max="40" step="0.01" value="-5"></div>
+            </div>
+        </div>
+        <button class="btn" id="btn-vis" onclick="togglePngVisibility()" style="margin-top:5px; border-color: var(--accent); color: var(--accent); width: 100%; justify-content: center;">👁 Visível: Sim</button>
+        <button class="btn" onclick="deletePng()" style="margin-top:10px; border-color: var(--danger); color: var(--danger); width: 100%; justify-content: center;">Apagar Objeto</button>
+    </div>
+
+    <div id="viewport">
+        <div id="scene-wrapper">
+            <a-scene embedded vr-mode-ui="enabled: false"
+                     renderer="antialias: true; preserveDrawingBuffer: true; colorManagement: true; exposure: 1.2; toneMapping: ACESFilmic;">
+                
+                <a-assets>
+                    <img id="sky-tex" src="">
+                </a-assets>
+
+                <a-sky id="world" radius="5000" material="shader: flat; npot: true; color: #111" rotation="0 -90 0"></a-sky>
+                
+                <a-entity light="type: ambient; intensity: 1.0"></a-entity>
+
+                <a-entity id="rig" position="0 1.6 0">
+                    <a-entity id="cam" camera="fov: 90; far: 10000; near: 0.1" look-controls="pointerLockEnabled: true; reverseMouseDrag: false; touchEnabled: false; magicWindowTrackingEnabled: false"></a-entity>
+                </a-entity>
+            </a-scene>
+        </div>
+    </div>
+
+    <div id="touch-controls">
+        <div class="joystick-zone" id="joystick-base">
+            <div class="joystick-handle" id="joystick-handle"></div>
+        </div>
+        
+        <div class="touch-button-stack">
+            <div class="touch-btn" id="btn-touch-up">▲</div>
+            <div class="touch-btn" id="btn-touch-down">▼</div>
+        </div>
+    </div>
+
+    <div id="ui-layer">
+        <div class="header">
+            <span>Estúdio 3D</span>
+            <span id="pos-debug" style="color: var(--accent); font-family: monospace;">ROT: 0°, 0° | FOV: 90</span>
+        </div>
+        
+        <div class="track" id="track-list">
+            <div id="playhead"></div>
+            <div id="track-content"></div>
+        </div>
+
+        <div class="controls">
+            <label for="f-up" class="btn"><span>📁</span> Abrir 360</label>
+            <input type="file" id="f-up" accept="image/*" style="display:none">
+            <label for="img-up" class="btn"><span>🖼️</span> Mídia</label>
+            <input type="file" id="img-up" accept="image/*" multiple style="display:none">
+            <button class="btn" id="copy-prompt">📋 Copiar Prompt</button>
+            
+            <button class="btn" id="add-kf" style="background: rgba(0, 242, 255, 0.15); color: var(--accent); border-color: var(--accent);">+ Novo Keyframe</button>
+            <button class="btn" id="take-photo">📸 Snapshot</button>
+            
+            <button class="btn" id="save-cam-json">💾 Exportar Cam</button>
+            <button class="btn" id="load-cam-json">📂 Importar Cam</button>
+            <input type="file" id="cam-json-up" accept=".json" style="display:none">
+
+            <div style="flex-grow: 1;"></div>
+            <button class="btn" id="play-btn">▶ Preview</button>
+            <button class="btn btn-render" id="render-btn">🔴 Exportar Full HD</button>
+        </div>
+    </div>
+
+    <script>
+        const rig = document.getElementById('rig'), 
+              cam = document.getElementById('cam'), 
+              scene = document.querySelector('a-scene'),
+              debug = document.getElementById('pos-debug'),
+              pngPanel = document.getElementById('png-panel');
+        
+        // Estados Touch
+        let joystickDelta = { x: 0, y: 0 };
+        let touchUpActive = false;
+        let touchDownActive = false;
+        let lastPinchDist = 0;
+
+        let keyframes = [], keys = {}, currentFOV = 90, animationTimeline = null, selectedKeyframeIndex = -1, selectedPng = null, pngIdCounter = 0;
+        
+        window.addEventListener('wheel', (e) => {
+            if (scene.is('rendering')) return;
+            currentFOV = Math.min(Math.max(currentFOV + (e.deltaY * 0.05), 15), 145);
+            cam.setAttribute('camera', 'fov', currentFOV);
+            updateDebug();
+        }, { passive: true });
+
+        // Zoom por Pinça (Touchscreen)
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                lastPinchDist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault(); // Impede o zoom nativo do navegador
+                const dist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                
+                if (lastPinchDist > 0) {
+                    // Diferença de distância (Fingers closer = delta positivo = zoom out)
+                    const delta = lastPinchDist - dist;
+                    currentFOV = Math.min(Math.max(currentFOV + (delta * 0.2), 15), 145);
+                    cam.setAttribute('camera', 'fov', currentFOV);
+                    updateDebug();
+                }
+                lastPinchDist = dist;
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            lastPinchDist = 0;
+        });
+
+        function updateDebug() {
+            const look = cam.components['look-controls'];
+            let rotText = "ROT: 0°, 0°";
+            if (look && look.pitchObject && look.yawObject) {
+                const rx = THREE.MathUtils.radToDeg(look.pitchObject.rotation.x).toFixed(0);
+                const ry = THREE.MathUtils.radToDeg(look.yawObject.rotation.y).toFixed(0);
+                rotText = `ROT: ${rx}°, ${ry}°`;
+            }
+            debug.innerText = `${rotText} | FOV: ${currentFOV.toFixed(0)}°`;
+        }
+
+        window.addEventListener('keydown', (e) => { 
+            keys[e.code] = true; 
+        });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        function moveLoop() {
+            if (scene.is('rendering')) return requestAnimationFrame(moveLoop);
+            const pos = rig.object3D.position;
+            const rot = cam.object3D.rotation;
+            let rawSpeed = keys['ShiftLeft'] ? 15.0 : 5.0;
+            const speed = rawSpeed * 0.1; // Normalização para o loop
+            const verticalSpeed = speed * 6.0; // Multiplicador aumentado para movimentos verticais muito mais rápidos
+
+            // Teclado
+            if (keys['KeyW']) { pos.x -= Math.sin(rot.y) * speed; pos.z -= Math.cos(rot.y) * speed; }
+            if (keys['KeyS']) { pos.x += Math.sin(rot.y) * speed; pos.z += Math.cos(rot.y) * speed; }
+            if (keys['KeyA']) { pos.x -= Math.cos(rot.y) * speed; pos.z += Math.sin(rot.y) * speed; }
+            if (keys['KeyD']) { pos.x += Math.cos(rot.y) * speed; pos.z -= Math.sin(rot.y) * speed; }
+            if (keys['KeyE']) pos.y += verticalSpeed;
+            if (keys['KeyQ']) pos.y -= verticalSpeed;
+
+            // Joystick Touch (Controle de Câmera - Igual ao MOUSE)
+            const look = cam.components['look-controls'];
+            if (joystickDelta.x !== 0 || joystickDelta.y !== 0) {
+                const lookSensitivity = 0.004; // Sensibilidade reduzida para um movimento mais devagar
+                if (look && look.pitchObject && look.yawObject) {
+                    look.yawObject.rotation.y -= joystickDelta.x * lookSensitivity;
+                    look.pitchObject.rotation.x += joystickDelta.y * lookSensitivity; 
+                    // Limita a rotação vertical para não "capotar" a câmera
+                    look.pitchObject.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, look.pitchObject.rotation.x));
+                }
+            }
+
+            // Botões Touch
+            if (touchUpActive) pos.y += verticalSpeed;
+            if (touchDownActive) pos.y -= verticalSpeed;
+
+            updateDebug();
+            requestAnimationFrame(moveLoop);
+        }
+        moveLoop();
+
+        // Ativa a trava do mouse (Pointer Lock) ao clicar na cena para navegação imersiva
+        scene.addEventListener('mousedown', (e) => {
+            // Só ativa se não estiver renderizando, não estiver no preview e se o clique for no canvas
+            if (!scene.is('rendering') && !animationTimeline && !document.pointerLockElement) {
+                scene.canvas.requestPointerLock();
+            }
+        });
+
+        // Lógica Avançada do Joystick (Pointer Events para Tablets)
+        const jBase = document.getElementById('joystick-base');
+        const jHandle = document.getElementById('joystick-handle');
+        let isDraggingJoystick = false;
+
+        function handlePointer(e) {
+            if (!isDraggingJoystick && e.type !== 'pointerdown') return;
+            
+            const rect = jBase.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            const dx = e.clientX - centerX;
+            const dy = e.clientY - centerY;
+            const maxRadius = 30; // Ajustado para joystick menor
+            const distance = Math.min(Math.sqrt(dx*dx + dy*dy), maxRadius);
+            const angle = Math.atan2(dy, dx);
+            
+            const moveX = Math.cos(angle) * distance;
+            const moveY = Math.sin(angle) * distance;
+            
+            jHandle.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
+            
+            // Normaliza para -1 a 1 para o moveLoop
+            joystickDelta.x = moveX / maxRadius;
+            joystickDelta.y = -(moveY / maxRadius); // Inverte aqui para que arrastar para cima seja negativo no Pitch
+        }
+
+        jBase.addEventListener('pointerdown', (e) => {
+            isDraggingJoystick = true;
+            jBase.setPointerCapture(e.pointerId);
+            handlePointer(e);
+        });
+        jBase.addEventListener('pointermove', handlePointer);
+        jBase.addEventListener('pointerup', (e) => {
+            isDraggingJoystick = false;
+            joystickDelta = { x: 0, y: 0 };
+            jHandle.style.transform = 'translate(-50%, -50%)';
+            jBase.releasePointerCapture(e.pointerId);
+        });
+
+        // Botões Touch de Elevação (Vertical Stack)
+        const btnUp = document.getElementById('btn-touch-up');
+        const btnDown = document.getElementById('btn-touch-down');
+
+        function blockContextMenu(e) { e.preventDefault(); e.stopPropagation(); return false; }
+        [btnUp, btnDown, jBase].forEach(el => el.oncontextmenu = blockContextMenu);
+
+        btnUp.onpointerdown = (e) => { e.preventDefault(); touchUpActive = true; btnUp.setPointerCapture(e.pointerId); };
+        btnUp.onpointerup = (e) => { touchUpActive = false; btnUp.releasePointerCapture(e.pointerId); };
+        btnUp.onpointercancel = () => touchUpActive = false;
+
+        btnDown.onpointerdown = (e) => { e.preventDefault(); touchDownActive = true; btnDown.setPointerCapture(e.pointerId); };
+        btnDown.onpointerup = (e) => { touchDownActive = false; btnDown.releasePointerCapture(e.pointerId); };
+        btnDown.onpointercancel = () => touchDownActive = false;
+
+        document.getElementById('f-up').onchange = (e) => {
+            const r = new FileReader();
+            r.onload = (ev) => { 
+                document.getElementById('world').setAttribute('src', ev.target.result); 
+                document.getElementById('world').setAttribute('material', 'color', '#fff'); 
+            };
+            r.readAsDataURL(e.target.files[0]);
+        };
+
+        // Gerenciamento de PNGs
+        function refreshObjectsList() {
+            const list = document.getElementById('objects-list');
+            list.innerHTML = '';
+            const objs = document.querySelectorAll('.raycastable');
+            objs.forEach((el, index) => {
+                const item = document.createElement('div');
+                item.className = 'obj-item' + (selectedPng === el ? ' selected' : '');
+                
+                let typeLabel = 'IMG';
+                if (el.dataset.isSequence === "true") typeLabel = 'SEQ';
+                else if (el.id.includes('vid-asset') || el.id.includes('media-obj') && el.components.material?.data?.src?.tagName === 'VIDEO') typeLabel = 'VÍDEO';
+                
+                const shortId = el.id ? el.id.slice(-4) : index;
+                item.innerHTML = `<span>${typeLabel === 'VÍDEO' ? '🎥' : (typeLabel === 'SEQ' ? '🎞️' : '🖼️')} ${typeLabel}_${shortId}</span>`;
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    selectPng(el);
+                };
+                list.appendChild(item);
+            });
+        }
+
+        function selectPng(el) {
+            selectedPng = el;
+            pngPanel.style.display = 'flex';
+            // Torna visível para edição imediata ao selecionar
+            el.setAttribute('visible', true);
+            
+            const pos = el.object3D.position;
+            const scl = el.object3D.scale;
+            const rot = el.object3D.rotation;
+
+            document.getElementById('sld-scale').value = scl.x;
+            document.getElementById('sld-rot-x').value = THREE.MathUtils.radToDeg(rot.x);
+            document.getElementById('sld-rot-y').value = THREE.MathUtils.radToDeg(rot.y);
+            document.getElementById('sld-rot-z').value = THREE.MathUtils.radToDeg(rot.z);
+            document.getElementById('sld-pos-x').value = pos.x;
+            document.getElementById('sld-pos-y').value = pos.y;
+            document.getElementById('sld-pos-z').value = pos.z;
+
+            updateVisBtnUI(el.object3D.visible);
+
+            refreshObjectsList();
+        }
+
+        function resetProject() {
+            if (!confirm("Isso apagará todos os keyframes e objetos. Continuar?")) return;
+            keyframes = [];
+            
+            // Cleanup Objects & Memory
+            document.querySelectorAll('.raycastable').forEach(el => {
+                if (el.dataset.intervalId) clearInterval(parseInt(el.dataset.intervalId));
+                el.parentNode.removeChild(el);
+            });
+            
+            // Clean up assets to avoid memory leaks
+            document.querySelectorAll('a-assets img, a-assets video').forEach(asset => {
+                if(asset.id !== 'sky-tex') {
+                    if(asset.src && asset.src.startsWith('blob:')) URL.revokeObjectURL(asset.src);
+                    asset.remove();
+                }
+            });
+
+            document.getElementById('world').setAttribute('src', '');
+            document.getElementById('world').setAttribute('material', 'color', '#111');
+            selectedKeyframeIndex = -1;
+            selectedPng = null;
+            pngPanel.style.display = 'none';
+            refreshObjectsList();
+            renderUI();
+        }
+
+        function resetSlidersUI() {
+            document.getElementById('sld-scale').value = 1;
+            document.getElementById('sld-rot-x').value = 0;
+            document.getElementById('sld-rot-y').value = 0;
+            document.getElementById('sld-rot-z').value = 0;
+            document.getElementById('sld-pos-x').value = 0;
+            document.getElementById('sld-pos-y').value = 1.6;
+            document.getElementById('sld-pos-z').value = -5;
+            // Reseta também o índice de keyframe selecionado para evitar sobrescrever frames por erro
+            selectedKeyframeIndex = -1;
+            renderUI();
+        }
+
+        function deselectPng() {
+            selectedPng = null;
+            pngPanel.style.display = 'none';
+            refreshObjectsList();
+        }
+
+        function deletePng() {
+            if (selectedPng) {
+                // Limpa o intervalo se for uma sequência de imagens
+                if (selectedPng.dataset.intervalId) {
+                    clearInterval(parseInt(selectedPng.dataset.intervalId));
+                }
+                
+                // Limpeza pesada de memória (Memory Leak fix)
+                if (selectedPng.dataset.isSequence === "true") {
+                    const seqId = selectedPng.dataset.seqId;
+                    const assets = document.querySelectorAll(`[id^="seq-asset-${seqId}-"]`);
+                    assets.forEach(a => {
+                        URL.revokeObjectURL(a.src);
+                        a.remove();
+                    });
+                } else if (selectedPng.id.startsWith('media-obj-')) {
+                    const srcData = selectedPng.components.material?.data?.src;
+                    if (srcData && srcData.tagName) { // is a DOM element (video or img)
+                        URL.revokeObjectURL(srcData.src);
+                        srcData.remove();
+                    }
+                }
+
+                selectedPng.parentNode.removeChild(selectedPng);
+                deselectPng();
+                refreshObjectsList();
+            }
+        }
+
+        function updatePngFromSliders() {
+            if (!selectedPng) return;
+            
+            const s = parseFloat(document.getElementById('sld-scale').value);
+            const rx = THREE.MathUtils.degToRad(parseFloat(document.getElementById('sld-rot-x').value));
+            const ry = THREE.MathUtils.degToRad(parseFloat(document.getElementById('sld-rot-y').value));
+            const rz = THREE.MathUtils.degToRad(parseFloat(document.getElementById('sld-rot-z').value));
+            const px = parseFloat(document.getElementById('sld-pos-x').value);
+            const py = parseFloat(document.getElementById('sld-pos-y').value);
+            const pz = parseFloat(document.getElementById('sld-pos-z').value);
+            
+            selectedPng.object3D.scale.set(s, s, s);
+            selectedPng.object3D.rotation.set(rx, ry, rz);
+            selectedPng.object3D.position.set(px, py, pz);
+        }
+
+        ['sld-scale', 'sld-rot-x', 'sld-rot-y', 'sld-rot-z', 'sld-pos-x', 'sld-pos-y', 'sld-pos-z'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updatePngFromSliders);
+        });
+
+        function togglePngVisibility() {
+            if (!selectedPng) return;
+            const newState = !selectedPng.object3D.visible;
+            selectedPng.setAttribute('visible', newState);
+            updateVisBtnUI(newState);
+        }
+
+        function updateVisBtnUI(visible) {
+            const btn = document.getElementById('btn-vis');
+            if (btn) btn.innerText = `👁 Visível: ${visible ? 'Sim' : 'Não'}`;
+        }
+
+        document.getElementById('img-up').onchange = (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+            
+            // Reseta os controles antes de configurar o novo PNG
+            resetSlidersUI();
+
+            // Função auxiliar para finalizar a configuração comum aos dois tipos
+            const finalizeMedia = (mediaEntity, width, height) => {
+                const ratio = width / height;
+                if (mediaEntity.tagName === 'A-ENTITY') {
+                    mediaEntity.setAttribute('geometry', `primitive: plane; width: ${ratio * 2}; height: 2`);
+                } else {
+                    mediaEntity.setAttribute('width', ratio * 2);
+                    mediaEntity.setAttribute('height', 2);
+                }
+
+                const direction = new THREE.Vector3(0, 0, -8);
+                const camQuaternion = new THREE.Quaternion();
+                cam.object3D.getWorldQuaternion(camQuaternion);
+                direction.applyQuaternion(camQuaternion);
+
+                const worldPos = new THREE.Vector3();
+                cam.object3D.getWorldPosition(worldPos);
+                const finalPos = worldPos.clone().add(direction);
+
+                mediaEntity.setAttribute('position', finalPos);
+
+                mediaEntity.addEventListener('loaded', () => {
+                    mediaEntity.object3D.lookAt(worldPos.x, worldPos.y, worldPos.z);
+
+                    keyframes.forEach((kf) => {
+                        if (!kf.pngs) kf.pngs = [];
+                        kf.pngs.push({
+                            id: mediaEntity.id,
+                            pos: { ...mediaEntity.object3D.position },
+                            rot: { ...mediaEntity.object3D.rotation },
+                            scl: { ...mediaEntity.object3D.scale },
+                            visible: false
+                        });
+                    });
+
+                    document.getElementById('sld-rot-x').value = THREE.MathUtils.radToDeg(mediaEntity.object3D.rotation.x);
+                    document.getElementById('sld-rot-y').value = THREE.MathUtils.radToDeg(mediaEntity.object3D.rotation.y);
+                    document.getElementById('sld-rot-z').value = THREE.MathUtils.radToDeg(mediaEntity.object3D.rotation.z);
+
+                    mediaEntity.setAttribute('visible', false);
+                    selectPng(mediaEntity);
+                }, { once: true });
+
+                scene.appendChild(mediaEntity);
+                refreshObjectsList();
+            };
+
+            if (files.length > 1) {
+                // Lógica para SEQUÊNCIA DE IMAGENS (CORRIGIDO PARA TRANSPARÊNCIA PERFEITA)
+                const sortedFiles = files.filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
+                if (sortedFiles.length === 0) return;
+
+                pngIdCounter++;
+                const seqId = pngIdCounter;
+                const assetIds = [];
+                
+                // Pré-carrega no a-assets para que o motor não perca o canal Alpha
+                sortedFiles.forEach((f, index) => {
+                    const imgEl = document.createElement('img');
+                    imgEl.id = `seq-asset-${seqId}-${index}`;
+                    imgEl.src = URL.createObjectURL(f);
+                    imgEl.crossOrigin = "anonymous";
+                    document.querySelector('a-assets').appendChild(imgEl);
+                    assetIds.push(`#${imgEl.id}`);
+                });
+
+                const img = new Image();
+                img.onload = () => {
+                    const mediaEntity = document.createElement('a-entity');
+                    mediaEntity.id = 'seq-obj-' + seqId;
+                    mediaEntity.classList.add('raycastable');
+                    
+                    // Metadados para sincronização de renderização de vídeo
+                    mediaEntity.dataset.isSequence = "true";
+                    mediaEntity.dataset.frameCount = assetIds.length;
+                    mediaEntity.dataset.fps = "12";
+                    mediaEntity.dataset.seqId = seqId;
+
+                    mediaEntity.setAttribute('material', {
+                        shader: 'flat',
+                        src: assetIds[0],
+                        transparent: true,
+                        alphaTest: 0.5,
+                        side: 'double',
+                        depthWrite: false
+                    });
+                    
+                    let currentFrame = 0;
+                    const intervalId = setInterval(() => {
+                        // Não roda o interval se estiver renderizando, para não dessincronizar
+                        if (scene.is('rendering')) return;
+                        currentFrame = (currentFrame + 1) % assetIds.length;
+                        mediaEntity.setAttribute('material', 'src', assetIds[currentFrame]);
+                    }, 1000 / 12); // 12 FPS padrão
+                    
+                    mediaEntity.dataset.intervalId = intervalId;
+                    finalizeMedia(mediaEntity, img.width, img.height);
+                };
+                img.src = document.querySelector(assetIds[0]).src;
+            } else {
+                // Lógica para UMA ÚNICA IMAGEM (Também otimizado)
+                const file = files[0];
+                pngIdCounter++;
+                
+                const imgAsset = document.createElement('img');
+                imgAsset.id = `img-asset-${pngIdCounter}`;
+                imgAsset.src = URL.createObjectURL(file);
+                imgAsset.crossOrigin = "anonymous";
+                document.querySelector('a-assets').appendChild(imgAsset);
+
+                imgAsset.onload = () => {
+                    const mediaEntity = document.createElement('a-entity');
+                    mediaEntity.id = 'media-obj-' + pngIdCounter;
+                    mediaEntity.classList.add('raycastable');
+                    mediaEntity.setAttribute('material', {
+                        shader: 'flat',
+                        src: `#${imgAsset.id}`,
+                        transparent: true,
+                        alphaTest: 0.5,
+                        side: 'double',
+                        depthWrite: false
+                    });
+                    
+                    finalizeMedia(mediaEntity, imgAsset.naturalWidth, imgAsset.naturalHeight);
+                };
+            }
+            
+            e.target.value = ''; // Reseta o input
+        };
+
+        function showNotification(text) {
+            const notification = document.createElement('div');
+            notification.textContent = text;
+            Object.assign(notification.style, {
+                position: 'fixed',
+                bottom: '215px',
+                left: '50%',
+                transform: 'translateX(-50%) translateY(20px)',
+                backgroundColor: 'var(--accent)',
+                color: 'var(--bg)',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                zIndex: '10001',
+                opacity: '0',
+                transition: 'opacity 0.4s ease, transform 0.4s ease',
+                fontWeight: '600',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+            });
+            document.body.appendChild(notification);
+            requestAnimationFrame(() => {
+                notification.style.opacity = '1';
+                notification.style.transform = 'translateX(-50%) translateY(0)';
+            });
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(-50%) translateY(20px)';
+                notification.addEventListener('transitionend', () => notification.remove());
+            }, 2000);
+        }
+
+        document.getElementById('copy-prompt').onclick = () => {
+            const text = "projeção equiretangular esférica, panorama completo de 360 graus, imagem contínua sem emendas, [...descreva sua imagem aqui...], maior resolução possível, texturas ultra detalhadas, ambiente imersivo de realidade virtual, foco nítido em toda a imagem, sem desfoque de profundidade, renderização fotorrealista de alta qualidade --ar 2:1";
+            navigator.clipboard.writeText(text).then(() => showNotification('Prompt copiado!'));
+        };
+
+        document.getElementById('save-cam-json').onclick = () => {
+            const look = cam.components['look-controls'];
+            if (!look || !look.pitchObject || !look.yawObject) return;
+            const preset = {
+                rot: { 
+                    x: THREE.MathUtils.radToDeg(look.pitchObject.rotation.x), 
+                    y: THREE.MathUtils.radToDeg(look.yawObject.rotation.y) 
+                },
+                fov: currentFOV
+            };
+            const blob = new Blob([JSON.stringify(preset, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `camera_preset_${Math.floor(Date.now()/1000)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showNotification('JSON de Câmera exportado!');
+        };
+
+        document.getElementById('load-cam-json').onclick = () => document.getElementById('cam-json-up').click();
+
+        document.getElementById('cam-json-up').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const preset = JSON.parse(ev.target.result);
+                    const look = cam.components['look-controls'];
+                    if (look) {
+                        look.pitchObject.rotation.x = THREE.MathUtils.degToRad(preset.rot.x);
+                        look.yawObject.rotation.y = THREE.MathUtils.degToRad(preset.rot.y);
+                        cam.object3D.rotation.set(look.pitchObject.rotation.x, look.yawObject.rotation.y, 0);
+                        syncLookControlsWithCamera();
+                    }
+                    currentFOV = preset.fov;
+                    cam.setAttribute('camera', 'fov', currentFOV);
+                    updateDebug();
+                    showNotification('Câmera carregada do JSON!');
+                } catch (err) {
+                    alert("Erro ao ler o arquivo JSON.");
+                }
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        };
+
+        function applyKF(kf, immediate = true) {
+            // Teleporta a câmera e PNGs para os dados de um keyframe específico
+            const duration = immediate ? 0 : 0.8;
+            const look = cam.components['look-controls'];
+
+            // Limpa qualquer animação em curso para evitar conflitos ao restaurar estado
+            gsap.killTweensOf(rig.object3D.position);
+            if (look) {
+                gsap.killTweensOf(look.pitchObject.rotation);
+                gsap.killTweensOf(look.yawObject.rotation);
+            }
+            document.querySelectorAll('.raycastable').forEach(el => {
+                gsap.killTweensOf([el.object3D.position, el.object3D.rotation, el.object3D.scale]);
+            });
+
+            if (!immediate && look) cam.setAttribute('look-controls', 'enabled', false);
+            
+            // Restauração de posição da câmera
+            if (immediate) {
+                rig.object3D.position.set(kf.pos.x, kf.pos.y, kf.pos.z);
+            } else {
+                gsap.to(rig.object3D.position, { 
+                    x: kf.pos.x, y: kf.pos.y, z: kf.pos.z, 
+                    duration: duration, ease: "power2.out" 
+                });
+            }
+            
+            // Animação da rotação interna do Look Controls
+            if (look) {
+                if (immediate) {
+                    look.pitchObject.rotation.x = THREE.MathUtils.degToRad(kf.rot.x);
+                    look.yawObject.rotation.y = THREE.MathUtils.degToRad(kf.rot.y);
+                    cam.object3D.rotation.set(look.pitchObject.rotation.x, look.yawObject.rotation.y, 0);
+                    syncLookControlsWithCamera();
+                } else {
+                    gsap.to(look.pitchObject.rotation, { 
+                        x: THREE.MathUtils.degToRad(kf.rot.x), 
+                        duration: duration,
+                        ease: "power2.out"
+                    });
+                    gsap.to(look.yawObject.rotation, { 
+                        y: THREE.MathUtils.degToRad(kf.rot.y), 
+                        duration: duration,
+                        ease: "power2.out",
+                        onUpdate: () => {
+                            cam.object3D.rotation.set(look.pitchObject.rotation.x, look.yawObject.rotation.y, 0);
+                        },
+                        onComplete: () => {
+                            if (!animationTimeline) cam.setAttribute('look-controls', 'enabled', true);
+                            syncLookControlsWithCamera();
+                        }
+                    });
+                }
+            }
+
+            currentFOV = kf.fov;
+            cam.setAttribute('camera', 'fov', currentFOV);
+
+            // Restaura posição dos PNGs se houver dados salvos no keyframe
+            if (kf.pngs) {
+                kf.pngs.forEach(p => {
+                    const el = document.getElementById(p.id);
+                    if (el) {
+                        if (immediate) {
+                            el.object3D.position.set(p.pos.x, p.pos.y, p.pos.z);
+                            el.object3D.rotation.set(p.rot.x, p.rot.y, p.rot.z);
+                            el.object3D.scale.set(p.scl.x, p.scl.y, p.scl.z);
+                        } else {
+                            gsap.to(el.object3D.position, { ...p.pos, duration: duration, ease: "power2.out" });
+                            gsap.to(el.object3D.rotation, { ...p.rot, duration: duration, ease: "power2.out" });
+                            gsap.to(el.object3D.scale, { ...p.scl, duration: duration, ease: "power2.out" });
+                        }
+                        // Aplica a visibilidade salva (padrão true se não definido)
+                        const isVis = p.visible !== false;
+                        el.setAttribute('visible', isVis);
+                        
+                        // Sincroniza os Sliders se o PNG atual estiver selecionado
+                        if (selectedPng && selectedPng.id === el.id) {
+                            updateVisBtnUI(isVis);
+                            document.getElementById('sld-scale').value = p.scl.x;
+                            document.getElementById('sld-rot-x').value = THREE.MathUtils.radToDeg(p.rot.x);
+                            document.getElementById('sld-rot-y').value = THREE.MathUtils.radToDeg(p.rot.y);
+                            document.getElementById('sld-rot-z').value = THREE.MathUtils.radToDeg(p.rot.z);
+                            document.getElementById('sld-pos-x').value = p.pos.x;
+                            document.getElementById('sld-pos-y').value = p.pos.y;
+                            document.getElementById('sld-pos-z').value = p.pos.z;
+                        }
+                    }
+                });
+            }
+            updateDebug();
+        }
+
+        function getKFData() {
+            const look = cam.components['look-controls'];
+            if (!look || !look.pitchObject || !look.yawObject) return null;
+
+            const pngs = Array.from(document.querySelectorAll('.raycastable')).map(el => ({
+                id: el.id,
+                pos: { x: el.object3D.position.x, y: el.object3D.position.y, z: el.object3D.position.z },
+                rot: { x: el.object3D.rotation.x, y: el.object3D.rotation.y, z: el.object3D.rotation.z },
+                scl: { x: el.object3D.scale.x, y: el.object3D.scale.y, z: el.object3D.scale.z },
+                visible: el.object3D.visible
+            }));
+
+            return {
+                pos: {...rig.object3D.position},
+                rot: { 
+                    x: THREE.MathUtils.radToDeg(look.pitchObject.rotation.x), 
+                    y: THREE.MathUtils.radToDeg(look.yawObject.rotation.y) 
+                },
+                fov: currentFOV,
+                duration: 2,
+                pngs: pngs
+            };
+        }
+        let currentPlayheadTime = 0;
+
+        function updateSelectedKeyframeData() {
+            if (selectedKeyframeIndex === -1) return;
+            const currentData = getKFData();
+            if (currentData) {
+                currentData.duration = keyframes[selectedKeyframeIndex].duration;
+                keyframes[selectedKeyframeIndex] = currentData;
+            }
+        }
+
+        document.getElementById('add-kf').onclick = () => {
+            if (selectedKeyframeIndex !== -1) {
+                updateSelectedKeyframeData();
+                selectedKeyframeIndex = -1;
+                renderUI();
+                return;
+            }
+
+            const kfData = getKFData();
+            if (!kfData) return alert("Aguarde o carregamento da câmera...");
+            
+            if (keyframes.length === 0) {
+                kfData.duration = 0;
+                keyframes.push(kfData);
+            } else {
+                // Calcula os tempos absolutos atuais
+                let absTimes = [];
+                let total = 0;
+                keyframes.forEach(k => { total += k.duration; absTimes.push(total); });
+
+                // Encontra onde inserir com base na posição da linha vermelha (currentPlayheadTime)
+                let insertIdx = keyframes.length;
+                for (let i = 0; i < absTimes.length; i++) {
+                    if (currentPlayheadTime < absTimes[i]) {
+                        insertIdx = i;
+                        break;
+                    }
+                }
+
+                if (insertIdx === keyframes.length) {
+                    // Adiciona ao final, calculando a distância do último ponto para a linha vermelha
+                    kfData.duration = Math.max(0.1, currentPlayheadTime - absTimes[absTimes.length - 1]);
+                    keyframes.push(kfData);
+                } else {
+                    // Insere no meio e ajusta o próximo ponto
+                    const prevTime = insertIdx === 0 ? 0 : absTimes[insertIdx - 1];
+                    kfData.duration = Math.max(0.1, currentPlayheadTime - prevTime);
+                    keyframes[insertIdx].duration = Math.max(0.1, absTimes[insertIdx] - currentPlayheadTime);
+                    keyframes.splice(insertIdx, 0, kfData);
+                }
+            }
+            renderUI();
+        };
+
+        // Permite deselecionar clicando na área vazia da trilha
+        document.getElementById('track-list').onclick = (e) => {
+            if (e.target === e.currentTarget) {
+                selectedKeyframeIndex = -1;
+                renderUI();
+            }
+        };
+
+        document.getElementById('take-photo').onclick = () => {
+            scene.renderer.render(scene.object3D, cam.getObject3D('camera'));
+            const link = document.createElement('a');
+            link.download = `snapshot-${Date.now()}.png`;
+            link.href = scene.canvas.toDataURL('image/png');
+            link.click();
+        };
+
+        function renderUI() {
+            const list = document.getElementById('track-content');
+            const addBtn = document.getElementById('add-kf');
+            const trackList = document.getElementById('track-list');
+
+            if (selectedKeyframeIndex !== -1) {
+                addBtn.innerHTML = '💾 Atualizar Ponto';
+                addBtn.style.background = 'var(--camera-kf)';
+                addBtn.style.color = '#000';
+            } else {
+                addBtn.innerHTML = '+ Novo Keyframe';
+                addBtn.style.background = 'rgba(0, 242, 255, 0.15)';
+                addBtn.style.color = 'var(--accent)';
+            }
+
+            list.innerHTML = '';
+            const pxPerSec = 80;
+            let cumulativeTime = 0;
+
+            const totalTime = keyframes.reduce((acc, kf, idx) => acc + (idx === 0 ? 0 : kf.duration), 0);
+            const totalWidth = Math.max(window.innerWidth, (totalTime + 10) * pxPerSec);
+            trackList.style.minWidth = "100%";
+            list.style.width = totalWidth + "px";
+            list.style.height = "100%";
+
+            if (!keyframes.length) {
+                list.innerHTML = '<span style="position:absolute; left:25px; top:40px; opacity:0.3; font-size: 10px;">ADICIONE PONTOS DE CÂMERA PARA CRIAR O MOVIMENTO</span>';
+            }
+
+            for (let s = 0; s <= (totalTime + 1200); s++) {
+                const marker = document.createElement('div');
+                marker.className = 'time-marker';
+                marker.style.left = (s * pxPerSec) + 'px';
+                marker.innerText = s + 's';
+                list.appendChild(marker);
+            }
+
+            keyframes.forEach((kf, i) => {
+                let nodeTime = 0;
+                for(let j=0; j<=i; j++) { if(j>0) nodeTime += keyframes[j].duration; }
+
+                const node = document.createElement('div');
+                node.className = 'kf-node' + (selectedKeyframeIndex === i ? ' selected' : '');
+                node.style.left = (nodeTime * pxPerSec) + 'px';
+                node.innerHTML = `
+                    <div class="kf-info">${nodeTime}s</div>
+                    <div class="kf-del" title="Excluir">×</div>
+                `;
+                
+                const delBtn = node.querySelector('.kf-del');
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+
+                    if (i === 0 && keyframes.length > 1) {
+                        // Ao deletar o primeiro ponto, movemos os dados do segundo para o tempo 0
+                        // e compensamos a duração no terceiro para manter a timeline fixa.
+                        const nextKF = keyframes[1];
+                        keyframes[0].pos = {...nextKF.pos};
+                        keyframes[0].rot = {...nextKF.rot};
+                        keyframes[0].fov = nextKF.fov;
+                        keyframes[0].pngs = JSON.parse(JSON.stringify(nextKF.pngs || []));
+                        
+                        if (keyframes.length > 2) {
+                            keyframes[2].duration += nextKF.duration;
+                        }
+                        keyframes.splice(1, 1);
+                    } else {
+                        if (i > 0 && i + 1 < keyframes.length) {
+                            keyframes[i + 1].duration += keyframes[i].duration;
+                        }
+                        keyframes.splice(i, 1);
+                    }
+
+                    // Garante que o primeiro keyframe da lista sempre tenha duração 0 (ponto de partida)
+                    if (keyframes.length > 0) keyframes[0].duration = 0;
+
+                    selectedKeyframeIndex = -1;
+                    if(keyframes.length === 0) {
+                        document.querySelectorAll('.raycastable').forEach(el => el.setAttribute('visible', true));
+                    }
+                    renderUI();
+                };
+
+                node.onclick = () => {
+                    selectedKeyframeIndex = i;
+                    currentPlayheadTime = nodeTime;
+                    const playhead = document.getElementById('playhead');
+                    playhead.style.left = (nodeTime * pxPerSec) + 'px';
+
+                    applyKF(keyframes[i], true);
+                    renderUI();
+                };
+
+                list.appendChild(node);
+            });
+        }
+
+        function syncLookControlsWithCamera() {
+            const look = cam.components['look-controls'];
+            if (look && look.pitchObject && look.yawObject) {
+                look.pitchObject.rotation.x = cam.object3D.rotation.x;
+                look.yawObject.rotation.y = cam.object3D.rotation.y;
+            }
+        }
+
+        function seekToTime(t) {
+            cam.setAttribute('look-controls', 'enabled', false);
+            
+            const tl = createTimeline();
+            if (tl) {
+                tl.progress(0);
+                tl.seek(t);
+                tl.kill(); // Limpa para não pesar a memória
+            }
+            
+            if (!animationTimeline && !isScrubbing) cam.setAttribute('look-controls', 'enabled', true);
+        }
+
+        // Lógica de Scrubbing (Arastar a linha vermelha)
+        const trackList = document.getElementById('track-list');
+        let isScrubbing = false;
+
+        function handleScrub(e) {
+            const rect = trackList.getBoundingClientRect();
+            const x = e.clientX - rect.left + trackList.scrollLeft;
+            const pxPerSec = 80;
+            currentPlayheadTime = x / pxPerSec;
+            
+            document.getElementById('playhead').style.left = x + 'px';
+            seekToTime(currentPlayheadTime);
+        }
+
+        trackList.onmousedown = (e) => {
+            if (e.target.closest('.kf-node') || e.target.closest('.kf-del')) return;
+            isScrubbing = true;
+            cam.setAttribute('look-controls', 'enabled', false);
+            handleScrub(e);
+        };
+
+        window.addEventListener('mousemove', (e) => { if (isScrubbing) handleScrub(e); });
+        window.addEventListener('mouseup', () => { 
+            if (isScrubbing) {
+                isScrubbing = false; 
+                syncLookControlsWithCamera();
+                if (!animationTimeline) cam.setAttribute('look-controls', 'enabled', true);
+            }
+        });
+
+        function createTimeline() {
+            if (keyframes.length < 2) return null;
+            
+            const look = cam.components['look-controls'];
+            const allPngs = document.querySelectorAll('.raycastable');
+            
+            // Limpa tweens anteriores para garantir sincronia total entre câmera e PNGs
+            gsap.killTweensOf([rig.object3D.position, cam.object3D.rotation]);
+            if (look) {
+                gsap.killTweensOf([look.pitchObject.rotation, look.yawObject.rotation]);
+            }
+            allPngs.forEach(el => gsap.killTweensOf([el.object3D.position, el.object3D.rotation, el.object3D.scale]));
+
+            const tl = gsap.timeline({ 
+                paused: true,
+                onUpdate: () => {
+                    // Sincroniza manualmente a rotação da câmera quando o look-controls está desativado (preview/render)
+                    if (look && look.pitchObject && look.yawObject) {
+                        cam.object3D.rotation.set(
+                            look.pitchObject.rotation.x,
+                            look.yawObject.rotation.y,
+                            0
+                        );
+                    }
+                    updateDebug();
+                }
+            });
+            let currentTime = 0;
+
+            keyframes.forEach((kf, i) => {
+                const stepDuration = kf.duration || 0;
+                const startTime = currentTime;
+                currentTime += stepDuration;
+
+                if (i === 0) {
+                    tl.set(rig.object3D.position, { x: kf.pos.x, y: kf.pos.y, z: kf.pos.z }, 0);
+                    if (look) {
+                        tl.set(look.pitchObject.rotation, { x: THREE.MathUtils.degToRad(kf.rot.x) }, 0);
+                        tl.set(look.yawObject.rotation, { y: THREE.MathUtils.degToRad(kf.rot.y) }, 0);
+                    }
+                    tl.call(() => {
+                        currentFOV = kf.fov;
+                        cam.setAttribute('camera', 'fov', currentFOV);
+                    }, null, 0);
+
+                    if (kf.pngs) {
+                        kf.pngs.forEach(p => {
+                            const el = document.getElementById(p.id);
+                            if (el) {
+                                tl.set(el.object3D.position, p.pos, 0);
+                                tl.set(el.object3D.rotation, p.rot, 0);
+                                tl.set(el.object3D.scale, p.scl, 0);
+                                tl.call(() => el.setAttribute('visible', p.visible !== false), null, 0);
+                            }
+                        });
+                    }
+                } else {
+                    const prevKF = keyframes[i-1];
+                    tl.to(rig.object3D.position, { 
+                        x: kf.pos.x, y: kf.pos.y, z: kf.pos.z, 
+                        duration: stepDuration, ease: "none" 
+                    }, startTime);
+
+                    if (look) {
+                        tl.to(look.pitchObject.rotation, { x: THREE.MathUtils.degToRad(kf.rot.x), duration: stepDuration, ease: "none" }, startTime);
+                        tl.to(look.yawObject.rotation, { y: THREE.MathUtils.degToRad(kf.rot.y), duration: stepDuration, ease: "none" }, startTime);
+                    }
+                    
+                    let fovProxy = { val: prevKF ? prevKF.fov : kf.fov };
+                    tl.to(fovProxy, { 
+                        val: kf.fov, duration: stepDuration, ease: "none",
+                        onUpdate: () => {
+                            currentFOV = fovProxy.val;
+                            cam.setAttribute('camera', 'fov', currentFOV);
+                        }
+                    }, startTime);
+
+                    if (kf.pngs) {
+                        kf.pngs.forEach(p => {
+                            const el = document.getElementById(p.id);
+                            if (el) {
+                                const prevPng = prevKF ? prevKF.pngs?.find(pp => pp.id === p.id) : null;
+                                const wasVisible = prevPng ? (prevPng.visible !== false) : false;
+                                const isVisible = (p.visible !== false);
+
+                                tl.to(el.object3D.position, { ...p.pos, duration: stepDuration, ease: "none" }, startTime);
+                                tl.to(el.object3D.rotation, { ...p.rot, duration: stepDuration, ease: "none" }, startTime);
+                                tl.to(el.object3D.scale, { ...p.scl, duration: stepDuration, ease: "none" }, startTime);
+
+                                if (!wasVisible && isVisible) {
+                                    tl.call(() => el.setAttribute('visible', true), null, startTime);
+                                } else if (wasVisible && !isVisible) {
+                                    tl.call(() => el.setAttribute('visible', false), null, startTime + stepDuration);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+            return tl;
+        }
+
+        const playBtn = document.getElementById('play-btn');
+        playBtn.onclick = () => {
+            // Se a animação estiver rodando, para ela.
+            const playhead = document.getElementById('playhead');
+            const pxPerSec = 80;
+
+            if (animationTimeline && animationTimeline.isActive()) {
+                animationTimeline.kill();
+                animationTimeline = null;
+                cam.setAttribute('look-controls', 'enabled', true);
+                playBtn.innerHTML = '▶ Preview';
+                playBtn.classList.remove('active');
+                return;
+            }
+
+            // Se não, cria e inicia.
+            animationTimeline = createTimeline();
+            if (!animationTimeline) {
+                alert("Crie pelo menos 2 keyframes!");
+                return;
+            }
+
+            cam.setAttribute('look-controls', 'enabled', false);
+            scene.play(); // Garante que a cena não está pausada
+            cam.setAttribute('look-controls', 'enabled', false);
+            playBtn.innerHTML = '⏹ Parar';
+            playBtn.classList.add('active');
+
+            playhead.style.display = 'block';
+            animationTimeline.play();
+            
+            animationTimeline.eventCallback("onUpdate", () => {
+                const time = animationTimeline.time();
+                currentPlayheadTime = time;
+                playhead.style.left = (time * pxPerSec) + 'px';
+
+                // Sincroniza manualmente a rotação da câmera com os valores animados pelo GSAP
+                const look = cam.components['look-controls'];
+                if (look && look.pitchObject && look.yawObject) {
+                    cam.object3D.rotation.set(
+                        look.pitchObject.rotation.x,
+                        look.yawObject.rotation.y,
+                        0
+                    );
+                }
+            });
+
+            animationTimeline.eventCallback("onComplete", () => {
+                syncLookControlsWithCamera();
+
+                cam.setAttribute('look-controls', 'enabled', true);
+                playBtn.innerHTML = '▶ Preview';
+                playBtn.classList.remove('active');
+                animationTimeline = null; // Reseta para a próxima vez
+            });
+        };
+
+        document.getElementById('render-btn').onclick = async () => {
+            const tl = createTimeline();
+            if (!tl) return alert("Crie pelo menos 2 keyframes!");
+
+            cam.setAttribute('look-controls', 'enabled', false);
+            scene.addState('rendering');
+            const curtain = document.getElementById('render-curtain'), 
+                  bar = document.getElementById('bar'),
+                  status = document.getElementById('render-status');
+            curtain.style.display = 'flex';
+            
+            // DEFINIDO PARA FULL HD (1080p)
+            const exportW = 1920; 
+            const exportH = 1080;
+            
+            const renderer = scene.renderer;
+            
+            // Salva tamanho original para restaurar depois
+            const originalSize = new THREE.Vector2();
+            renderer.getSize(originalSize);
+            
+            renderer.setSize(exportW, exportH, false);
+            
+            const cameraEl = cam.getObject3D('camera');
+            const originalAspect = cameraEl.aspect;
+            cameraEl.aspect = exportW / exportH;
+            cameraEl.updateProjectionMatrix();
+
+            try {
+                const fps = 24;
+                const totalFrames = Math.ceil(tl.duration() * fps);
+                const muxer = new WebMMuxer.Muxer({
+                    target: new WebMMuxer.ArrayBufferTarget(),
+                    video: { codec: 'V_VP9', width: exportW, height: exportH, frameRate: fps }
+                });
+
+                const videoEncoder = new VideoEncoder({
+                    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                    error: e => console.error(e)
+                });
+
+                videoEncoder.configure({
+                    codec: 'vp09.00.10.08', width: exportW, height: exportH,
+                    bitrate: 12_000_000 // Otimizado para 1080p
+                });
+
+                scene.pause();
+                const videos = document.querySelectorAll('video');
+                videos.forEach(v => v.pause());
+
+                for (let i = 0; i < totalFrames; i++) {
+                    if (!scene.is('rendering')) break;
+
+                    // Controle de fluxo: evita que a memória estoure e o navegador trave
+                    // Se a fila de codificação estiver muito cheia, aguarda um momento
+                    while (videoEncoder.encodeQueueSize > 30) {
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+
+                    const progress = Math.round((i / totalFrames) * 100);
+                    bar.style.width = `${progress}%`;
+                    status.innerText = `PROCESSANDO FRAME ${i} DE ${totalFrames} (${progress}%)`;
+
+                    const renderTime = i / fps;
+                    tl.seek(renderTime, false);
+
+                    // Sincroniza cada vídeo para o tempo exato do frame atual da exportação
+                    videos.forEach(v => {
+                        if (v.duration) v.currentTime = renderTime % v.duration;
+                    });
+
+                    // Sincroniza meticulosamente as sequências de imagens na exportação (MELHORIA)
+                    document.querySelectorAll('[data-is-sequence="true"]').forEach(seq => {
+                        const frameCount = parseInt(seq.dataset.frameCount);
+                        const seqFps = parseInt(seq.dataset.fps);
+                        const seqId = seq.dataset.seqId;
+                        const targetFrame = Math.floor(renderTime * seqFps) % frameCount;
+                        seq.setAttribute('material', 'src', `#seq-asset-${seqId}-${targetFrame}`);
+                    });
+
+                    renderer.render(scene.object3D, cameraEl);
+                    
+                    const frame = new VideoFrame(renderer.domElement, { timestamp: (i * 1000000) / fps });
+
+                    videoEncoder.encode(frame, { keyFrame: i % 48 === 0 });
+                    frame.close();
+
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
+                await videoEncoder.flush();
+                muxer.finalize();
+                
+                const blob = new Blob([muxer.target.buffer], { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `foto3d.webm`;
+                a.click();
+                
+                // Limpeza do URL object
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            } catch (err) {
+                alert("Erro: " + err.message);
+                console.error(err);
+            } finally {
+                // Restaura o estado original SEM recarregar a página
+                renderer.setSize(originalSize.x, originalSize.y, false);
+                cameraEl.aspect = originalAspect;
+                cameraEl.updateProjectionMatrix();
+                
+                scene.play();
+                document.querySelectorAll('video').forEach(v => v.play());
+                scene.removeState('rendering');
+                curtain.style.display = 'none';
+                
+                // Força resize para ajustar layout
+                scene.resize();
+            }
+        };
+
+        // Inicializa a UI carregada
+        renderUI();
+    </script>
+</body>
+</html>
