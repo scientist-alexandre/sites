@@ -311,7 +311,9 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.screenSpacePanning = false; // Garante que o movimento de pan não incline a visão
+        controls.screenSpacePanning = true; // Permite arrastar para os lados/cima/baixo na tela (Estilo Pan do PC)
+        controls.enablePan = true;
+        controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
         controls.update();
 
         // ILUMINAÇÃO "ARGILA"
@@ -364,21 +366,23 @@
             document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(mode + '-btn').classList.add('active');
 
+            // Mantemos os controles sempre ativos para permitir Pan/Zoom com 2 dedos em qualquer modo
+            controls.enabled = true;
+
             if (mode === 'camera') {
-                controls.enabled = true;
+                controls.enableRotate = true;
                 container.style.cursor = 'grab';
-                viewHelperTxt.textContent = "MODO CÂMERA (Toque em Desenhar para começar)";
+                viewHelperTxt.textContent = "MODO CÂMERA (1 dedo: Girar | 2 dedos: Pan/Zoom)";
                 viewHelperTxt.style.color = "var(--text-muted)";
             } else {
-                controls.enabled = false;
+                controls.enableRotate = false; // Bloqueia rotação para não estragar o traço
                 if (mode === 'draw') {
                     container.style.cursor = 'crosshair';
-                    viewHelperTxt.textContent = "MODO DESENHO (Desenhando na Grade ou sobre os Traços)";
-                    viewHelperTxt.textContent = "MODO DESENHO (A grade segue sua visão)";
+                    viewHelperTxt.textContent = "MODO DESENHO (1 dedo: Desenha | 2 dedos: Pan/Zoom)";
                     viewHelperTxt.style.color = "var(--accent)";
                 } else {
                     container.style.cursor = 'cell';
-                    viewHelperTxt.textContent = "MODO BORRACHA";
+                    viewHelperTxt.textContent = "MODO BORRACHA (1 dedo: Apaga | 2 dedos: Pan/Zoom)";
                     viewHelperTxt.style.color = "#FF3B30";
                 }
             }
@@ -444,6 +448,11 @@
             
             // Rejeição de multi-toque: Se houver mais de um dedo, não desenha
             if (activePointers.size > 1 || currentMode === 'camera') {
+                // Se estava desenhando e entrou o segundo dedo, cancela o traço atual para não deixar pontos soltos
+                if (isDrawing && currentStrokeGroup) {
+                    scene.remove(currentStrokeGroup);
+                    currentStrokeGroup = null;
+                }
                 isDrawing = false;
                 return;
             }
