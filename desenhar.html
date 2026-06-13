@@ -442,25 +442,6 @@
             position: relative;
         }
 
-        /* Botão de Deletar Frame */
-        .delete-frame-btn {
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            background: #ff3b30;
-            color: white;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            z-index: 5;
-        }
-        .frame-thumb:hover .delete-frame-btn { display: flex; }
-
         /* Controles de Duração */
         .duration-badge {
             position: absolute;
@@ -476,19 +457,19 @@
         }
         .duration-controls {
             position: absolute;
-            bottom: -20px;
+            top: -20px;
             left: 0;
             width: 100%;
             display: flex;
             justify-content: center;
-            gap: 8px;
+            gap: 4px;
             opacity: 0;
             transition: 0.2s;
             pointer-events: none;
         }
         .frame-thumb:hover .duration-controls, .frame-thumb:active .duration-controls { 
             opacity: 1; 
-            bottom: 2px; 
+            top: 2px; 
             pointer-events: auto; 
         }
         .dur-btn { 
@@ -497,9 +478,9 @@
             color: white; 
             border-radius: 4px; 
             cursor: pointer; 
-            width: 24px; 
-            height: 24px; 
-            font-size: 16px; 
+            width: 18px; 
+            height: 18px; 
+            font-size: 12px; 
             font-weight: bold;
             display: flex; 
             align-items: center; 
@@ -574,6 +555,7 @@
             <button class="icon-btn" id="undoBtn" title="Desfazer">↺</button>
             <button class="icon-btn" id="redoBtn" title="Refazer">↻</button>
             <button class="icon-btn" id="clearBtn" title="Limpar Canvas">🗑️</button>
+            <button class="icon-btn" id="deleteCurrentFrameBtn" title="Deletar Frame Selecionado" style="color: #ff3b30;">✖</button>
         </div>
         <div class="top-right">
             <div class="layers-menu">
@@ -1012,6 +994,7 @@
 
         // Garante que o canvas seja transparente inicialmente (fundo branco vem do CSS)
         ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+        renderTimeline(true);
         refreshLayerDisplay();
         saveFrameState(0);
 
@@ -1693,6 +1676,7 @@
         }
 
         async function deleteFrame(index) {
+            if (isPlaying) return;
             finishSelection(); // Aplica qualquer transformação pendente antes de alterar a estrutura
             if (frames.length <= 1) {
                 frames[0].layers.forEach(l => l && l.close && l.close());
@@ -2259,22 +2243,15 @@
             } else {
                 thumb.style.backgroundImage = 'none';
             }
-
-            if (!thumb.querySelector('.delete-frame-btn')) {
-                const deleteBtn = document.createElement('div');
-                deleteBtn.className = 'delete-frame-btn';
-                deleteBtn.innerHTML = '×';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation(); // Evita carregar o frame ao clicar no X
-                    deleteFrame(index);
-                };
-                thumb.appendChild(deleteBtn);
-            }
         }
 
         document.getElementById('clearBtn').addEventListener('click', () => {
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             saveFrameState(currentFrameIndex);
+        });
+
+        document.getElementById('deleteCurrentFrameBtn').addEventListener('click', () => {
+            deleteFrame(currentFrameIndex);
         });
 
         document.getElementById('addFrameBtn').addEventListener('click', addBlankFrame);
