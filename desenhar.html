@@ -2311,18 +2311,19 @@
                 mainCanvas.style.visibility = 'hidden'; 
                 onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
                 
+                // Criar o canvas de buffer apenas UMA vez ao iniciar o play para economizar memória e CPU
+                const offscreen = document.createElement('canvas');
+                offscreen.width = playbackCanvas.width;
+                offscreen.height = playbackCanvas.height;
+                const offCtx = offscreen.getContext('2d');
+                
                 let playIndex = 0;
-
-                const runPlayback = async () => {
+                const runPlayback = () => {
                     if (!isPlaying || currentSession !== playSessionId) return;
+                    const startTime = performance.now(); // Marca o início do processamento do frame
 
-                    // Composição off-screen para evitar piscadas (flicker)
-                    const offscreen = document.createElement('canvas');
-                    offscreen.width = playbackCanvas.width;
-                    offscreen.height = playbackCanvas.height;
-                    const offCtx = offscreen.getContext('2d');
-                    
-                    offCtx.fillStyle = 'white'; offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+                    offCtx.fillStyle = 'white'; 
+                    offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
                     offCtx.drawImage(bgCanvas, 0, 0);
 
                     for (const layerData of frames[playIndex].layers) {
@@ -2332,9 +2333,16 @@
                     if (isPlaying && currentSession === playSessionId) {
                         pCtx.clearRect(0, 0, playbackCanvas.width, playbackCanvas.height);
                         pCtx.drawImage(offscreen, 0, 0);
+                        
                         const hold = frames[playIndex].duration || 1;
+                        const targetInterval = (1000 / fps) * hold;
                         playIndex = (playIndex + 1) % frames.length;
-                        setTimeout(runPlayback, (1000 / fps) * hold);
+
+                        // Calcula quanto tempo o desenho demorou e subtrai do próximo delay
+                        const processingTime = performance.now() - startTime;
+                        const nextDelay = Math.max(0, targetInterval - processingTime);
+                        
+                        setTimeout(runPlayback, nextDelay);
                     }
                 };
 
