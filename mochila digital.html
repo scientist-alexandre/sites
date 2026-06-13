@@ -126,6 +126,9 @@
             left: 0;
             z-index: 5;
             cursor: crosshair;
+            touch-action: none;
+            image-rendering: optimizeSpeed;
+            will-change: transform;
             touch-action: none; /* Desabilita o scroll para não atrapalhar o desenho */
         }
 
@@ -809,6 +812,7 @@
         function start(e) {
             if (imgState.active) return; // Não desenha se estiver transformando uma imagem
             saveState();
+            if (imgState.active || !e.isPrimary) return; 
             drawing = true;
             const pos = getPos(e);
             ctx.beginPath();
@@ -821,11 +825,28 @@
             if (!drawing) return;
             const pos = getPos(e);
             ctx.lineTo(pos.x, pos.y);
+            
+            // getCoalescedEvents permite capturar todos os pontos entre frames (essencial para tablets)
+            let events = [e];
+            if (e.getCoalescedEvents) {
+                events = e.getCoalescedEvents();
+            }
+
+            for (let event of events) {
+                const pos = getPos(event);
+                ctx.lineTo(pos.x, pos.y);
+            }
             ctx.stroke();
             if (e.cancelable) e.preventDefault(); // Evita scroll em dispositivos touch
         }
 
         function stop() { drawing = false; }
+        function stop(e) { 
+            if(drawing) {
+                drawing = false;
+                saveState(); // Salva o estado apenas ao terminar o traço para evitar lag no início
+            }
+        }
 
         // Eventos de Mouse e Touch
         canvas.addEventListener('mousedown', start);
@@ -834,6 +855,11 @@
         canvas.addEventListener('touchstart', start, { passive: false });
         canvas.addEventListener('touchmove', move, { passive: false });
         canvas.addEventListener('touchend', stop);
+        // Eventos de Pointer (Unifica Mouse, Touch e Pen com baixa latência)
+        canvas.addEventListener('pointerdown', start);
+        canvas.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', stop);
+        canvas.addEventListener('pointercancel', stop);
 
         function setPen() {
             currentTool = 'pen';
@@ -1003,7 +1029,7 @@
                     exportMochila();
                 }
             }
-        }, 10 * 60 * 1000); // 10 minutos em milissegundos
+        }, 7 * 60 * 1000); // 10 minutos em milissegundos
     </script>
 </body>
 </html>
