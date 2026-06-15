@@ -6,10 +6,10 @@
     <script src="https://cdn.jsdelivr.net/npm/webm-muxer@3.0.1/build/webm-muxer.js"></script>
     <title>Estúdio 3D</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #0f0f0f; font-family: 'Inter', 'Segoe UI', sans-serif; height: 100%; color: #d4d4d4; }
+        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #0f0f0f; font-family: 'Inter', 'Segoe UI', sans-serif; height: 100%; color: #d4d4d4; overscroll-behavior: none; }
 
-        #app-container { display: flex; width: 100vw; height: 100vh; flex-direction: column; }
-        #main-view { display: flex; flex: 1; flex-direction: row; overflow: hidden; }
+        #app-container { display: flex; width: 100%; height: 100vh; height: 100dvh; flex-direction: column; }
+        #main-view { display: flex; flex: 1; flex-direction: row; overflow: hidden; min-height: 0; }
 
         /* Área de Trabalho de Vídeo (Esquerda) */
         #workspace { 
@@ -39,7 +39,7 @@
         .ui-section { padding: 15px; border-bottom: 1px solid #333; }
         #section-import { flex: 0 0 auto; }
         #section-layers { flex: 1; overflow-y: auto; display: flex; flex-direction: column; background: #181818; }
-        #section-controls { flex: 0 0 auto; background: #1e1e1e; border-bottom: none; }
+        #section-controls { flex: 0 0 auto; background: #1e1e1e; border-bottom: none; max-height: 180px; overflow-y: auto; }
 
         /* Linha do Tempo (Timeline) */
         #timeline { 
@@ -51,6 +51,7 @@
             border-top: 1px solid #333;
             z-index: 20;
             user-select: none;
+            flex-shrink: 0;
         }
         .timeline-header { padding: 8px 20px; display: flex; gap: 15px; align-items: center; background: #2d2d2d; font-size: 11px; border-bottom: 1px solid #3e3e3e; }
         .timeline-body { flex: 1; position: relative; background: #121212; overflow-x: auto; overflow-y: hidden; cursor: crosshair; }
@@ -78,7 +79,10 @@
             flex-direction: column;
         }
         .layer-item {
-            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
             font-size: 12px;
             cursor: pointer;
             border-bottom: 1px solid #252525;
@@ -87,6 +91,10 @@
         }
         .layer-item:hover { background: #2a2a2a; color: #eee; }
         .layer-item.active { background: #37373d; color: #fff; border-left: 3px solid #fff; }
+        .remove-layer-btn { background: transparent !important; border: none !important; color: #666 !important; font-size: 16px !important; padding: 0 5px !important; cursor: pointer; text-transform: none !important; line-height: 1; }
+        .remove-layer-btn:hover { color: #ff4d4d !important; }
+        .vis-layer-btn { background: transparent !important; border: none !important; color: #888 !important; font-size: 14px !important; cursor: pointer; padding: 0 5px !important; line-height: 1; }
+        .vis-layer-btn:hover { color: #fff !important; }
 
         /* Sliders Custom */
         input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; width: 100%; margin: 5px 0; accent-color: #fff; }
@@ -102,8 +110,8 @@
         #ui-toggle { display: none; position: fixed; top: 10px; right: 10px; z-index: 1001; background: #fff; color: #000; border-radius: 50%; width: 40px; height: 40px; border: none; font-size: 20px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
         /* Responsividade Profissional */
-        @media (max-width: 768px) {
-            #main-view { flex-direction: column; }
+        @media (max-width: 1024px) {
+            #main-view { flex-direction: column; height: calc(100dvh - 160px); }
             #ui { 
                 position: fixed; 
                 right: 0; 
@@ -114,7 +122,7 @@
             }
             #ui.open { transform: translateX(0); }
             #ui-toggle { display: block; }
-            #timeline { height: 140px; }
+            #timeline { height: 160px; }
             .timeline-header { flex-wrap: wrap; gap: 8px; padding: 10px; }
             #durationInput { width: 80px; }
             button { padding: 8px 10px; } /* Botões maiores para touch */
@@ -175,6 +183,15 @@
 
             <label>Profundidade</label>
             <input type="range" id="objDepth" min="1" max="50" value="10">
+
+            <label>Rotação X</label>
+            <input type="range" id="rotX" min="-360" max="360" value="0">
+
+            <label>Rotação Y</label>
+            <input type="range" id="rotY" min="-360" max="360" value="0">
+
+            <label>Rotação Z</label>
+            <input type="range" id="rotZ" min="-360" max="360" value="0">
             </div>
         </div>
     </div>
@@ -185,8 +202,9 @@
             <button id="playBtn">Play</button>
             <button id="keyBtn" class="secondary">Add Keyframe</button>
             <button id="delKeyBtn" class="secondary">Delete Keyframe</button>
+            <button id="promptBtn" class="secondary">Prompt 3D</button>
             <label style="color: #888; margin-left: 10px;">Duração:</label>
-            <input type="text" id="durationInput" value="00:00:10.00" style="width: 100px; background: #181818; color: #eee; border: 1px solid #444; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px;">
+            <input type="text" id="durationInput" value="00:00:10.00" readonly style="width: 100px; background: #181818; color: #888; border: 1px solid #333; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: default;">
             <span id="timeDisplay">00:00.00</span>
             <div style="flex-grow: 1;"></div>
             <button id="exportVideoBtn" style="background: #ffffff; color: #000; border: none; font-weight: bold;">Exportar Vídeo</button>
@@ -231,7 +249,11 @@
         const angleV = document.getElementById('angleV');
         const objScale = document.getElementById('objScale');
         const objDepth = document.getElementById('objDepth');
+        const rotX = document.getElementById('rotX');
+        const rotY = document.getElementById('rotY');
+        const rotZ = document.getElementById('rotZ');
         const layersList = document.getElementById('layersList');
+        const promptBtn = document.getElementById('promptBtn');
         const exportVideoBtn = document.getElementById('exportVideoBtn');
 
         // Sistema de Animação
@@ -340,16 +362,60 @@
 
             let currentYawDeg = (yaw * 180 / Math.PI) % 360;
             novoObjeto.userData.hDeg = -currentYawDeg;
+            let hDeg = (yaw * 180 / Math.PI) % 360;
+            if (hDeg > 180) hDeg -= 360;
+            if (hDeg <= -180) hDeg += 360;
+            novoObjeto.userData.hDeg = hDeg;
             novoObjeto.userData.vDeg = (pitch * 180 / Math.PI);
             novoObjeto.userData.scale = 25;
             novoObjeto.userData.depth = 10;
+            novoObjeto.userData.rotX = 0;
+            novoObjeto.userData.rotY = 0;
+            novoObjeto.userData.rotZ = 0;
 
             scene.add(novoObjeto);
             objetosList.push(novoObjeto);
 
+            // Sincroniza o novo objeto com keyframes que já existem
+            keyframes.forEach(kf => {
+                // Se o keyframe for anterior ao tempo do upload, a mídia deve ser invisível
+                const isBefore = kf.time < currentTime;
+                kf.objects.push({
+                    hDeg: novoObjeto.userData.hDeg,
+                    vDeg: novoObjeto.userData.vDeg,
+                    scale: novoObjeto.userData.scale,
+                    depth: novoObjeto.userData.depth,
+                    visible: !isBefore,
+                    rotX: 0, rotY: 0, rotZ: 0
+                });
+            });
+
+            // Se estamos no meio da timeline e não há um ponto de partida (tempo 0),
+            // criamos um agora para definir que o objeto era invisível antes deste momento.
+            if (currentTime > 0 && !keyframes.find(k => k.time === 0)) {
+                keyframes.push({
+                    time: 0,
+                    camera: { yaw, pitch, fov: currentFov },
+                    objects: objetosList.map((obj, i) => ({
+                        hDeg: obj.userData.hDeg, vDeg: obj.userData.vDeg,
+                        scale: obj.userData.scale, depth: obj.userData.depth,
+                        visible: i === objetosList.length - 1 ? false : obj.visible,
+                        rotX: 0, rotY: 0, rotZ: 0
+                    }))
+                });
+                keyframes.sort((a, b) => a.time - b.time);
+            }
+
+            // Adiciona um keyframe no tempo atual para gravar o estado "visível" a partir de agora
+            addKeyframe();
+
             indexSelecionado = objetosList.length - 1;
             atualizarSlidersParaObjeto(novoObjeto);
             posicionarObjeto(novoObjeto);
+            applyAnimation(); // Atualiza a cena imediatamente para refletir a visibilidade
+
+            // Reseta o input para permitir carregar o mesmo arquivo novamente se desejar
+            e.target.value = '';
         });
 
         function atualizarUILista() {
@@ -357,13 +423,60 @@
             objetosList.forEach((obj, index) => {
                 const item = document.createElement('div');
                 item.className = `layer-item ${index === indexSelecionado ? 'active' : ''}`;
-                item.textContent = obj.userData.filename || `Objeto ${index + 1}`;
-                item.onclick = () => {
+                
+                const nameLabel = document.createElement('span');
+                nameLabel.style.flex = "1";
+                nameLabel.textContent = obj.userData.filename || `Objeto ${index + 1}`;
+                nameLabel.onclick = () => {
                     indexSelecionado = index;
                     atualizarSlidersParaObjeto(obj);
                 };
+                item.appendChild(nameLabel);
+
+                const visBtn = document.createElement('button');
+                visBtn.innerHTML = obj.visible ? '👁️' : '🕶️';
+                visBtn.className = 'vis-layer-btn';
+                visBtn.title = 'Esconder/Mostrar';
+                visBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    obj.visible = !obj.visible;
+                    atualizarUILista();
+                    if (!isPlaying) renderer.render(scene, camera);
+                };
+                item.appendChild(visBtn);
+
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = '&times;';
+                delBtn.className = 'remove-layer-btn';
+                delBtn.title = 'Remover Camada';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removerCamada(index);
+                };
+                item.appendChild(delBtn);
+
                 layersList.appendChild(item);
             });
+        }
+
+        function removerCamada(index) {
+            const obj = objetosList[index];
+            scene.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+            objetosList.splice(index, 1);
+            keyframes.forEach(kf => kf.objects.splice(index, 1));
+
+            if (indexSelecionado === index) indexSelecionado = null;
+            else if (indexSelecionado > index) indexSelecionado--;
+
+            atualizarUILista();
+            applyAnimation();
+            renderKeyframes(); // Remove os marcadores visuais da timeline
+            recalcularDuracaoFinal(true); // Atualiza a duração e a renderização da cena
         }
 
         function atualizarSlidersParaObjeto(obj) {
@@ -371,6 +484,9 @@
             angleV.value = Math.round(obj.userData.vDeg);
             objScale.value = obj.userData.scale;
             objDepth.value = obj.userData.depth;
+            rotX.value = Math.round(obj.userData.rotX || 0);
+            rotY.value = Math.round(obj.userData.rotY || 0);
+            rotZ.value = Math.round(obj.userData.rotZ || 0);
 
             atualizarUILista();
         }
@@ -391,6 +507,9 @@
 
             // Garante que o plano sempre esteja virado para o centro (câmera)
             obj.lookAt(0, 0, 0);
+            obj.rotateX(THREE.MathUtils.degToRad(obj.userData.rotX || 0));
+            obj.rotateY(THREE.MathUtils.degToRad(obj.userData.rotY || 0));
+            obj.rotateZ(THREE.MathUtils.degToRad(obj.userData.rotZ || 0));
         }
 
         // Evento ao mudar os sliders (Ajuste manual)
@@ -401,36 +520,46 @@
                 obj.userData.vDeg = Number(angleV.value);
                 obj.userData.scale = Number(objScale.value);
                 obj.userData.depth = Number(objDepth.value);
+
+                // Lógica de trava (snap) no zero para rotações
+                let rx = Number(rotX.value);
+                let ry = Number(rotY.value);
+                let rz = Number(rotZ.value);
+                const threshold = 10; // Sensibilidade da trava (graus)
+                if (Math.abs(rx) < threshold) { rx = 0; rotX.value = 0; }
+                if (Math.abs(ry) < threshold) { ry = 0; rotY.value = 0; }
+                if (Math.abs(rz) < threshold) { rz = 0; rotZ.value = 0; }
+
+                obj.userData.rotX = rx;
+                obj.userData.rotY = ry;
+                obj.userData.rotZ = rz;
                 posicionarObjeto(obj);
             }
         }
 
-        function recalcularDuracaoFinal() {
+        function recalcularDuracaoFinal(shouldApply = false) {
             if (keyframes.length > 0) {
                 duration = keyframes[keyframes.length - 1].time;
-                durationInput.value = secondsToTimecode(duration, true);
+            } else {
+                duration = 10; // Fallback caso não existam keyframes
             }
-            updateTimelineUI(false); 
+            durationInput.value = secondsToTimecode(duration, true);
+            if (currentTime > duration) {
+                currentTime = duration;
+            }
+            updateTimelineUI(shouldApply); 
         }
 
         angleH.addEventListener('input', onSliderInput);
         angleV.addEventListener('input', onSliderInput);
         objScale.addEventListener('input', onSliderInput);
         objDepth.addEventListener('input', onSliderInput);
-        durationInput.addEventListener('change', () => {
-            duration = timecodeToSeconds(durationInput.value);
-            durationInput.value = secondsToTimecode(duration, true); // Sanitiza a entrada com centésimos
-            updateTimelineUI(true);
-        });
+        rotX.addEventListener('input', onSliderInput);
+        rotY.addEventListener('input', onSliderInput);
+        rotZ.addEventListener('input', onSliderInput);
 
         // Lógica de Timeline
         function addKeyframe() {
-            // Se o usuário inserir um keyframe além da duração atual, a duração expande
-            if (currentTime > duration) {
-                duration = currentTime;
-                durationInput.value = secondsToTimecode(duration, true);
-            }
-
             // Remove keyframe existente no mesmo tempo
             keyframes = keyframes.filter(k => Math.abs(k.time - currentTime) > 0.1);
 
@@ -441,7 +570,11 @@
                     hDeg: obj.userData.hDeg,
                     vDeg: obj.userData.vDeg,
                     scale: obj.userData.scale,
-                    depth: obj.userData.depth
+                    depth: obj.userData.depth,
+                    visible: obj.visible,
+                    rotX: obj.userData.rotX || 0,
+                    rotY: obj.userData.rotY || 0,
+                    rotZ: obj.userData.rotZ || 0
                 }))
             };
 
@@ -505,6 +638,11 @@
                     obj.userData.vDeg = lerp(prev.objects[i].vDeg, next.objects[i].vDeg, t);
                     obj.userData.scale = lerp(prev.objects[i].scale, next.objects[i].scale, t);
                     obj.userData.depth = lerp(prev.objects[i].depth, next.objects[i].depth, t);
+                    // Visibilidade agora é "Hold": mantém o estado do keyframe anterior até chegar no próximo
+                    obj.visible = (prev.objects[i].visible !== false);
+                    obj.userData.rotX = lerp(prev.objects[i].rotX || 0, next.objects[i].rotX || 0, t);
+                    obj.userData.rotY = lerp(prev.objects[i].rotY || 0, next.objects[i].rotY || 0, t);
+                    obj.userData.rotZ = lerp(prev.objects[i].rotZ || 0, next.objects[i].rotZ || 0, t);
                     posicionarObjeto(obj);
                 }
             });
@@ -531,8 +669,20 @@
                 keyframes.splice(selectedKeyframeIndex, 1);
                 selectedKeyframeIndex = null;
                 renderKeyframes();
+                recalcularDuracaoFinal(true);
                 applyAnimation();
             }
+        };
+
+        promptBtn.onclick = () => {
+            const prompt = "Spherical equirectangular 360-degree projection, seamless full panorama, [descreva seu cenário aqui], 8k UHD resolution, hyper-realistic, photorealistic, cinematic lighting, sharp focus across entire image, zero depth of field blur, immersive virtual reality environment, highly detailed textures, masterpiece quality, high-end 3D render --ar 2:1";
+            navigator.clipboard.writeText(prompt).then(() => {
+                const originalText = promptBtn.textContent;
+                promptBtn.textContent = "Copiado!";
+                setTimeout(() => promptBtn.textContent = originalText, 2000);
+            }).catch(err => {
+                console.error('Erro ao copiar prompt: ', err);
+            });
         };
 
         function updateTimeFromMouseEvent(e) {
@@ -558,12 +708,6 @@
                 const x = e.clientX - rect.left + timelineBar.scrollLeft;
                 let newTime = Math.max(0, x / pps);
 
-                // Auto-expande a duração se arrastar para o fim
-                if (newTime > duration) {
-                    duration = newTime;
-                    durationInput.value = secondsToTimecode(duration, true);
-                }
-
                 const movingKeyframe = keyframes[draggedKeyframeIndex];
                 movingKeyframe.time = newTime;
                 
@@ -578,7 +722,7 @@
                 keyframes.sort((a, b) => a.time - b.time);
                 draggedKeyframeIndex = keyframes.indexOf(movingKeyframe);
                 selectedKeyframeIndex = draggedKeyframeIndex;
-                updateTimelineUI();
+                recalcularDuracaoFinal(true);
             }
         });
 
@@ -612,12 +756,50 @@
 
         // Clique para Selecionar ou Navegar
         let isPointerDown = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let initialPinchDist = 0;
+
         renderer.domElement.addEventListener('pointerdown', (e) => {
             isPointerDown = true;
-            // Se for desktop, tenta lock. Se for touch, apenas rastreia movimento.
-            if (e.pointerType === 'mouse' && e.button === 0) {
-                renderer.domElement.requestPointerLock();
+            if (e.pointerType === 'mouse') {
+                if (e.button === 0) renderer.domElement.requestPointerLock();
+            } else {
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
             }
+        });
+
+        // Lógica de Pinch Zoom (Dois dedos)
+        workspace.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                initialPinchDist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+            }
+        }, { passive: false });
+
+        workspace.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && initialPinchDist > 0) {
+                const dist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                const diff = initialPinchDist - dist;
+                
+                currentFov += diff * 0.1;
+                currentFov = Math.max(10, Math.min(90, currentFov));
+                camera.fov = currentFov;
+                camera.updateProjectionMatrix();
+                
+                initialPinchDist = dist;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            initialPinchDist = 0;
         });
 
         window.addEventListener('pointerup', () => {
@@ -632,13 +814,34 @@
                 yaw += e.movementX * 0.0015;
                 pitch -= e.movementY * 0.0015;
             } else if (isPointerDown && (e.pointerType === 'touch' || e.pointerType === 'pen')) {
-                // Lógica de swipe para touch
-                yaw -= e.movementX * 0.005;
-                pitch += e.movementY * 0.005;
+                // Melhoria na detecção de movimento para touch
+                const movementX = e.clientX - lastTouchX;
+                const movementY = e.clientY - lastTouchY;
+                
+                yaw -= movementX * 0.005;
+                pitch += movementY * 0.005;
+                
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
             } else {
                 return;
             }
 
+            pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, pitch));
+            updateCameraRotation();
+        });
+
+        // Controle da câmera via teclado (Seta para cima e para baixo)
+        window.addEventListener('keydown', (e) => {
+            const step = 0.05; // Sensibilidade do movimento
+            if (e.key === 'ArrowUp') {
+                pitch += step; // Move a visão para cima (céu)
+            } else if (e.key === 'ArrowDown') {
+                pitch -= step; // Move a visão para baixo (chão)
+            } else {
+                return;
+            }
+            // Aplica os limites para não ultrapassar o topo ou o fundo do cenário
             pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, pitch));
             updateCameraRotation();
         });
@@ -779,75 +982,4 @@
         animate();
     </script>
 </body>
-</html>             if (!isExporting) break;
-
-                    while (videoEncoder.encodeQueueSize > 30) {
-                        await new Promise(r => setTimeout(r, 100));
-                    }
-
-                    const progress = Math.min(100, Math.round((i / totalFrames) * 100));
-                    bar.style.width = `${progress}%`;
-                    status.innerText = `PROCESSANDO FRAME ${i} DE ${totalFrames} (${progress}%)`;
-
-                    currentTime = i / fps;
-                    applyAnimation(false);
-                    objetosList.forEach(obj => {
-                        if (obj.userData.isSequence) {
-                            const frameIdx = Math.floor(currentTime * 24) % obj.userData.textures.length;
-                            obj.material.map = obj.userData.textures[frameIdx];
-                        }
-                    });
-                    renderer.render(scene, camera);
-                    const frame = new VideoFrame(renderer.domElement, { timestamp: (i * 1000000) / fps });
-                    videoEncoder.encode(frame, { keyFrame: i % 48 === 0 });
-                    frame.close();
-                    await new Promise(r => setTimeout(r, 0));
-                }
-                await videoEncoder.flush();
-                muxer.finalize();
-                const blob = new Blob([muxer.target.buffer], { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `video3d.webm`; a.click();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-            } catch (err) { alert("Erro: " + err.message); console.error(err);
-            } finally {
-                renderer.setSize(originalSize.x, originalSize.y, false); camera.aspect = originalAspect; camera.updateProjectionMatrix();
-                currentTime = originalTime; applyAnimation(true); curtain.style.display = 'none';
-                isExporting = false;
-            }
-        }
-        exportVideoBtn.onclick = exportVideo;
-
-        window.addEventListener('resize', onWindowResize);
-
-        const clock = new THREE.Clock();
-        function animate() {
-            requestAnimationFrame(animate);
-            if (isExporting) return; // Impede renderização e lógica de tempo durante a exportação
-            const delta = clock.getDelta();
-
-            if (isPlaying) {
-                currentTime += delta;
-                if (currentTime >= duration) currentTime = 0;
-                applyAnimation();
-                updateTimelineUI(false); // Já aplicamos a animação acima
-            }
-
-            // Atualiza sequências de imagens para criar o efeito de vídeo
-            objetosList.forEach(obj => {
-                if (obj.userData.isSequence) {
-                    obj.userData.timer += delta;
-                    if (obj.userData.timer >= 1 / 24) { // 24 FPS
-                        obj.userData.timer = 0;
-                        obj.userData.currentFrame = (obj.userData.currentFrame + 1) % obj.userData.textures.length;
-                        obj.material.map = obj.userData.textures[obj.userData.currentFrame];
-                    }
-                }
-            });
-
-            renderer.render(scene, camera);
-        }
-        animate();
-    </script>
-</body>
-</html>  
+</html>
