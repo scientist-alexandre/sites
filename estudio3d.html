@@ -205,7 +205,7 @@
             <button id="promptBtn" class="secondary">Prompt 3D</button>
             <button id="photoBtn" class="secondary">Foto</button>
             <label style="color: #888; margin-left: 10px;">Duração:</label>
-            <input type="text" id="durationInput" value="00:00:10.00" readonly style="width: 100px; background: #181818; color: #888; border: 1px solid #333; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: default;">
+            <input type="text" id="durationInput" value="00:00:10.00" style="width: 100px; background: #181818; color: #eee; border: 1px solid #444; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: text;">
             <span id="timeDisplay">00:00.00</span>
             <div style="flex-grow: 1;"></div>
             <button id="exportVideoBtn" style="background: #ffffff; color: #000; border: none; font-weight: bold;">Exportar Vídeo</button>
@@ -561,10 +561,9 @@
         }
 
         function recalcularDuracaoFinal(shouldApply = false) {
-            if (keyframes.length > 0) {
-                duration = keyframes[keyframes.length - 1].time;
-            } else {
-                duration = 10; // Fallback caso não existam keyframes
+            const lastKeyTime = keyframes.length > 0 ? keyframes[keyframes.length - 1].time : 0;
+            if (lastKeyTime > duration) {
+                duration = lastKeyTime;
             }
             durationInput.value = secondsToTimecode(duration, true);
             if (currentTime > duration) {
@@ -572,6 +571,18 @@
             }
             updateTimelineUI(shouldApply); 
         }
+
+        durationInput.addEventListener('change', () => {
+            const newSeconds = timecodeToSeconds(durationInput.value);
+            if (!isNaN(newSeconds) && newSeconds > 0) {
+                duration = newSeconds;
+                // Garante que a duração comporte o último keyframe existente
+                const lastKeyTime = keyframes.length > 0 ? keyframes[keyframes.length - 1].time : 0;
+                if (lastKeyTime > duration) duration = lastKeyTime;
+            }
+            durationInput.value = secondsToTimecode(duration, true);
+            updateTimelineUI(true);
+        });
 
         angleH.addEventListener('input', onSliderInput);
         angleV.addEventListener('input', onSliderInput);
