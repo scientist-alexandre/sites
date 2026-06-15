@@ -681,7 +681,7 @@
                 
                 // Handles (Cantos)
                 ctx.fillStyle = 'white';
-                const hSize = 20;
+                const hSize = 40; // Aumentado para facilitar o toque no tablet
                 const half = hSize / 2;
                 const handles = [
                     { x: -selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half }, // TL
@@ -695,9 +695,27 @@
                     ctx.strokeRect(h.x, h.y, hSize, hSize);
                 });
 
-                // Alça de Rotação (Handle acima do clipe)
-                ctx.fillRect(-half, -selectedClip.h / 2 - 40 - half, hSize, hSize);
-                ctx.strokeRect(-half, -selectedClip.h / 2 - 40 - half, hSize, hSize);
+                // Alças de Rotação (Aumentadas e movidas para os 4 cantos internos)
+                ctx.fillStyle = '#3b82f6'; // Azul destaque
+                const rotOffset = 10;
+                const rotHandles = [
+                    { x: -selectedClip.w / 2 + rotOffset, y: -selectedClip.h / 2 + rotOffset }, // TL
+                    { x: selectedClip.w / 2 - rotOffset - hSize, y: -selectedClip.h / 2 + rotOffset }, // TR
+                    { x: -selectedClip.w / 2 + rotOffset, y: selectedClip.h / 2 - rotOffset - hSize }, // BL
+                    { x: selectedClip.w / 2 - rotOffset - hSize, y: selectedClip.h / 2 - rotOffset - hSize } // BR
+                ];
+                rotHandles.forEach(h => {
+                    ctx.beginPath();
+                    ctx.arc(h.x + half, h.y + half, half, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    // Desenhar um ícone circular branco simples para indicar rotação
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(h.x + half, h.y + half, half * 0.6, 0, Math.PI * 1.5);
+                    ctx.stroke();
+                });
 
                 ctx.restore();
             }
@@ -1074,26 +1092,34 @@
                 const lx = (pos.x - centerX) * Math.cos(rad) - (pos.y - centerY) * Math.sin(rad);
                 const ly = (pos.x - centerX) * Math.sin(rad) + (pos.y - centerY) * Math.cos(rad);
 
-                const hSize = 30;
-                const half = 20 / 2;
-                
-                // Check Hit na Alça de Rotação
-                if (lx >= -half && lx <= half && ly >= -selectedClip.h / 2 - 40 - half && ly <= -selectedClip.h / 2 - 40 + half) {
-                    canvasDrag = { active: true, type: 'rotate', clip: selectedClip, startX: pos.x, startY: pos.y, 
-                                   initRotation: selectedClip.rotation, centerX, centerY };
-                    return;
-                }
-
-                // TL, TR, BL, BR no espaço local
-                const handles = [
-                    { type: 'tl', x: -selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half },
-                    { type: 'tr', x: selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half },
-                    { type: 'bl', x: -selectedClip.w / 2 - half, y: selectedClip.h / 2 - half },
-                    { type: 'br', x: selectedClip.w / 2 - half, y: selectedClip.h / 2 - half }
+                // Check Hit na Alça de Rotação (4 cantos internos) - área de clique generosa (50px)
+                const hitSize = 50;
+                const rotOffset = 30; // Centro aproximado dos círculos azuis
+                const rotPoints = [
+                    { x: -selectedClip.w / 2 + rotOffset, y: -selectedClip.h / 2 + rotOffset },
+                    { x: selectedClip.w / 2 - rotOffset, y: -selectedClip.h / 2 + rotOffset },
+                    { x: -selectedClip.w / 2 + rotOffset, y: selectedClip.h / 2 - rotOffset },
+                    { x: selectedClip.w / 2 - rotOffset, y: selectedClip.h / 2 - rotOffset }
                 ];
 
-                for (const h of handles) {
-                    if (lx >= h.x && lx <= h.x + hSize && ly >= h.y && ly <= h.y + hSize) {
+                for (let p of rotPoints) {
+                    if (Math.hypot(lx - p.x, ly - p.y) < hitSize / 2) {
+                        const startAngle = Math.atan2(pos.y - centerY, pos.x - centerX);
+                        canvasDrag = { active: true, type: 'rotate', clip: selectedClip, startX: pos.x, startY: pos.y, 
+                                       initRotation: selectedClip.rotation, centerX, centerY, startAngle };
+                        return;
+                    }
+                }
+
+                // Check Hit nos Cantos de Redimensionamento (Área de 50px ao redor do canto exato)
+                const corners = [
+                    { type: 'tl', x: -selectedClip.w / 2, y: -selectedClip.h / 2 },
+                    { type: 'tr', x: selectedClip.w / 2, y: -selectedClip.h / 2 },
+                    { type: 'bl', x: -selectedClip.w / 2, y: selectedClip.h / 2 },
+                    { type: 'br', x: selectedClip.w / 2, y: selectedClip.h / 2 }
+                ];
+                for (const h of corners) {
+                    if (Math.abs(lx - h.x) < 25 && Math.abs(ly - h.y) < 25) {
                         canvasDrag = { active: true, type: h.type, clip: selectedClip, startX: pos.x, startY: pos.y, 
                                        initX: selectedClip.x, initY: selectedClip.y, initW: selectedClip.w, initH: selectedClip.h };
                         return;
@@ -1141,8 +1167,14 @@
                 c.x = canvasDrag.initX + dx;
                 c.y = canvasDrag.initY + dy;
             } else if (canvasDrag.type === 'rotate') {
-                const angle = Math.atan2(pos.y - canvasDrag.centerY, pos.x - canvasDrag.centerX);
-                c.rotation = (angle * 180 / Math.PI) + 90; // +90 para alinhar com a alça superior
+                const currentAngle = Math.atan2(pos.y - canvasDrag.centerY, pos.x - canvasDrag.centerX);
+                let delta = currentAngle - canvasDrag.startAngle;
+                // Normaliza o delta para evitar saltos ao cruzar o limite de 180 graus
+                if (delta > Math.PI) delta -= Math.PI * 2;
+                if (delta < -Math.PI) delta += Math.PI * 2;
+                
+                const sensitivity = 0.5; // Reduz a velocidade da rotação pela metade para maior precisão
+                c.rotation = canvasDrag.initRotation + (delta * 180 / Math.PI * sensitivity);
             } else {
                 // Resize simples
                 if (canvasDrag.type.includes('r')) c.w = Math.max(50, canvasDrag.initW + dx);

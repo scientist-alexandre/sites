@@ -177,6 +177,24 @@
             justify-content: space-between;
             align-items: center;
         }
+        .visibility-btn {
+            padding: 2px 6px;
+            margin-right: 8px;
+            cursor: pointer;
+            filter: grayscale(1);
+        }
+        .merge-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #888;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            margin-left: auto;
+            margin-right: 5px;
+        }
+        .merge-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
         .layer-item.active { background: var(--active-blue); color: white; }
         #soloModeBtn.active { background: #ff9500; color: white; }
 
@@ -591,9 +609,14 @@
                 <button class="icon-btn" id="layersBtn" title="Camadas">≡</button>
                 <div class="layers-dropdown" id="layersDropdown">
                     <div style="font-size: 10px; color: #888; margin-bottom: 5px;">CAMADAS DO FRAME</div>
-                    <div class="layer-item" onclick="switchLayer(2)">Frente <span id="l2-stat"></span></div>
-                    <div class="layer-item active" onclick="switchLayer(1)">Meio <span id="l1-stat"></span></div>
-                    <div class="layer-item" onclick="switchLayer(0)">Atrás <span id="l0-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(2)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 2)">👁️</span> 3 <span id="l2-stat"></span></div>
+                    <div class="layer-item active" onclick="switchLayer(1)">
+                        <span class="visibility-btn" onclick="toggleLayerVisibility(event, 1)">👁️</span> 2 
+                        <button class="merge-btn" onclick="mergeLayers(event, 2, 1)" title="Puxar camada 3 para esta">▲</button> 
+                        <button class="merge-btn" onclick="mergeLayers(event, 0, 1)" title="Puxar camada 1 para esta">▼</button>
+                        <span id="l1-stat"></span>
+                    </div>
+                    <div class="layer-item" onclick="switchLayer(0)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 0)">👁️</span> 1 <span id="l0-stat"></span></div>
                     <button class="icon-btn" id="soloModeBtn" title="Modo Solo (Melhora Performance)" style="font-size: 10px; width: 100%; margin-top: 5px; border: 1px solid #444;">MODO SOLO: OFF</button>
                 </div>
             </div>
@@ -767,8 +790,8 @@
         let frames = [{ layers: [null, null, null], duration: 1 }]; 
         let currentFrameIndex = 0;
         let activeLayerIndex = 1;
-        let undoStack = [];
-        let redoStack = [];
+        let layerVisibility = [true, true, true];
+        let undoStack = [], redoStack = [];
         let isHistoryAction = false;
         let soloMode = false;
         let isExporting = false;
@@ -927,28 +950,23 @@
         const perspectiveBtn = document.getElementById('perspectiveBtn');
         const flipHBtn = document.getElementById('flipHBtn');
         const flipVBtn = document.getElementById('flipVBtn');
-        const bucketBtn = document.getElementById('bucketBtn');
-        const eyedropperBtn = document.getElementById('eyedropperBtn');
 
-        brushBtn.onclick = () => { finishSelection(); currentTool = 'brush'; updateToolUI(); };
-        eraserBtn.onclick = () => { finishSelection(); currentTool = 'eraser'; updateToolUI(); };
-        bucketBtn.onclick = () => { finishSelection(); currentTool = 'bucket'; updateToolUI(); };
-        eyedropperBtn.onclick = () => { finishSelection(); currentTool = 'eyedropper'; updateToolUI(); };
-        selectionBtn.onclick = () => { 
-            if(currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'bucket') finishSelection();
-            currentTool = 'lasso'; 
-            updateToolUI(); 
-        };
-        perspectiveBtn.onclick = () => {
-            if(currentTool === 'lasso' || currentTool === 'perspective') finishSelection();
-            currentTool = 'perspective';
+        function setTool(tool) {
+            finishSelection();
+            currentTool = tool;
             updateToolUI();
-        };
+        }
+
+        brushBtn.onclick = () => setTool('brush');
+        eraserBtn.onclick = () => setTool('eraser');
+        document.getElementById('bucketBtn').onclick = () => setTool('bucket');
+        document.getElementById('eyedropperBtn').onclick = () => setTool('eyedropper');
+        selectionBtn.onclick = () => setTool('lasso');
+        perspectiveBtn.onclick = () => setTool('perspective');
 
         function flipCanvas(canvas, horizontal = true) {
             const temp = document.createElement('canvas');
-            temp.width = canvas.width;
-            temp.height = canvas.height;
+            temp.width = canvas.width; temp.height = canvas.height;
             const tCtx = temp.getContext('2d');
             tCtx.drawImage(canvas, 0, 0);
 
@@ -1001,8 +1019,8 @@
             eraserBtn.classList.toggle('active', currentTool === 'eraser');
             selectionBtn.classList.toggle('active', currentTool === 'lasso');
             perspectiveBtn.classList.toggle('active', currentTool === 'perspective');
-            bucketBtn.classList.toggle('active', currentTool === 'bucket');
-            eyedropperBtn.classList.toggle('active', currentTool === 'eyedropper');
+            document.getElementById('bucketBtn').classList.toggle('active', currentTool === 'bucket');
+            document.getElementById('eyedropperBtn').classList.toggle('active', currentTool === 'eyedropper');
         }
 
         async function switchLayer(index) {
@@ -1022,6 +1040,62 @@
             
             // Atualiza a visualização das camadas estáticas (as que você não está editando)
             refreshLayerDisplay();
+        }
+
+        function toggleLayerVisibility(event, index) {
+            event.stopPropagation(); // Impede que o clique selecione a camada
+            layerVisibility[index] = !layerVisibility[index];
+            refreshLayerDisplay();
+        }
+
+        async function mergeLayers(event, sourceIdx, targetIdx) {
+            if (event) event.stopPropagation(); // Impede de trocar para a camada ao clicar no botão de mesclar
+            if (isPlaying) return;
+
+            // Bloqueia ações de histórico para evitar que switchLayer sobrescreva a mesclagem
+            const wasHistory = isHistoryAction;
+            isHistoryAction = true;
+
+            // 1. Sincroniza o que está na tela agora com o banco de dados de frames
+            if (frames[currentFrameIndex]) {
+                const old = frames[currentFrameIndex].layers[activeLayerIndex];
+                frames[currentFrameIndex].layers[activeLayerIndex] = await createImageBitmap(mainCanvas);
+                if (old && old.close) old.close();
+            }
+
+            const sourceLayer = frames[currentFrameIndex].layers[sourceIdx];
+            const targetLayer = frames[currentFrameIndex].layers[targetIdx];
+
+            // 2. Só realiza a mesclagem se a camada de origem tiver conteúdo
+            if (sourceLayer) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = mainCanvas.width;
+                tempCanvas.height = mainCanvas.height;
+                const tCtx = tempCanvas.getContext('2d');
+
+                // Identifica a ordem Z correta (quem está abaixo no índice deve ser desenhado primeiro)
+                const lowerLayer = (sourceIdx < targetIdx) ? sourceLayer : targetLayer;
+                const higherLayer = (sourceIdx > targetIdx) ? sourceLayer : targetLayer;
+
+                if (lowerLayer) tCtx.drawImage(lowerLayer, 0, 0);
+                if (higherLayer) tCtx.drawImage(higherLayer, 0, 0);
+
+                const mergedBmp = await createImageBitmap(tempCanvas);
+                
+                // Limpa bitmaps antigos para liberar memória
+                if (sourceLayer && sourceLayer.close) sourceLayer.close();
+                if (targetLayer && targetLayer.close) targetLayer.close();
+
+                // Define o resultado na camada alvo (Base 2) e limpa a origem
+                frames[currentFrameIndex].layers[targetIdx] = mergedBmp;
+                frames[currentFrameIndex].layers[sourceIdx] = null;
+            }
+
+            // 3. Mantém a seleção na camada alvo (Base 2) e redesenha tudo
+            activeLayerIndex = targetIdx;
+            await loadFrame(currentFrameIndex); 
+            isHistoryAction = wasHistory;
+            updateSingleThumbnail(currentFrameIndex);
         }
 
         layersBtn.addEventListener('click', (e) => {
@@ -1070,7 +1144,6 @@
         function startDrawing(e) {
             if (isPlaying) return;
             isDrawing = true;
-            layersDropdown.classList.remove('show'); // Fecha o menu ao começar a desenhar para limpar a visão
             
             // Tira um snapshot do frame atual para renderização live sem beading
             snapshotCanvas.width = mainCanvas.width;
@@ -1785,14 +1858,23 @@
         function refreshLayerDisplay() {
             // Ajusta a profundidade do canvas de desenho para a posição da camada ativa
             mainCanvas.style.zIndex = activeLayerIndex + 1;
+            // Oculta/Mostra o canvas principal (onde você desenha) baseado no "olho"
+            mainCanvas.style.visibility = layerVisibility[activeLayerIndex] ? 'visible' : 'hidden';
             
             // Modo Solo: Se ligado, esconde o fundo para economizar processamento
             bgCanvas.style.visibility = (soloMode) ? 'hidden' : 'visible';
             canvasContainer.style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
 
-            // Atualiza o destaque visual (cor azul) no menu de camadas para a camada ativa
+            // Atualiza o menu de camadas: cor azul para a ativa e ícone do olho
             document.querySelectorAll('.layer-item').forEach((el, i) => {
-                el.classList.toggle('active', (2 - i) === activeLayerIndex);
+                const layerIdx = 2 - i; // Inverte pois a lista visual é Frente(2) -> Meio(1) -> Atrás(0)
+                el.classList.toggle('active', layerIdx === activeLayerIndex);
+                
+                const visBtn = el.querySelector('.visibility-btn');
+                if (visBtn) {
+                    visBtn.textContent = layerVisibility[layerIdx] ? '👁️' : '⚪';
+                    visBtn.style.filter = layerVisibility[layerIdx] ? 'grayscale(0)' : 'grayscale(1) opacity(0.3)';
+                }
             });
 
             // Limpa e redesenha os canvases de visualização de camadas (exceto a ativa)
@@ -1800,6 +1882,8 @@
                 const lCanvas = document.getElementById(`layer${i}`);
                 const lCtx = lCanvas.getContext('2d');
                 
+                lCanvas.style.visibility = (layerVisibility[i] && !soloMode) ? 'visible' : 'hidden';
+
                 // No modo solo, escondemos as outras camadas
                 if (i === activeLayerIndex || (soloMode && i !== activeLayerIndex)) {
                     lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
@@ -1886,7 +1970,6 @@
         menuBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             menuDropdown.classList.toggle('show');
-            layersDropdown.classList.remove('show');
         });
 
         window.addEventListener('click', (e) => {
@@ -1960,10 +2043,16 @@
                 const dirHandle = await window.showDirectoryPicker();
                 
                 const exportFps = 24;
-                // Calcula a duração total da animação baseada no FPS atual da linha do tempo
-                const animationDuration = frames.length / fps;
-                // Define o total de frames necessários para uma saída de 24 FPS
-                const totalExportFrames = Math.max(1, Math.floor(animationDuration * exportFps));
+                
+                // Calcula o total de ticks (duração total considerando frames individuais)
+                let totalTicks = 0;
+                const frameStarts = frames.map(f => {
+                    const start = totalTicks;
+                    totalTicks += (f.duration || 1);
+                    return start;
+                });
+
+                const totalExportFrames = Math.max(1, Math.floor((totalTicks / fps) * exportFps));
 
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = mainCanvas.width;
@@ -1971,9 +2060,13 @@
                 const tCtx = tempCanvas.getContext('2d');
 
                 for (let i = 0; i < totalExportFrames; i++) {
-                    // Mapeia o frame de exportação atual para o frame correspondente na animação original
-                    const frameIdx = Math.floor((i / exportFps) * fps);
-                    const targetFrame = Math.min(frameIdx, frames.length - 1);
+                    // Encontra qual frame original corresponde a este momento da exportação
+                    const currentTimeInTicks = (i / exportFps) * fps;
+                    let targetFrame = 0;
+                    for (let j = 0; j < frameStarts.length; j++) {
+                        if (frameStarts[j] <= currentTimeInTicks) targetFrame = j;
+                        else break;
+                    }
 
                     tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
                     
@@ -2033,7 +2126,8 @@
                 bitrate: 5e6, // 5 Mbps para alta qualidade
             });
 
-            const frameDuration = 1000000 / fps; // microssegundos
+            const tickDuration = 1000000 / fps; // microssegundos por tick de frame
+            let currentTick = 0;
 
             for (let i = 0; i < frames.length; i++) {
                 // Composição do frame
@@ -2051,9 +2145,14 @@
                 }
 
                 // Cria o VideoFrame a partir do canvas composto
-                const frame = new VideoFrame(tempCanvas, { timestamp: i * frameDuration });
+                const durationTicks = (frames[i].duration || 1);
+                const frame = new VideoFrame(tempCanvas, { 
+                    timestamp: currentTick * tickDuration,
+                    duration: durationTicks * tickDuration // Informa ao encoder a duração exata deste frame
+                });
                 encoder.encode(frame);
                 frame.close(); // Libera memória imediatamente
+                currentTick += durationTicks;
             }
 
             await encoder.flush();
@@ -2093,7 +2192,8 @@
             const projectData = {
                 fps: fps,
                 frames: serializedFrames,
-                background: bgCanvas.toDataURL()
+                background: bgCanvas.toDataURL(),
+                layerVisibility: layerVisibility // Salva o estado dos "olhos"
             };
 
             const blob = new Blob([JSON.stringify(projectData)], { type: "application/json" });
@@ -2122,6 +2222,7 @@
                 fps = data.fps || 12;
                 document.getElementById('fpsSlider').value = fps;
                 document.getElementById('fpsValue').textContent = fps;
+                if (data.layerVisibility) layerVisibility = data.layerVisibility;
 
                 const bgImg = new Image();
                 bgImg.onload = () => {
@@ -2146,8 +2247,9 @@
                 undoStack = [];
                 redoStack = [];
                 isHistoryAction = true; // Impede que o canvas atual sobrescreva o primeiro frame do projeto carregado
-                loadFrame(0);
+                await loadFrame(0);
                 isHistoryAction = false;
+                renderTimeline(true); // Garante que a timeline reflita o projeto carregado
             };
             reader.readAsText(file);
         };
@@ -2272,6 +2374,7 @@
             isHistoryAction = true; // Impede salvamento redundante durante o recarregamento
             await loadFrame(newIndex);
             isHistoryAction = false;
+            renderTimeline(true); // Força atualização completa para sincronizar IDs e durações na UI
         }
 
         async function updateSingleThumbnail(index) {
@@ -2370,7 +2473,8 @@
                     offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
                     offCtx.drawImage(bgCanvas, 0, 0);
 
-                    for (const layerData of frames[playIndex].layers) {
+                    for (let l = 0; l < 3; l++) {
+                        const layerData = frames[playIndex].layers[l];
                         if (layerData) offCtx.drawImage(layerData, 0, 0);
                     }
 
@@ -2393,7 +2497,6 @@
                 runPlayback();
             } else {
                 playSessionId++; // Invalida callbacks de imagens que ainda estejam carregando
-                mainCanvas.style.visibility = 'visible';
                 toggleStaticLayersVisibility(true);
                 isHistoryAction = true; // Impede que o loadFrame salve a imagem mesclada do playback sobre a sua camada original
                 loadFrame(currentFrameIndex);
