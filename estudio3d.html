@@ -203,6 +203,7 @@
             <button id="keyBtn" class="secondary">Add Keyframe</button>
             <button id="delKeyBtn" class="secondary">Delete Keyframe</button>
             <button id="promptBtn" class="secondary">Prompt 3D</button>
+            <button id="photoBtn" class="secondary">Foto</button>
             <label style="color: #888; margin-left: 10px;">Duração:</label>
             <input type="text" id="durationInput" value="00:00:10.00" readonly style="width: 100px; background: #181818; color: #888; border: 1px solid #333; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: default;">
             <span id="timeDisplay">00:00.00</span>
@@ -254,6 +255,7 @@
         const rotZ = document.getElementById('rotZ');
         const layersList = document.getElementById('layersList');
         const promptBtn = document.getElementById('promptBtn');
+        const photoBtn = document.getElementById('photoBtn');
         const exportVideoBtn = document.getElementById('exportVideoBtn');
 
         // Sistema de Animação
@@ -685,6 +687,31 @@
             });
         };
 
+        photoBtn.onclick = () => {
+            const exportW = 1920;
+            const exportH = 1080;
+            const originalSize = new THREE.Vector2();
+            renderer.getSize(originalSize);
+            const originalAspect = camera.aspect;
+
+            // Configura temporariamente para Full HD
+            renderer.setSize(exportW, exportH, false);
+            camera.aspect = exportW / exportH;
+            camera.updateProjectionMatrix();
+
+            renderer.render(scene, camera);
+            const link = document.createElement('a');
+            link.download = `snapshot_${new Date().getTime()}.png`;
+            link.href = renderer.domElement.toDataURL('image/png');
+            link.click();
+
+            // Restaura o tamanho original da interface
+            renderer.setSize(originalSize.x, originalSize.y, false);
+            camera.aspect = originalAspect;
+            camera.updateProjectionMatrix();
+            renderer.render(scene, camera);
+        };
+
         function updateTimeFromMouseEvent(e) {
             const rect = timelineBar.getBoundingClientRect();
             const x = e.clientX - rect.left + timelineBar.scrollLeft;
@@ -966,6 +993,23 @@
             }
 
             // Atualiza sequências de imagens para criar o efeito de vídeo
+            objetosList.forEach(obj => {
+                if (obj.userData.isSequence) {
+                    obj.userData.timer += delta;
+                    if (obj.userData.timer >= 1 / 24) { // 24 FPS
+                        obj.userData.timer = 0;
+                        obj.userData.currentFrame = (obj.userData.currentFrame + 1) % obj.userData.textures.length;
+                        obj.material.map = obj.userData.textures[obj.userData.currentFrame];
+                    }
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>     // Atualiza sequências de imagens para criar o efeito de vídeo
             objetosList.forEach(obj => {
                 if (obj.userData.isSequence) {
                     obj.userData.timer += delta;
