@@ -425,7 +425,7 @@
                 <div class="vfx-content">
                     <div class="label-group">
                         <label>Velocidade Horizontal <span id="val-scroll-speed">0</span></label>
-                        <input type="range" id="scroll-speed" min="-5000" max="5000" step="50" value="0">
+                        <input type="range" id="scroll-speed" min="-1000" max="1000" step="1" value="0">
                     </div>
                     <div class="button-row">
                         <button class="btn-trigger" id="btn-kf-scroll" style="border-color: #00ff88; color: #00ff88;">◆ Add Key</button>
@@ -528,7 +528,7 @@
                         </div>
                     </div>
                     <div class="label-group">
-                        <label>Direção (Ângulo) <span id="val-light-angle">90</span>°</label>
+                        <label>Direção <span id="val-light-angle">90</span>°</label>
                         <input type="range" id="light-angle" min="0" max="360" value="90">
                     </div>
                     <div class="label-group">
@@ -819,12 +819,13 @@
             void main() {
                 float mask = texture2D(uMask, vTextureCoord).r;
                 if (mask <= 0.01) {
-                    gl_FragColor = texture2D(uSampler, vTextureCoord);
-                    return;
+                     gl_FragColor = texture2D(uSampler, vTextureCoord);
+                     return;
                 }
 
-                // Força o tempo a completar ciclos inteiros de 2*PI baseado na duração
-                float cycles = max(1.0, floor(uSpeed * uDuration));
+                // FIX: Removemos o 'max(1.0)' para permitir que a velocidade chegue a zero.
+                // Aumentamos o multiplicador para que o slider de 0-2.0 tenha uma escala de velocidade mais natural.
+                float cycles = floor(uSpeed * uDuration * 2.0);
                 float phase = (uTime / uDuration);
                 float t = phase * 6.28318 * cycles;
 
@@ -870,16 +871,18 @@
                 float wave3 = sin(distAlong * 12.0 - uTime * 10.0 + 2.5) * 0.04;
                 
                 // A turbulência aumenta com a distância para simular o balanço das pontas das chamas
-                float noise = (wave1 + wave2 + wave3) * uFlicker * (0.3 + distAlong * 2.0);
+                float noise = (wave1 + wave2 + wave3) * uFlicker * (0.3 + max(0.0, distAlong) * 2.0);
                 
-                float distAcross = length(p - distAlong * dir) + noise;
+                // FIX: Se estiver "atrás" da origem (distAlong < 0), calculamos a distância radial ao ponto uPos.
+                // Isso cria o arredondamento da fonte baseado no uSourceSize.
+                float distAcross = ((distAlong < 0.0) ? length(p) : length(p - distAlong * dir)) + noise;
 
                 // uSourceSize agora controla a largura real do feixe no início
                 float currentWidth = uSourceSize + (max(0.0, distAlong) * uSpread);
                 float cone = smoothstep(currentWidth, currentWidth * 0.5, distAcross);
                 
-                float falloff = smoothstep(uSize, 0.0, max(0.0, distAlong));
-                if (distAlong < 0.0) cone = 0.0;
+                // FIX: Ajustamos o falloff para permitir que a borda arredondada apareça sem cortes secos
+                float falloff = smoothstep(uSize, -uSourceSize, distAlong);
 
                 // Oscilação errática e veloz de intensidade (flicker de fogo)
                 float pulse = 1.0 + (sin(uTime * 35.0) * cos(uTime * 17.0) * 0.2 * uFlicker);
@@ -1090,10 +1093,7 @@
             zoomLayers = [];
 
             for (let i = 0; i < NUM_ZOOM_LAYERS; i++) {
-                const s = new PIXI.Sprite(texture);
-                s.anchor.set(0.5);
-                s.x = 1456 / 2;
-                s.y = 728 / 2;
+                const s = new PIXI.TilingSprite(texture, 1456, 728);
                 // Armazena o offset inicial para distribuir as camadas no loop
                 s.initialZOffset = i / NUM_ZOOM_LAYERS;
                 s.zProgress = s.initialZOffset;
@@ -1125,6 +1125,9 @@
             // Isso impede que a luz "pule" quando o conteúdo interno se move ou ondula.
             app.stage.filterArea = app.screen;
 
+            // FIX: Alinha as coordenadas dos filtros com a tela para precisão absoluta ao pintar
+            if (zoomContainer) zoomContainer.filterArea = app.screen;
+
             // Setup Mascara de Vento
             maskTexture = PIXI.RenderTexture.create({ width: 1456, height: 728 });
             maskSprite = new PIXI.Sprite(maskTexture);
@@ -1138,17 +1141,18 @@
 
             const texture = PIXI.Texture.from(imageURL);
             // Trocado para Sprite comum para evitar repetição (multiplicação)
-            sprite = new PIXI.Sprite(texture);
-            sprite.anchor.set(0.5);
-            sprite.x = 1456 / 2;
-            sprite.y = 728 / 2;
+            sprite = new PIXI.TilingSprite(texture, 1456, 728);
             
             const onTextureLoaded = () => {
                 if (texture.width <= 1) return; // Garante que a imagem já tenha dimensões reais
 
                 // Cálculo de Aspect Fit: Imagem inteira na tela sem cortes nem repetições
                 const ratio = Math.min(1456 / texture.width, 728 / texture.height);
-                sprite.scale.set(ratio);
+                sprite.tileScale.set(ratio);
+                // Centraliza a textura inicialmente
+                sprite.tilePosition.x = (1456 - texture.width * ratio) / 2;
+                sprite.tilePosition.y = (728 - texture.height * ratio) / 2;
+                
                 setupZoomLayers(texture);
             };
 
@@ -1223,6 +1227,10 @@
             sprite.filters = contentFilters;
             zoomContainer.filters = contentFilters;
 
+            // FIX: Agora que o sprite existe, configuramos a área de filtro com segurança
+            sprite.filterArea = app.screen;
+            zoomContainer.filterArea = app.screen;
+
             // Filtros Globais (pós-processamento aplicado sobre tudo na tela)
             app.stage.filters = [colorFilter, globalLightFilter, vaporFilter, lightFilter, vignetteFilter];
 
@@ -1271,7 +1279,7 @@
             
             maskBrush.clear();
             maskBrush.beginFill(0xffffff, 1.0);
-            maskBrush.drawCircle(pos.x, pos.y, size);
+            maskBrush.drawCircle(pos.x, pos.y, size / 2);
             maskBrush.endFill();
             
             app.renderer.render(maskBrush, { renderTexture: maskTexture, clear: false });
@@ -1349,6 +1357,10 @@
             settings.expSpeed = parseFloat(e.target.value);
             document.getElementById('val-exp-speed').innerText = settings.expSpeed.toFixed(1);
             if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('wind-brush-size').addEventListener('input', (e) => {
+            document.getElementById('val-wind-brush').innerText = e.target.value;
         });
 
         document.getElementById('wind-strength').addEventListener('input', (e) => {
@@ -1846,17 +1858,11 @@
             const animTime = isLivePreview ? (performance.now() / 1000) : currentTime;
             const duration = settings.renderDuration;
 
-            // Cálculo de Ripple Determinístico e em Loop (Texture size 2048)
-            const rippleCycles = Math.floor(duration * 2.0 * settings.rippleSpeed);
-            const rippleX = (animTime / duration) * rippleCycles * 2048;
-            const rippleY = rippleX * 0.5;
-            const internalCount = (animTime / duration) * rippleCycles * 6.28318;
-
-            rippleMap.x = rippleX;
-            rippleMap.y = rippleY;
-            // FIX: Usa módulo para que a textura de deslocamento não "pule" por valores gigantes
-            rippleMap.x = rippleX % 2048;
-            rippleMap.y = rippleY % 2048;
+            // Scroll de Cenário em Loop (Sincronizado com tempo e duração)
+            const tex = sprite.texture;
+            const baseRatio = Math.min(1456 / tex.width, 728 / tex.height);
+            const scrollCycles = Math.round((settings.scrollSpeed * duration) / (tex.width * baseRatio));
+            const scrollOffset = (animTime / duration) * scrollCycles * (tex.width * baseRatio);
 
             if (settings.zoomActive && zoomLayers.length > 0) {
                 sprite.visible = false;
@@ -1875,7 +1881,11 @@
 
                     // Escala exponencial
                     const scaleValue = baseScale * Math.pow(settings.zoomMax, s.zProgress);
-                    s.scale.set(scaleValue);
+                    s.tileScale.set(scaleValue);
+                    
+                    // Centraliza + Scroll
+                    s.tilePosition.x = (1456 - tex.width * scaleValue) / 2 + scrollOffset;
+                    s.tilePosition.y = (728 - tex.height * scaleValue) / 2;
                     
                     // Transição Senoidal: Cria um cross-fade perfeito entre as 2 camadas.
                     // Quando uma está no pico de opacidade (centro), a outra está totalmente invisível (reiniciando).
@@ -1889,17 +1899,18 @@
             } else {
                 sprite.visible = true;
                 zoomContainer.visible = false;
+
+                sprite.tilePosition.x = (1456 - tex.width * baseRatio) / 2 + scrollOffset;
             }
 
-            // Scroll de Cenário em Loop
-            const tex = sprite.texture;
-            const scaledWidth = tex.width * sprite.scale.x;
-            
-            // Encontra o número de voltas completas mais próximo da velocidade desejada
-            const scrollCycles = Math.round((settings.scrollSpeed * duration) / scaledWidth);
-            const scrollPosX = (animTime / duration) * scrollCycles * scaledWidth;
+            // Cálculo de Ripple Determinístico e em Loop (Texture size 2048)
+            const rippleCycles = Math.floor(duration * 2.0 * settings.rippleSpeed);
+            const rippleX = (animTime / duration) * rippleCycles * 2048;
+            const rippleY = rippleX * 0.5;
+            const internalCount = (animTime / duration) * rippleCycles * 6.28318;
 
-            sprite.x = (1456 / 2) + scrollPosX;
+            rippleMap.x = rippleX % 2048;
+            rippleMap.y = rippleY % 2048;
 
             // Lógica de Camera Shake
             if (settings.shakeActive && settings.shakeStrength > 0) {
@@ -2333,4 +2344,4 @@
         });
     </script>
 </body>
-</html>
+</html> 
