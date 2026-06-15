@@ -440,16 +440,16 @@
                         <label>Pintar Área <input type="checkbox" id="toggle-wind-edit"></label>
                     </div>
                     <div class="label-group">
-                        <label>Tamanho Pincel <span id="val-wind-brush">50</span></label>
-                        <input type="range" id="wind-brush-size" min="10" max="200" value="50">
+                        <label>Tamanho Pincel <span id="val-wind-brush">25</span></label>
+                        <input type="range" id="wind-brush-size" min="10" max="100" value="25">
                     </div>
                     <div class="label-group">
-                        <label>Força <span id="val-wind-strength">0.5</span></label>
-                        <input type="range" id="wind-strength" min="0" max="2.0" step="0.01" value="0.5">
+                        <label>Força <span id="val-wind-strength">0.01</span></label>
+                        <input type="range" id="wind-strength" min="0" max="0.5" step="0.001" value="0.01">
                     </div>
                     <div class="label-group">
-                        <label>Velocidade <span id="val-wind-speed">0.5</span></label>
-                        <input type="range" id="wind-speed" min="0" max="2.0" step="0.01" value="0.5">
+                        <label>Velocidade <span id="val-wind-speed">0.01</span></label>
+                        <input type="range" id="wind-speed" min="0" max="0.5" step="0.001" value="0.01">
                     </div>
                     <div class="label-group">
                         <label>Direção do Vento</label>
@@ -823,20 +823,24 @@
                      return;
                 }
 
-                // FIX: Removemos o 'max(1.0)' para permitir que a velocidade chegue a zero.
-                // Aumentamos o multiplicador para que o slider de 0-2.0 tenha uma escala de velocidade mais natural.
-                float cycles = floor(uSpeed * uDuration * 2.0);
-                float phase = (uTime / uDuration);
+                // Para um ciclo perfeito, calculamos um número inteiro de voltas (cycles) baseado na velocidade e duração.
+                // Com durações longas, os "degraus" do floor ficam quase imperceptíveis, mantendo a sensibilidade.
+                float cycles = floor(uSpeed * uDuration + 0.5);
+                float phase = uTime / uDuration;
                 float t = phase * 6.28318 * cycles;
 
-                // Ruído em escalas diferentes para realismo (galhos vs folhas)
-                float n1 = texture2D(uNoise, mod(vTextureCoord * 0.1 + t * 0.05, 1.0)).r;
-                float n2 = texture2D(uNoise, mod(vTextureCoord * 0.4 + t * 0.15, 1.0)).g;
+                // Para o ruído não "pular" no loop, o deslocamento dele também deve ser baseado em ciclos inteiros.
+                float nCycles1 = floor(cycles * 0.1 + 1.0);
+                float nCycles2 = floor(cycles * 0.3 + 1.0);
+                float n1 = texture2D(uNoise, mod(vTextureCoord * 0.1 + phase * nCycles1, 1.0)).r;
+                float n2 = texture2D(uNoise, mod(vTextureCoord * 0.4 + phase * nCycles2, 1.0)).g;
                 
-                float movement = sin(t * 2.0 + n1 * 6.28) * 0.7; // Balanço largo
-                movement += sin(t * 5.0 + n2 * 10.0) * 0.3;      // Jitter rápido
+                float movement = sin(t + n1 * 6.28) * 0.8; 
+                // Usamos multiplicadores inteiros (ex: 3.0) para o jitter acompanhar o loop principal.
+                movement += sin(t * 3.0 + n2 * 10.0) * 0.2; 
                 
-                float dist = movement * uStrength * mask * 0.005;
+                // Multiplicador aumentado de 0.005 para 0.025 para permitir um deslocamento muito maior (longe da origem)
+                float dist = movement * uStrength * mask * 0.025;
                 vec2 uv = vTextureCoord + (uDirection * dist);
                 
                 gl_FragColor = texture2D(uSampler, uv);
