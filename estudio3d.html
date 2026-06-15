@@ -158,7 +158,7 @@
         <div class="ui-section" id="section-import">
             <h2>Importar</h2>
             <label>Fundo 360°:</label>
-            <input type="file" id="bgInput" accept="image/*">
+            <input type="file" id="bgInput" accept="image/*" multiple>
             <div style="margin-top:10px;"></div>
             <label>Novo Objeto:</label>
             <input type="file" id="charInput" accept="image/*" multiple>
@@ -242,6 +242,7 @@
         let yaw = 0;
         let pitch = 0;
         let objetosList = [];
+        let bgSequence = { textures: [], currentFrame: 0, timer: 0 };
         let indexSelecionado = null;
 
         const bgInput = document.getElementById('bgInput');
@@ -280,20 +281,40 @@
         const delKeyBtn = document.getElementById('delKeyBtn');
         let isDraggingTimeline = false;
 
-        // Carrega o Panorama de Fundo
-        bgInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    new THREE.TextureLoader().load(event.target.result, (texture) => {
-                        texture.mapping = THREE.EquirectangularReflectionMapping;
-                        texture.colorSpace = THREE.SRGBColorSpace;
-                        scene.background = texture;
-                    });
-                };
-                reader.readAsDataURL(file);
+        // Carrega o Panorama de Fundo (Suporta Sequência)
+        bgInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+            const loader = new THREE.TextureLoader();
+            const loadTexture = (file) => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        loader.load(event.target.result, (texture) => {
+                            texture.mapping = THREE.EquirectangularReflectionMapping;
+                            texture.colorSpace = THREE.SRGBColorSpace;
+                            resolve(texture);
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            const textures = await Promise.all(files.map(file => loadTexture(file)));
+            
+            if (textures.length > 1) {
+                bgSequence.textures = textures;
+                bgSequence.currentFrame = 0;
+                bgSequence.timer = 0;
+                scene.background = textures[0];
+            } else {
+                bgSequence.textures = [];
+                scene.background = textures[0];
             }
+            if (!isPlaying) renderer.render(scene, camera);
         });
 
         // Funções de conversão de tempo (Formato After Effects HH:MM:SS)
@@ -956,6 +977,11 @@
                             obj.material.map = obj.userData.textures[frameIdx];
                         }
                     });
+                    // Atualiza sequência de fundo na exportação
+                    if (bgSequence.textures.length > 1) {
+                        const bgFrameIdx = Math.floor(currentTime * 24) % bgSequence.textures.length;
+                        scene.background = bgSequence.textures[bgFrameIdx];
+                    }
                     renderer.render(scene, camera);
                     const frame = new VideoFrame(renderer.domElement, { timestamp: (i * 1000000) / fps });
                     videoEncoder.encode(frame, { keyFrame: i % 48 === 0 });
@@ -992,14 +1018,23 @@
                 updateTimelineUI(false); // Já aplicamos a animação acima
             }
 
+            // Atualiza sequência de fundo (Automático e sem piscar)
+            if (bgSequence.textures.length > 1) {
+                // Usa o tempo real do sistema para rodar independente do Play
+                const frameIdx = Math.floor((performance.now() / 1000) * 24) % bgSequence.textures.length;
+                if (bgSequence.currentFrame !== frameIdx) {
+                    bgSequence.currentFrame = frameIdx;
+                    scene.background = bgSequence.textures[frameIdx];
+                }
+            }
+
             // Atualiza sequências de imagens para criar o efeito de vídeo
             objetosList.forEach(obj => {
                 if (obj.userData.isSequence) {
-                    obj.userData.timer += delta;
-                    if (obj.userData.timer >= 1 / 24) { // 24 FPS
-                        obj.userData.timer = 0;
-                        obj.userData.currentFrame = (obj.userData.currentFrame + 1) % obj.userData.textures.length;
-                        obj.material.map = obj.userData.textures[obj.userData.currentFrame];
+                    const frameIdx = Math.floor((performance.now() / 1000) * 24) % obj.userData.textures.length;
+                    if (obj.userData.currentFrame !== frameIdx) {
+                        obj.userData.currentFrame = frameIdx;
+                        obj.material.map = obj.userData.textures[frameIdx];
                     }
                 }
             });
@@ -1009,21 +1044,4 @@
         animate();
     </script>
 </body>
-</html>     // Atualiza sequências de imagens para criar o efeito de vídeo
-            objetosList.forEach(obj => {
-                if (obj.userData.isSequence) {
-                    obj.userData.timer += delta;
-                    if (obj.userData.timer >= 1 / 24) { // 24 FPS
-                        obj.userData.timer = 0;
-                        obj.userData.currentFrame = (obj.userData.currentFrame + 1) % obj.userData.textures.length;
-                        obj.material.map = obj.userData.textures[obj.userData.currentFrame];
-                    }
-                }
-            });
-
-            renderer.render(scene, camera);
-        }
-        animate();
-    </script>
-</body>
-</html>
+</html> 
