@@ -157,11 +157,11 @@
     <div id="ui">
         <div class="ui-section" id="section-import">
             <h2>Importar</h2>
-            <label>Fundo 360°:</label>
-            <input type="file" id="bgInput" accept="image/*" multiple>
+            <label>Fundo 360° (Pasta ou Arquivos):</label>
+            <input type="file" id="bgInput" accept="image/*" webkitdirectory directory multiple>
             <div style="margin-top:10px;"></div>
-            <label>Novo Objeto:</label>
-            <input type="file" id="charInput" accept="image/*" multiple>
+            <label>Novo Objeto (Pasta ou Arquivos):</label>
+            <input type="file" id="charInput" accept="image/*" webkitdirectory directory multiple>
         </div>
 
         <div class="ui-section" id="section-layers">
@@ -205,10 +205,10 @@
             <button id="promptBtn" class="secondary">Prompt 3D</button>
             <button id="photoBtn" class="secondary">Foto</button>
             <label style="color: #888; margin-left: 10px;">Duração:</label>
-            <input type="text" id="durationInput" value="00:00:10.00" style="width: 100px; background: #181818; color: #eee; border: 1px solid #444; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: text;">
+            <input type="text" id="durationInput" value="00:02:00.00" style="width: 100px; background: #181818; color: #eee; border: 1px solid #444; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: text;">
             <span id="timeDisplay">00:00.00</span>
             <div style="flex-grow: 1;"></div>
-            <button id="exportVideoBtn" style="background: #ffffff; color: #000; border: none; font-weight: bold;">Exportar Vídeo</button>
+            <button id="exportVideoBtn" style="background: #1a1a1a; color: #fff; border: 1px solid #444; font-weight: bold;">Exportar Vídeo</button>
         </div>
         <div class="timeline-body" id="timelineBar">
             <div id="timelineTrack">
@@ -216,7 +216,7 @@
             </div>
         </div>
     </div>
-    </div>
+</div>
 
     <script type="module">
         import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
@@ -263,7 +263,7 @@
         let isPlaying = false;
         let isExporting = false;
         let currentTime = 0;
-        let duration = 10; 
+        let duration = 120; 
         const pps = 50; // Pixels Per Second (Escala da timeline)
         let keyframes = []; // { time, camera: {yaw, pitch, fov}, objects: [ {hDeg, vDeg, scale, depth} ] }
         let selectedKeyframeIndex = null;
@@ -283,7 +283,8 @@
 
         // Carrega o Panorama de Fundo (Suporta Sequência)
         bgInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
+            // Filtra apenas arquivos de imagem caso a pasta contenha outros arquivos
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
             if (files.length === 0) return;
 
             files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -337,7 +338,8 @@
 
         // Adiciona um novo objeto ou sequência à cena
         charInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
+            // Filtra apenas arquivos de imagem
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
             if (files.length === 0) return;
 
             // Ordena os arquivos numericamente (frame1, frame2, frame10...)
@@ -709,14 +711,22 @@
         };
 
         promptBtn.onclick = () => {
-            const prompt = "Spherical equirectangular 360-degree projection, seamless full panorama, [descreva seu cenário aqui], 8k UHD resolution, hyper-realistic, photorealistic, cinematic lighting, sharp focus across entire image, zero depth of field blur, immersive virtual reality environment, highly detailed textures, masterpiece quality, high-end 3D render --ar 2:1";
-            navigator.clipboard.writeText(prompt).then(() => {
+            const prompt = "Spherical equirectangular 360-degree projection, seamless full panorama, [... descreva sua imagem aqui...], 8k UHD resolution, hyper-realistic, photorealistic, cinematic lighting, sharp focus across entire image, zero depth of field blur, immersive virtual reality environment, highly detailed textures, masterpiece quality, high-end 3D render --ar 2:1";
+            
+            // Fallback para garantir que funcione em arquivos locais (file://)
+            const textArea = document.createElement("textarea");
+            textArea.value = prompt;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
                 const originalText = promptBtn.textContent;
                 promptBtn.textContent = "Copiado!";
                 setTimeout(() => promptBtn.textContent = originalText, 2000);
-            }).catch(err => {
+            } catch (err) {
                 console.error('Erro ao copiar prompt: ', err);
-            });
+            }
+            document.body.removeChild(textArea);
         };
 
         photoBtn.onclick = () => {
@@ -1053,6 +1063,7 @@
             renderer.render(scene, camera);
         }
         animate();
+        updateTimelineUI();
     </script>
 </body>
-</html> 
+</html>

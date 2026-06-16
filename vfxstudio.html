@@ -444,12 +444,12 @@
                         <input type="range" id="wind-brush-size" min="10" max="100" value="25">
                     </div>
                     <div class="label-group">
-                        <label>Força <span id="val-wind-strength">0.0001</span></label>
-                        <input type="range" id="wind-strength" min="0" max="0.25" step="0.0001" value="0.0001">
+                        <label>Força <span id="val-wind-strength">10</span></label>
+                        <input type="range" id="wind-strength" min="0" max="100" step="1" value="10">
                     </div>
                     <div class="label-group">
-                        <label>Velocidade <span id="val-wind-speed">0.001</span></label>
-                        <input type="range" id="wind-speed" min="0" max="0.25" step="0.0001" value="0.001">
+                        <label>Velocidade <span id="val-wind-speed">15</span></label>
+                        <input type="range" id="wind-speed" min="0" max="100" step="1" value="15">
                     </div>
                     <div class="label-group">
                         <label>Direção do Vento</label>
@@ -635,6 +635,10 @@
                         <label>Velocidade <span id="val-vapor-speed">1.0</span></label>
                         <input type="range" id="vapor-speed" min="0.1" max="5.0" step="0.1" value="1.0">
                     </div>
+                    <div class="label-group">
+                        <label>Cor da Fumaça</label>
+                        <input type="color" id="vapor-color" value="#ffffff" style="width: 100%; height: 30px; border: none; background: none; cursor: pointer;">
+                    </div>
                     <div class="button-row">
                         <button class="btn-trigger" id="btn-kf-vapor" style="border-color: #888888; color: #ffffff;">◆ Add Key</button>
                     </div>
@@ -663,7 +667,7 @@
             <button id="btn-play" class="btn-transport">Play</button>
             <div style="font-family: monospace; color: var(--accent); font-size: 14px; min-width: 80px;" id="time-display">00:00.00</div>
             <div style="flex: 1"></div>
-            <div>DURAÇÃO TOTAL: <input type="number" id="render-duration" class="time-input" value="60" min="1">s</div>
+            <div>DURAÇÃO TOTAL: <input type="number" id="render-duration" class="time-input" value="10" min="1">s</div>
         </div>
         <div id="timeline-track">
             <div id="timeline-content">
@@ -772,6 +776,7 @@
             expRippleSpeed: 1.0,
             vaporProgress: 0,
             vaporSpeed: 0.5,
+            vaporColor: '#ffffff',
             scrollSpeed: 0,
             zoomActive: false,
             zoomSpeed: 0,
@@ -801,7 +806,7 @@
             lightColor: '#ffffff',
             globalLightIntensity: 0.0,
             globalLightColor: '#ffffff',
-            renderDuration: 60,
+            renderDuration: 10,
             keyframes: []
         };
 
@@ -823,26 +828,23 @@
                      return;
                 }
 
-                // Para um ciclo perfeito, calculamos um número inteiro de voltas (cycles) baseado na velocidade e duração.
-                // Com durações longas, os "degraus" do floor ficam quase imperceptíveis, mantendo a sensibilidade.
-                float cycles = floor(uSpeed * uDuration + 0.5);
+                // Para um loop perfeito, calculamos um número inteiro de oscilações baseado na velocidade e duração.
+                float cycles = max(1.0, floor(uSpeed * uDuration + 0.5));
                 float phase = uTime / uDuration;
-                float t = phase * 6.28318 * cycles;
+                
+                float angle = phase * 6.28318 * cycles;
+                
+                // Variação espacial para que diferentes partes da imagem não se movam em bloco rígido.
+                float spatialOffset = (vTextureCoord.x * 3.0 + vTextureCoord.y * 2.0) * 1.2;
+                
+                // Movimento principal de balanço + harmônico de "ondulação" (shiver).
+                // Ambos são baseados em 'cycles' inteiros, garantindo continuidade total no loop.
+                float sway = sin(angle + spatialOffset);
+                sway += sin(angle * 2.0 + spatialOffset * 1.5) * 0.25;
 
-                // Para o ruído não "pular" no loop, o deslocamento dele também deve ser baseado em ciclos inteiros.
-                float nCycles1 = floor(cycles * 0.1 + 1.0);
-                float nCycles2 = floor(cycles * 0.3 + 1.0);
-                float n1 = texture2D(uNoise, mod(vTextureCoord * 0.1 + phase * nCycles1, 1.0)).r;
-                float n2 = texture2D(uNoise, mod(vTextureCoord * 0.4 + phase * nCycles2, 1.0)).g;
-                
-                float movement = sin(t + n1 * 6.28) * 0.8; 
-                // Usamos multiplicadores inteiros (ex: 3.0) para o jitter acompanhar o loop principal.
-                movement += sin(t * 3.0 + n2 * 10.0) * 0.2; 
-                
-                // Multiplicador aumentado de 0.005 para 0.025 para permitir um deslocamento muito maior (longe da origem)
-                float dist = movement * uStrength * mask * 0.025;
+                // uStrength 1.0 (~100 no slider) gera um deslocamento suave de aproximadamente 1 a 2cm.
+                float dist = sway * uStrength * mask * 0.025;
                 vec2 uv = vTextureCoord + (uDirection * dist);
-                
                 gl_FragColor = texture2D(uSampler, uv);
             }
         `;
@@ -870,9 +872,9 @@
                 float distAlong = dot(p, dir);
                 
                 // Ruído multicamada para simular chamas realistas
-                float wave1 = sin(distAlong * 45.0 - uTime * 28.0) * 0.02;
-                float wave2 = cos(distAlong * 22.0 - uTime * 18.0 + 1.2) * 0.03;
-                float wave3 = sin(distAlong * 12.0 - uTime * 10.0 + 2.5) * 0.04;
+                float wave1 = sin(distAlong * 45.0 - uTime * 6.28318 * 5.0) * 0.02;
+                float wave2 = cos(distAlong * 22.0 - uTime * 6.28318 * 3.0 + 1.2) * 0.03;
+                float wave3 = sin(distAlong * 12.0 - uTime * 6.28318 * 2.0 + 2.5) * 0.04;
                 
                 // A turbulência aumenta com a distância para simular o balanço das pontas das chamas
                 float noise = (wave1 + wave2 + wave3) * uFlicker * (0.3 + max(0.0, distAlong) * 2.0);
@@ -889,7 +891,7 @@
                 float falloff = smoothstep(uSize, -uSourceSize, distAlong);
 
                 // Oscilação errática e veloz de intensidade (flicker de fogo)
-                float pulse = 1.0 + (sin(uTime * 35.0) * cos(uTime * 17.0) * 0.2 * uFlicker);
+                float pulse = 1.0 + (sin(uTime * 6.28318 * 10.0) * cos(uTime * 6.28318 * 5.0) * 0.2 * uFlicker);
                 vec4 tex = texture2D(uSampler, vTextureCoord);
                 gl_FragColor = vec4(tex.rgb + (uColor * cone * falloff * pulse), tex.a);
             }
@@ -946,54 +948,50 @@
             varying vec2 vTextureCoord;
             uniform sampler2D uSampler;
             uniform sampler2D uNoise;
-            uniform float uThreshold;
+            uniform float uThreshold; // Quantidade (Agora controla a Opacidade Global)
             uniform float uTime;
             uniform float uDuration;
             uniform float uSpeed;
+            uniform vec3 uColor;
+
+            float sampleNoise(vec2 uv) {
+                return texture2D(uNoise, mod(uv, 1.0)).r;
+            }
 
             void main() {
                 vec4 color = texture2D(uSampler, vTextureCoord);
-                
                 vec2 uv = vTextureCoord;
                 
-                // 1. PERSPECTIVA PARA O HORIZONTE (Indo para o fundo)
-                float perspective = 1.0 + (1.0 - uv.y) * 2.0;
-                vec2 pUV = vec2((uv.x - 0.5) * perspective + 0.5, uv.y);
+                // Para loop perfeito em texturas repetitivas (mod 1.0),
+                // o deslocamento uTime deve ser um valor inteiro ao final da duração.
+                float rise = uTime; 
+                float drift = uTime * 0.2; 
                 
-                // 2. MOVIMENTO LINEAR SINCRONIZADO (Loops em inteiros de 0 a 1)
-                vec2 flowCycles = floor(vec2(2.0, 8.0) * uSpeed * uDuration);
-                vec2 flow = (uTime / uDuration) * flowCycles;
+                // pUV: Escala aumentada para detalhes menores (fininhos)
+                vec2 pUV = vec2(uv.x * 4.0 + drift, uv.y * 1.5 + rise);
                 
-                // 3. TURBULÊNCIA E NOISE FRACTAL
-                float d = texture2D(uNoise, mod(pUV * 0.5 + flow * 0.5, 1.0)).r;
-                vec2 noiseUV = pUV + vec2(d * 0.08 - 0.04, 0.0);
+                // 2. Ruído de Altíssima Frequência (FBM) para ser "extremamente fina"
+                float n = sampleNoise(pUV * 1.0) * 0.5;
+                n += sampleNoise(pUV * 2.0 + 0.33) * 0.25;
+                n += sampleNoise(pUV * 4.0 + 0.66) * 0.125;
+                n += sampleNoise(pUV * 8.0) * 0.0625;
+                n += sampleNoise(pUV * 16.0) * 0.03125; // Camada extra de micro-detalhe
                 
-                float n1 = texture2D(uNoise, mod(noiseUV * 0.5 + flow, 1.0)).r;
-                float n2 = texture2D(uNoise, mod(noiseUV * 1.2 + flow * 1.2, 1.0)).r;
-                float n3 = texture2D(uNoise, mod(noiseUV * 3.0 + flow * 2.0, 1.0)).r;
-                float fbm = (n1 * 0.5 + n2 * 0.3 + n3 * 0.2);
+                // 3. Aumento de Densidade e Contraste
+                n = pow(n * 2.5, 1.4); // Torna a fumaça mais "visível" e densa
                 
-                // 4. AJUSTE DE SENSIBILIDADE DO SLIDER (Evita whiteout precoce)
-                float t = pow(uThreshold, 1.0); 
+                // 4. Gradiente Vertical (Saindo do chão)
+                // uv.y=1.0 é o chão. O gradiente agora é mais concentrado na base.
+                float verticalGradient = smoothstep(0.1, 0.98, uv.y);
                 
-                // 5. MINI PARTÍCULAS (Muitas e microscópicas)
-                // Frequência altíssima para grãos minúsculos
-                float pNoise = texture2D(uNoise, mod(noiseUV * 300.0 + flow * 25.0, 1.0)).r;
-                // Quantidade inicial alta
-                float particles = pow(clamp(pNoise + t * 0.6, 0.0, 1.0), 30.0) * 2.0;
-                
-                // 6. DENSIDADE POR ALTURA (Embaixo densa, em cima fumaça)
-                float verticalGradient = smoothstep(0.0, 3.0, uv.y);
-                float smokeVolume = smoothstep(1.5, 0.1, fbm) * t;
-                
-                // Máscara de altura rasteira
-                float hMask = smoothstep(0.1, 1.5, uv.y);
-                
-                // Densidade final: Partículas sobem mais, volume fica mais embaixo
-                float finalFog = clamp((smokeVolume * 0.5 + particles * (0.3 + verticalGradient * 0.7)) * hMask, 0.0, 0.92);
-                
-                vec3 fogCol = vec3(1.0); // Branco puro
-                color.rgb = mix(color.rgb, fogCol, finalFog);
+                // 5. Opacidade controlada pelo slider "Quantidade"
+                float finalAlpha = clamp(n * verticalGradient * uThreshold, 0.0, 0.98);
+
+                // 6. Shading e Cor
+                float shading = smoothstep(0.15, 0.7, n);
+                vec3 smokeColor = mix(uColor * 0.5, uColor, shading);
+
+                color.rgb = mix(color.rgb, smokeColor, finalAlpha);
                 
                 gl_FragColor = color;
             }
@@ -1135,8 +1133,21 @@
             // Setup Mascara de Vento
             maskTexture = PIXI.RenderTexture.create({ width: 1456, height: 728 });
             maskSprite = new PIXI.Sprite(maskTexture);
-            maskBrush = new PIXI.Graphics();
-            maskBlur = new PIXI.filters.BlurFilter(8);
+            
+            // Criação de um pincel macio (Soft Brush) usando gradiente radial
+            const bCanvas = document.createElement('canvas');
+            bCanvas.width = 128;
+            bCanvas.height = 128;
+            const bCtx = bCanvas.getContext('2d');
+            const grad = bCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            bCtx.fillStyle = grad;
+            bCtx.fillRect(0, 0, 128, 128);
+            
+            maskBrush = new PIXI.Sprite(PIXI.Texture.from(bCanvas));
+            maskBrush.anchor.set(0.5);
+            maskBlur = new PIXI.filters.BlurFilter(4);
             
             app.stage.eventMode = 'static';
             app.stage.on('pointerdown', (e) => { if(document.getElementById('toggle-wind-edit').checked) { isPaintingMask = true; paintMask(e); } }, { passive: false });
@@ -1180,7 +1191,8 @@
                 uNoise: createNoiseTexture(),
                 uTime: 0,
                 uDuration: settings.renderDuration,
-                uSpeed: 1.0
+                uSpeed: 1.0,
+                uColor: [1, 1, 1]
             });
 
             vignetteFilter = new PIXI.Filter(null, vignetteShader, {
@@ -1280,12 +1292,10 @@
         function paintMask(e) {
             const pos = e.getLocalPosition(app.stage);
             const size = parseInt(document.getElementById('wind-brush-size').value);
-            
-            maskBrush.clear();
-            maskBrush.beginFill(0xffffff, 1.0);
-            maskBrush.drawCircle(pos.x, pos.y, size / 2);
-            maskBrush.endFill();
-            
+
+            maskBrush.width = size;
+            maskBrush.height = size;
+            maskBrush.position.copyFrom(pos);
             app.renderer.render(maskBrush, { renderTexture: maskTexture, clear: false });
         }
 
@@ -1368,14 +1378,14 @@
         });
 
         document.getElementById('wind-strength').addEventListener('input', (e) => {
-            settings.windStrength = parseFloat(e.target.value);
-            document.getElementById('val-wind-strength').innerText = settings.windStrength.toFixed(2);
+            settings.windStrength = parseInt(e.target.value);
+            document.getElementById('val-wind-strength').innerText = settings.windStrength;
             if (!isPlaying) applySettingsToCanvas();
         });
 
         document.getElementById('wind-speed').addEventListener('input', (e) => {
-            settings.windSpeed = parseFloat(e.target.value);
-            document.getElementById('val-wind-speed').innerText = settings.windSpeed.toFixed(2);
+            settings.windSpeed = parseInt(e.target.value);
+            document.getElementById('val-wind-speed').innerText = settings.windSpeed;
             if (!isPlaying) applySettingsToCanvas();
         });
 
@@ -1398,6 +1408,11 @@
         document.getElementById('vapor-speed').addEventListener('input', (e) => {
             settings.vaporSpeed = parseFloat(e.target.value);
             document.getElementById('val-vapor-speed').innerText = settings.vaporSpeed.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('vapor-color').addEventListener('input', (e) => {
+            settings.vaporColor = e.target.value;
             if (!isPlaying) applySettingsToCanvas();
         });
 
@@ -1560,22 +1575,24 @@
         }
         updateRuler();
 
-        function updateScrubberUI() {
+        function updateScrubberUI(updateInputs = true) {
             const pos = currentTime * PPS;
             scrubber.style.left = `${pos}px`;
             document.getElementById('time-display').innerText = `00:${currentTime.toFixed(2).replace('.',':').padStart(5, '0')}`;
-            seek(currentTime);
+            seek(currentTime, updateInputs);
             
             // Auto-scroll para manter a agulha visível
-            if (isPlaying) {
+            if (isPlaying || isDraggingScrubber) {
                 const scrollLeft = track.scrollLeft;
                 const trackWidth = track.clientWidth;
-                if (pos > scrollLeft + trackWidth - 50) track.scrollLeft = pos - 100;
-                if (pos < scrollLeft) track.scrollLeft = pos;
+                const padding = 100; // Margem para começar o scroll antes de bater na borda
+                if (pos > scrollLeft + trackWidth - padding) track.scrollLeft = pos - trackWidth + padding;
+                if (pos < scrollLeft + padding) track.scrollLeft = Math.max(0, pos - padding);
             }
         }
 
         track.addEventListener('pointerdown', (e) => {
+            if (isPlaying) togglePlay(); // Para a reprodução imediatamente ao interagir
             isDraggingScrubber = true;
             handleTimelineInteraction(e);
         });
@@ -1584,14 +1601,18 @@
             if (isDraggingScrubber) handleTimelineInteraction(e);
         });
 
-        window.addEventListener('pointerup', () => isDraggingScrubber = false);
+        window.addEventListener('pointerup', () => {
+            if (isDraggingScrubber) {
+                isDraggingScrubber = false;
+                updateScrubberUI(true); // Sincroniza os inputs da interface ao soltar o mouse
+            }
+        });
 
         function handleTimelineInteraction(e) {
             const rect = content.getBoundingClientRect();
             let x = e.clientX - rect.left; 
             currentTime = Math.max(0, Math.min(x / PPS, settings.renderDuration)); 
-            if (isPlaying) togglePlay(); // Para o play se o usuário clicar na timeline
-            updateScrubberUI();
+            updateScrubberUI(false); // Não atualiza inputs pesados durante o arraste para manter a fluidez
         }
 
         // Controle de Play/Pause
@@ -1622,7 +1643,11 @@
         }
 
         document.getElementById('btn-reset').addEventListener('click', () => {
+            if (isPlaying) togglePlay(); // Para a reprodução se estiver ativo
             currentTime = 0;
+            track.scrollLeft = 0; // Reseta o scroll da timeline
+            threeYaw = 0; // Reseta a rotação horizontal 3D
+            threePitch = 0; // Reseta a rotação vertical 3D
             updateScrubberUI();
         });
 
@@ -1737,7 +1762,8 @@
                 type: 'vapor',
                 time: currentTime,
                 vaporProgress: settings.vaporProgress,
-                vaporSpeed: settings.vaporSpeed
+                vaporSpeed: settings.vaporSpeed,
+                vaporColor: settings.vaporColor
             });
         });
 
@@ -1837,7 +1863,7 @@
                     if (typeof v0 === 'boolean') return v0; // Toggles não interpolam, apenas mudam
 
                     // Interpolação de Cor (Hex)
-                    if (prop === 'lightColor' || prop === 'globalLightColor') {
+                    if (prop === 'lightColor' || prop === 'globalLightColor' || prop === 'vaporColor') {
                         const c0 = hexToRgb(v0);
                         const c1 = hexToRgb(v1);
                         const ratio = (time - t0) / (t1 - t0);
@@ -1875,15 +1901,18 @@
                 const texture = zoomLayers[0].texture;
                 const baseScale = Math.max(1920 / texture.width, 1080 / texture.height);
                 const cycleSpeed = (settings.zoomSpeed / 100) * 1;
-                const timeForZoom = isLivePreview ? (performance.now() / 1000) : currentTime;
+
+                // Cálculo determinístico para Loop Perfeito:
+                // Definimos uma quantidade inteira de ciclos baseada na velocidade e duração.
+                let totalZoomCycles = Math.floor(Math.abs(cycleSpeed) * duration + 0.5);
+                if (totalZoomCycles < 1) totalZoomCycles = 1;
+                let zoomDirection = cycleSpeed >= 0 ? 1 : -1;
 
                 zoomLayers.forEach(s => {
-                    // Cálculo determinístico baseado no tempo para garantir loop perfeito no render
-                    let progress = ( (timeForZoom * cycleSpeed) + s.initialZOffset );
-                    // Módulo matemático real para lidar com números negativos (Zoom Out)
+                    // Proporção do tempo atual (0 a 1) multiplicada por ciclos inteiros
+                    let timePhase = animTime / duration;
+                    let progress = (timePhase * totalZoomCycles * zoomDirection) + s.initialZOffset;
                     s.zProgress = ((progress % 1) + 1) % 1;
-
-                    // Escala exponencial
                     const scaleValue = baseScale * Math.pow(settings.zoomMax, s.zProgress);
                     s.tileScale.set(scaleValue);
                     
@@ -1893,8 +1922,6 @@
                     
                     // Transição Senoidal: Cria um cross-fade perfeito entre as 2 camadas.
                     // Quando uma está no pico de opacidade (centro), a outra está totalmente invisível (reiniciando).
-                    s.alpha = Math.sin(s.zProgress * Math.PI);
-                    // Com 4 camadas, usamos uma curva senoidal mais suave
                     s.alpha = Math.pow(Math.sin(s.zProgress * Math.PI), 0.7);
                 });
 
@@ -1918,14 +1945,16 @@
 
             // Lógica de Camera Shake
             if (settings.shakeActive && settings.shakeStrength > 0) {
-                const shakeTime = isLivePreview ? (performance.now() / 1000) : currentTime;
-                const t = shakeTime * settings.shakeSpeed;
+                // Sincroniza o tremor para terminar onde começou (0)
+                // Usamos shakeSpeed para definir quantos ciclos ocorrem na duração total
+                const shakeCycles = Math.max(1, Math.floor(settings.shakeSpeed * duration / 5.0));
+                const t = (animTime / duration) * shakeCycles * Math.PI * 2.0;
+                
                 const angleRad = (settings.shakeAngle * Math.PI) / 180;
 
-                // Criamos um movimento composto (Lissajous) para simular o "X"
-                // O eixo principal usa sin(t), o perpendicular usa sin(t * 1.5) para cruzar o caminho
+                // Lissajous que sempre fecha em 0,0 quando t é múltiplo de 2PI
                 const p1 = Math.sin(t);
-                const p2 = Math.sin(t * 1.5); 
+                const p2 = Math.sin(t * 2.0); // Usar 2.0 em vez de 1.5 garante loop no final de 2PI
                 
                 const dx = p1 * settings.shakeStrength;
                 const dy = p2 * (settings.shakeStrength * 0.7); // O "cruzamento" é 70% da força total
@@ -1977,16 +2006,21 @@
             }
 
             // Aplica Vaporização
+            // O shader espera que uTime suba de 0 a N ciclos inteiros para loopar a textura
+            const vaporCycles = Math.max(1, Math.floor(settings.vaporSpeed * duration * 0.5));
+            
             vaporFilter.uniforms.uThreshold = settings.vaporProgress;
-            vaporFilter.uniforms.uTime = animTime * settings.vaporSpeed;
+            vaporFilter.uniforms.uTime = (animTime / duration) * (vaporCycles * 5.0);
             vaporFilter.uniforms.uDuration = duration;
             vaporFilter.uniforms.uSpeed = settings.vaporSpeed;
+            vaporFilter.uniforms.uColor = hexToRgb(settings.vaporColor);
 
             // Aplica Vento
             windFilter.uniforms.uTime = animTime;
             windFilter.uniforms.uDuration = duration;
-            windFilter.uniforms.uStrength = settings.windStrength;
-            windFilter.uniforms.uSpeed = settings.windSpeed;
+            // Mapeia os valores de 0-100 para escalas úteis ao shader
+            windFilter.uniforms.uStrength = settings.windStrength / 100.0;
+            windFilter.uniforms.uSpeed = settings.windSpeed / 50.0;
             windFilter.uniforms.uDirection.x = settings.windDirX;
             windFilter.uniforms.uDirection.y = settings.windDirY;
 
@@ -2015,7 +2049,10 @@
                 lightFilter.uniforms.uSize = settings.lightSize;
                 lightFilter.uniforms.uSpread = settings.lightSpread;
                 lightFilter.uniforms.uSourceSize = settings.lightSource;
-                lightFilter.uniforms.uTime = animTime;
+                
+                // Normaliza o tempo do flicker para loopar conforme a duração
+                lightFilter.uniforms.uTime = animTime / duration; 
+                
                 lightFilter.uniforms.uFlicker = settings.lightFlicker;
                 lightFilter.uniforms.uColor = hexToRgb(settings.lightColor);
                 lightFilter.enabled = true;
@@ -2047,6 +2084,7 @@
             settings.expSpeed = getInterpolatedValue(time, 'expSpeed', 'impact');
             settings.vaporProgress = getInterpolatedValue(time, 'vaporProgress', 'vapor');
             settings.vaporSpeed = getInterpolatedValue(time, 'vaporSpeed', 'vapor');
+            settings.vaporColor = getInterpolatedValue(time, 'vaporColor', 'vapor');
             settings.scrollSpeed = getInterpolatedValue(time, 'scrollSpeed', 'scroll');
             settings.zoomActive = getInterpolatedValue(time, 'zoomActive', 'zoom');
             settings.zoomSpeed = getInterpolatedValue(time, 'zoomSpeed', 'zoom');
@@ -2096,6 +2134,7 @@
                 document.getElementById('val-vapor-progress').innerText = Math.round(settings.vaporProgress * 100);
                 document.getElementById('vapor-speed').value = settings.vaporSpeed;
                 document.getElementById('val-vapor-speed').innerText = settings.vaporSpeed.toFixed(1);
+                document.getElementById('vapor-color').value = settings.vaporColor;
                 document.getElementById('scroll-speed').value = settings.scrollSpeed;
                 document.getElementById('val-scroll-speed').innerText = Math.round(settings.scrollSpeed);
                 document.getElementById('toggle-zoom').checked = settings.zoomActive;
@@ -2139,9 +2178,9 @@
                 document.getElementById('val-global-light-intensity').innerText = settings.globalLightIntensity.toFixed(1);
                 document.getElementById('global-light-color').value = settings.globalLightColor;
                 document.getElementById('wind-strength').value = settings.windStrength;
-                document.getElementById('val-wind-strength').innerText = settings.windStrength.toFixed(2);
+                document.getElementById('val-wind-strength').innerText = Math.round(settings.windStrength);
                 document.getElementById('wind-speed').value = settings.windSpeed;
-                document.getElementById('val-wind-speed').innerText = settings.windSpeed.toFixed(2);
+                document.getElementById('val-wind-speed').innerText = Math.round(settings.windSpeed);
                 document.getElementById('wind-dir-x').value = settings.windDirX;
                 document.getElementById('wind-dir-y').value = settings.windDirY;
             }
