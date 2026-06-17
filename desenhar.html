@@ -319,6 +319,7 @@
         /* Destaque para o botão de seleção */
         #selectionBtn.active { color: #ffcc00; text-shadow: 0 0 5px rgba(255,204,0,0.5); }
         #perspectiveBtn.active { color: #ff3b30; text-shadow: 0 0 5px rgba(255,59,48,0.5); }
+        #warpBtn.active { color: #5ac8fa; text-shadow: 0 0 5px rgba(90,200,250,0.5); }
         #bucketBtn { color: #ff3b30; }
         #bucketBtn.active { background: rgba(255, 255, 255, 0.15); box-shadow: 0 0 12px rgba(255, 59, 48, 0.5); }
         #eraserBtn.active { color: inherit; background: rgba(255, 255, 255, 0.15); box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); }
@@ -594,6 +595,7 @@
             <button class="icon-btn" id="selectionBtn" title="Seleção Lasso">◌</button>
             <button class="icon-btn" id="selectAllBtn" title="Selecionar Tudo">⛶</button>
             <button class="icon-btn" id="perspectiveBtn" title="Perspectiva">📐</button>
+            <button class="icon-btn" id="warpBtn" title="Warp Puppet">🌀</button>
             <button class="icon-btn" id="flipHBtn" title="Inverter Horizontal">↔️</button>
             <button class="icon-btn" id="flipVBtn" title="Inverter Vertical">↕️</button>
             <button class="icon-btn" id="copyBtn" title="Copiar">📑</button>
@@ -741,6 +743,11 @@
         const snapshotCanvas = document.createElement('canvas'); // Foto do frame no início do traço
         const snapCtx = snapshotCanvas.getContext('2d');
         
+        // Warp Puppet Tool State
+        let warpMesh = [];
+        const WARP_GRID = 20;
+        let draggedWarpPoint = null;
+
         // Função para exibir avisos sem bloquear a tela
         function showNotification(msg) {
             const notification = document.createElement('div');
@@ -948,12 +955,21 @@
         const selectionBtn = document.getElementById('selectionBtn');
         const selectAllBtn = document.getElementById('selectAllBtn');
         const perspectiveBtn = document.getElementById('perspectiveBtn');
+        const warpBtn = document.getElementById('warpBtn');
         const flipHBtn = document.getElementById('flipHBtn');
         const flipVBtn = document.getElementById('flipVBtn');
 
         function setTool(tool) {
-            finishSelection();
-            currentTool = tool;
+            if (currentTool === tool && (tool === 'lasso' || tool === 'perspective' || tool === 'warp')) {
+                finishSelection();
+                currentTool = 'brush';
+            } else {
+                finishSelection();
+                currentTool = tool;
+                if (tool === 'warp') {
+                    setBrushSize(25);
+                }
+            }
             updateToolUI();
         }
 
@@ -963,6 +979,7 @@
         document.getElementById('eyedropperBtn').onclick = () => setTool('eyedropper');
         selectionBtn.onclick = () => setTool('lasso');
         perspectiveBtn.onclick = () => setTool('perspective');
+        warpBtn.onclick = () => setTool('warp');
 
         function flipCanvas(canvas, horizontal = true) {
             const temp = document.createElement('canvas');
@@ -1019,6 +1036,7 @@
             eraserBtn.classList.toggle('active', currentTool === 'eraser');
             selectionBtn.classList.toggle('active', currentTool === 'lasso');
             perspectiveBtn.classList.toggle('active', currentTool === 'perspective');
+            warpBtn.classList.toggle('active', currentTool === 'warp');
             document.getElementById('bucketBtn').classList.toggle('active', currentTool === 'bucket');
             document.getElementById('eyedropperBtn').classList.toggle('active', currentTool === 'eyedropper');
         }
@@ -1159,7 +1177,20 @@
                 return;
             }
             
-            if (currentTool === 'lasso' || currentTool === 'perspective') {
+            if (currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp') {
+                if (isTransforming && currentTool === 'warp') {
+                    // Verifica se o clique foi dentro da caixa de seleção (com uma pequena margem de erro)
+                    const margin = 20;
+                    const isInside = pos.x >= selectionBox.x - margin && pos.x <= selectionBox.x + selectionBox.w + margin &&
+                                     pos.y >= selectionBox.y - margin && pos.y <= selectionBox.y + selectionBox.h + margin;
+
+                    if (isInside) {
+                        draggedWarpPoint = true; // Agora funciona como um gatilho para o modo de influência
+                        dragStart = { x: pos.x, y: pos.y };
+                        return;
+                    }
+                }
+
                 if (isTransforming) {
                     const hit = getTransformHit(pos);
                     if (hit) {
@@ -1176,7 +1207,10 @@
                         return;
                     }
                 }
-                selectionPath = [pos];
+                
+                // Se já estiver transformando e clicar fora da área de controle, 
+                // finaliza a transformação atual para não perder o desenho de vista.
+                finishSelection();
                 return;
             }
             
@@ -1223,8 +1257,28 @@
                 ? e.getCoalescedEvents() 
                 : [e];
             
-            if (currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'bucket') {
+            if (currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp' || currentTool === 'bucket') {
                 const pos = getMousePos(e);
+                if (currentTool === 'warp' && isTransforming && draggedWarpPoint) {
+                    const influenceRadius = parseFloat(brushSizeInput.value) * 4; // Multiplicador para uma deformação mais suave
+                    const dx = pos.x - dragStart.x;
+                    const dy = pos.y - dragStart.y;
+
+                    warpMesh.forEach(p => {
+                        const d = Math.hypot(p.x - dragStart.x, p.y - dragStart.y);
+                        if (d < influenceRadius) {
+                            // Aplica um peso baseado na distância (mais perto do centro = mais movimento)
+                            const weight = 1 - (d / influenceRadius);
+                            p.x += dx * weight;
+                            p.y += dy * weight;
+                        }
+                    });
+
+                    dragStart = { x: pos.x, y: pos.y };
+                    drawTransformUI();
+                    return;
+                }
+
                 if (isTransforming && transformMode) {
                     if (transformMode === 'move') {
                         const dx = pos.x - dragStart.x;
@@ -1317,7 +1371,7 @@
 
         function stopDrawing(e) {
             if (isDrawing) {
-                if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'bucket' && e) {
+                if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket' && e) {
                     const pos = getMousePos(e);
                     dCtx.beginPath();
                     dCtx.moveTo(lastMidX, lastMidY);
@@ -1328,9 +1382,10 @@
                 
                 dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
                 isDrawing = false;
-                if ((currentTool === 'lasso' || currentTool === 'perspective') && !isTransforming && selectionPath.length > 3) {
+                draggedWarpPoint = null;
+                if ((currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp') && !isTransforming && selectionPath.length > 3) {
                     createSelection();
-                } else if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'bucket') {
+                } else if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket') {
                     transformMode = null;
                     saveFrameState(currentFrameIndex);
                 }
@@ -1416,6 +1471,18 @@
             ctx.restore();
 
             isTransforming = true;
+
+            if (currentTool === 'warp') {
+                warpMesh = [];
+                for (let y = 0; y <= WARP_GRID; y++) {
+                    for (let x = 0; x <= WARP_GRID; x++) {
+                        const px = minX + (x / WARP_GRID) * (maxX - minX);
+                        const py = minY + (y / WARP_GRID) * (maxY - minY);
+                        warpMesh.push({ x: px, y: py, ox: px, oy: py });
+                    }
+                }
+            }
+
             saveFrameState(currentFrameIndex); // Salva o frame atual sem os pixels recortados
             drawTransformUI();
         }
@@ -1446,6 +1513,36 @@
                 return;
             }
             
+            if (currentTool === 'warp') {
+                renderMeshWarp(uiCtx, selectionCanvas, warpMesh, WARP_GRID);
+                uiCtx.strokeStyle = "rgba(90, 200, 250, 0.15)";
+                uiCtx.lineWidth = 1;
+                uiCtx.beginPath();
+                for (let y = 0; y <= WARP_GRID; y++) {
+                    uiCtx.moveTo(warpMesh[y * (WARP_GRID + 1)].x, warpMesh[y * (WARP_GRID + 1)].y);
+                    for (let x = 1; x <= WARP_GRID; x++) {
+                        uiCtx.lineTo(warpMesh[y * (WARP_GRID + 1) + x].x, warpMesh[y * (WARP_GRID + 1) + x].y);
+                    }
+                }
+                for (let x = 0; x <= WARP_GRID; x++) {
+                    uiCtx.moveTo(warpMesh[x].x, warpMesh[x].y);
+                    for (let y = 1; y <= WARP_GRID; y++) {
+                        uiCtx.lineTo(warpMesh[y * (WARP_GRID + 1) + x].x, warpMesh[y * (WARP_GRID + 1) + x].y);
+                    }
+                }
+                uiCtx.stroke();
+
+                warpMesh.forEach(p => {
+                    uiCtx.fillStyle = "rgba(255, 255, 255, 0.2)";
+                    uiCtx.strokeStyle = "rgba(0, 122, 255, 0.2)";
+                    uiCtx.beginPath();
+                    uiCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                    uiCtx.fill();
+                    uiCtx.stroke();
+                });
+                return;
+            }
+
             uiCtx.save();
             uiCtx.translate(b.x + b.w/2, b.y + b.h/2);
             uiCtx.rotate(b.angle);
@@ -1595,6 +1692,48 @@
             drawTriangle(p[1], p[2], p[3], w, 0, w, h, 0, h);
         }
 
+        function renderMeshWarp(targetCtx, img, mesh, gridSize) {
+            const w = img.width;
+            const h = img.height;
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const i = y * (gridSize + 1) + x;
+                    const v0 = mesh[i], v1 = mesh[i + 1], v2 = mesh[i + gridSize + 1], v3 = mesh[i + gridSize + 2];
+                    drawMeshTriangle(targetCtx, img, v0, v1, v2);
+                    drawMeshTriangle(targetCtx, img, v1, v3, v2);
+                }
+            }
+        }
+
+        function drawMeshTriangle(targetCtx, img, p0, p1, p2) {
+            const u0 = p0.ox - selectionBox.x, v0 = p0.oy - selectionBox.y;
+            const u1 = p1.ox - selectionBox.x, v1 = p1.oy - selectionBox.y;
+            const u2 = p2.ox - selectionBox.x, v2 = p2.oy - selectionBox.y;
+            const x0 = p0.x, y0 = p0.y, x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y;
+
+            const det = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
+            if (Math.abs(det) < 0.1) return;
+
+            targetCtx.save();
+            targetCtx.beginPath();
+            targetCtx.moveTo(x0, y0);
+            targetCtx.lineTo(x1, y1);
+            targetCtx.lineTo(x2, y2);
+            targetCtx.closePath();
+            targetCtx.clip();
+
+            const a = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) / det;
+            const b = ((y1 - y0) * (v2 - v0) - (y2 - y0) * (v1 - v0)) / det;
+            const c = ((x2 - x0) * (u1 - u0) - (x1 - x0) * (u2 - u0)) / det;
+            const d = ((y2 - y0) * (u1 - u0) - (y1 - y0) * (u2 - u0)) / det;
+            const e = x0 - a * u0 - c * v0;
+            const f = y0 - b * u0 - d * v0;
+
+            targetCtx.transform(a, b, c, d, e, f);
+            targetCtx.drawImage(img, 0, 0);
+            targetCtx.restore();
+        }
+
         function getTransformHit(pos) {
             if (currentTool === 'perspective') {
                 for (let i = 0; i < selectionCorners.length; i++) {
@@ -1699,6 +1838,8 @@
             if (isTransforming) {
                 if (currentTool === 'perspective') {
                     renderDistorted(ctx, selectionCanvas, selectionCorners);
+                } else if (currentTool === 'warp') {
+                    renderMeshWarp(ctx, selectionCanvas, warpMesh, WARP_GRID);
                 } else {
                     const b = selectionBox;
                     ctx.save();
@@ -1711,6 +1852,8 @@
                 
                 isTransforming = false;
                 transformMode = null;
+                draggedWarpPoint = null;
+                warpMesh = [];
                 selectionPath = [];
                 uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
                 saveFrameState(currentFrameIndex);
@@ -1763,6 +1906,16 @@
         window.setBrushSize = setBrushSize; // Torna acessível globalmente para o onclick
 
         async function undo() {
+            // Se estiver no Warp, o primeiro "Desfazer" reseta a malha sem fechar a ferramenta
+            if (isTransforming && currentTool === 'warp') {
+                const isModified = warpMesh.some(p => p.x !== p.ox || p.y !== p.oy);
+                if (isModified) {
+                    warpMesh.forEach(p => { p.x = p.ox; p.y = p.oy; });
+                    drawTransformUI();
+                    return;
+                }
+            }
+
             if (undoStack.length === 0) return;
             isHistoryAction = true;
             finishSelection();

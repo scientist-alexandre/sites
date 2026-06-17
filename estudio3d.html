@@ -157,11 +157,21 @@
     <div id="ui">
         <div class="ui-section" id="section-import">
             <h2>Importar</h2>
-            <label>Fundo 360° (Pasta ou Arquivos):</label>
-            <input type="file" id="bgInput" accept="image/*" webkitdirectory directory multiple>
-            <div style="margin-top:10px;"></div>
-            <label>Novo Objeto (Pasta ou Arquivos):</label>
-            <input type="file" id="charInput" accept="image/*" webkitdirectory directory multiple>
+            <label>Fundo 360°</label>
+            <div style="display: flex; gap: 5px; margin-top: 5px; margin-bottom: 15px;">
+                <button onclick="document.getElementById('bgInput').click()" style="flex: 1;">Mídia</button>
+                <button onclick="document.getElementById('bgFolderInput').click()" style="flex: 1;">Pasta</button>
+            </div>
+            <input type="file" id="bgInput" accept="image/*" multiple style="display:none">
+            <input type="file" id="bgFolderInput" accept="image/*" webkitdirectory directory multiple style="display:none">
+            
+            <label>Novo Objeto</label>
+            <div style="display: flex; gap: 5px; margin-top: 5px;">
+                <button onclick="document.getElementById('charInput').click()" style="flex: 1;">Mídia</button>
+                <button onclick="document.getElementById('charFolderInput').click()" style="flex: 1;">Pasta</button>
+            </div>
+            <input type="file" id="charInput" accept="image/*" multiple style="display:none">
+            <input type="file" id="charFolderInput" accept="image/*" webkitdirectory directory multiple style="display:none">
         </div>
 
         <div class="ui-section" id="section-layers">
@@ -246,7 +256,9 @@
         let indexSelecionado = null;
 
         const bgInput = document.getElementById('bgInput');
+        const bgFolderInput = document.getElementById('bgFolderInput');
         const charInput = document.getElementById('charInput');
+        const charFolderInput = document.getElementById('charFolderInput');
         const angleH = document.getElementById('angleH');
         const angleV = document.getElementById('angleV');
         const objScale = document.getElementById('objScale');
@@ -282,7 +294,7 @@
         let isDraggingTimeline = false;
 
         // Carrega o Panorama de Fundo (Suporta Sequência)
-        bgInput.addEventListener('change', async (e) => {
+        async function handleBgSelection(e) {
             // Filtra apenas arquivos de imagem caso a pasta contenha outros arquivos
             const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
             if (files.length === 0) return;
@@ -316,7 +328,10 @@
                 scene.background = textures[0];
             }
             if (!isPlaying) renderer.render(scene, camera);
-        });
+        }
+
+        bgInput.addEventListener('change', handleBgSelection);
+        bgFolderInput.addEventListener('change', handleBgSelection);
 
         // Funções de conversão de tempo (Formato After Effects HH:MM:SS)
         function secondsToTimecode(totalSeconds, includeMs = false) {
@@ -337,7 +352,7 @@
         }
 
         // Adiciona um novo objeto ou sequência à cena
-        charInput.addEventListener('change', async (e) => {
+        async function handleCharSelection(e) {
             // Filtra apenas arquivos de imagem
             const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
             if (files.length === 0) return;
@@ -441,7 +456,10 @@
 
             // Reseta o input para permitir carregar o mesmo arquivo novamente se desejar
             e.target.value = '';
-        });
+        }
+
+        charInput.addEventListener('change', handleCharSelection);
+        charFolderInput.addEventListener('change', handleCharSelection);
 
         function atualizarUILista() {
             layersList.innerHTML = '';
@@ -629,6 +647,7 @@
                 marker.className = `keyframe-marker ${index === selectedKeyframeIndex ? 'selected' : ''}`;
                 marker.style.left = `${k.time * pps}px`;
                 marker.onpointerdown = (e) => {
+                    marker.setPointerCapture(e.pointerId);
                     e.stopPropagation(); // Impede o scrubbing ao selecionar o keyframe
                     selectedKeyframeIndex = index;
                     isDraggingKeyframe = true;
@@ -765,6 +784,7 @@
 
         timelineTrack.addEventListener('pointerdown', (e) => {
             isDraggingTimeline = true;
+            timelineTrack.setPointerCapture(e.pointerId);
             updateTimeFromMouseEvent(e);
             e.preventDefault(); // Impede a seleção de objetos/texto
         });
@@ -808,8 +828,16 @@
         function updateTimelineUI(shouldApplyAnim = true) {
             const totalWidth = duration * pps;
             timelineTrack.style.width = `${totalWidth}px`;
-            playhead.style.left = `${currentTime * pps}px`;
+            const playheadPos = currentTime * pps;
+            playhead.style.left = `${playheadPos}px`;
             timeDisplay.textContent = secondsToTimecode(currentTime, true);
+
+            // Auto-scroll: Centraliza o scroll no playhead durante play ou arraste
+            if (isPlaying || isDraggingTimeline || isDraggingKeyframe) {
+                const containerWidth = timelineBar.clientWidth;
+                timelineBar.scrollLeft = playheadPos - (containerWidth / 2);
+            }
+
             if (!isPlaying && shouldApplyAnim) applyAnimation(true);
         }
 

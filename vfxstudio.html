@@ -515,9 +515,47 @@
             </div>
 
             <div class="effect-card">
-                <h3>Iluminação Dinâmica <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <h3>Fogo Procedural <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
                 <div class="vfx-content">
                     <div class="label-group">
+                        <label>Gerenciar Chamas</label>
+                        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                            <select id="fire-selector" style="flex: 1; background: #000; color: #fff; border: 1px solid #444; height: 30px; font-size: 10px; border-radius: 4px;"></select>
+                            <button class="btn-primary" id="btn-add-fire" style="padding: 0 12px; height: 30px;">+</button>
+                            <button class="btn-primary" id="btn-remove-fire" style="padding: 0 12px; height: 30px; background: #c0392b;">-</button>
+                        </div>
+                    </div>
+                    <div class="label-group">
+                        <label>Posição (X / Y)</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="range" id="fire-pos-x" min="0" max="1" step="0.01" value="0.5">
+                            <input type="range" id="fire-pos-y" min="0" max="1" step="0.01" value="0.5">
+                        </div>
+                    </div>
+                    <div class="label-group">
+                        <label>Tamanho <span id="val-fire-size">1.0</span></label>
+                        <input type="range" id="fire-size" min="0.1" max="3.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="label-group">
+                        <label>Intensidade/Calor <span id="val-fire-int">1.0</span></label>
+                        <input type="range" id="fire-intensity" min="0" max="2.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-fire" style="border-color: #e67e22; color: #e67e22;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Iluminação<i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Gerenciar Luzes</label>
+                        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                            <select id="light-selector" style="flex: 1; background: #000; color: #fff; border: 1px solid #444; height: 30px; font-size: 10px; border-radius: 4px;"></select>
+                            <button class="btn-primary" id="btn-add-light" style="padding: 0 12px; height: 30px;">+</button>
+                            <button class="btn-primary" id="btn-remove-light" style="padding: 0 12px; height: 30px; background: #c0392b;">-</button>
+                        </div>
                         <label>Ativo <input type="checkbox" id="toggle-light"></label>
                     </div>
                     <div class="label-group">
@@ -679,7 +717,9 @@
     </footer>
 
     <script>
-        let app, sprite, rippleMap, rippleFilter, impactFilter, impactSprite, vaporFilter, vignetteFilter, colorFilter, windFilter, lightFilter, globalLightFilter;
+        let app, sprite, rippleMap, rippleFilter, impactFilter, impactSprite, vaporFilter, vignetteFilter, colorFilter, windFilter, globalLightFilter, fireNoiseTex;
+        let lightFilters = []; // Array para múltiplos filtros de luz
+        let fireFilters = []; // Array para múltiplos filtros de fogo
         let zoomContainer, zoomLayers = [], maskTexture, maskSprite, maskBrush, maskBlur;
         let count = 0;
         let explosionActive = false;
@@ -749,7 +789,7 @@
 
             // Garante que a textura do PIXI seja mapeada corretamente como fundo 360
             const texture = new THREE.CanvasTexture(app.view);
-            texture.mapping = THREE.EquirectangularReflectionMapping;
+            texture.mapping = THREE.EquirectangularReflectionMapping; 
             texture.colorSpace = THREE.SRGBColorSpace;
             threeTexture = texture;
             threeScene.background = threeTexture;
@@ -795,15 +835,10 @@
             windSpeed: 0.5,
             windDirX: 1.0,
             windDirY: 0.3,
-            lightActive: false,
-            lightPosX: 0.5,
-            lightPosY: 0.2,
-            lightAngle: 90,
-            lightSize: 0.5,
-            lightSpread: 0.5,
-            lightSource: 0,
-            lightFlicker: 0,
-            lightColor: '#ffffff',
+            lights: [{ active: false, posX: 0.5, posY: 0.2, angle: 90, size: 0.5, spread: 0.5, source: 0, flicker: 0, color: '#ffffff' }],
+            selectedLightIndex: 0,
+            fires: [],
+            selectedFireIndex: 0,
             globalLightIntensity: 0.0,
             globalLightColor: '#ffffff',
             renderDuration: 10,
@@ -864,6 +899,11 @@
             void main() {
                 float aspect = 2.0; // Proporção 2:1
                 vec2 p = vTextureCoord - uPos;
+                
+                // FIX: Continuidade Horizontal 360° (Equirretangular)
+                if (p.x > 0.5) p.x -= 1.0;
+                else if (p.x < -0.5) p.x += 1.0;
+                
                 p.x *= aspect;
                 
                 float angleRad = uAngle * 0.0174533;
@@ -898,6 +938,84 @@
         `;
 
         
+        const fireShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform sampler2D uNoise;
+            uniform vec2 uPos;
+            uniform float uSize;
+            uniform float uIntensity;
+            uniform float uTime;
+
+            void main() {
+                vec2 uv = vTextureCoord;
+                vec2 p = uv - uPos;
+                
+                // Fix 360 horizontal wrap
+                if (p.x > 0.5) p.x -= 1.0;
+                else if (p.x < -0.5) p.x += 1.0;
+                
+                p.x *= 2.0; // Aspect ratio fix
+                float scale = uSize + 0.01;
+                p /= scale;
+
+                float y = -p.y;
+
+                // Sincronização com o movimento da iluminação (Flicker Waves)
+                // Copiando as frequências de oscilação do lightShader
+                float t = uTime * 6.28318;
+                float w1 = sin(y * 5.0 - t * 2.0) * 0.03;
+                float w2 = cos(y * 10.0 - t * 3.0 + 1.2) * 0.02;
+                float flickerWaves = (w1 + w2) * (0.4 + y);
+                
+                // Aplica o balanço lateral sincronizado
+                p.x += flickerWaves;
+
+                // Geometria do Fogo (Triângulo Orgânico)
+                float fireWidthFactor = pow(max(0.0, 1.0 - y), 0.8);
+                float fireShape = smoothstep(0.45 * fireWidthFactor, 0.0, abs(p.x));
+                fireShape *= smoothstep(-0.05, 0.15, y) * smoothstep(1.0, 0.7, y); 
+
+                // Geometria da Fumaça (Expansiva para cima)
+                float smokeY = y - 0.3;
+                float smokeWidth = 0.4 * (1.0 + smokeY * 0.8);
+                float smokeShape = smoothstep(smokeWidth, 0.0, abs(p.x + flickerWaves * 0.6));
+                smokeShape *= smoothstep(0.2, 0.9, y) * smoothstep(2.5, 1.2, y);
+                
+                // Ruídos Orgânicos Diferenciados
+                vec2 nUV = vTextureCoord * 1.5;
+                float noiseT = uTime * 2.0;
+                float n = texture2D(uNoise, nUV + vec2(0.0, noiseT * 0.5)).r * 0.6 + texture2D(uNoise, nUV * 2.0 - vec2(0.0, noiseT)).r * 0.3;
+                float sn = texture2D(uNoise, nUV * 0.8 + vec2(uTime * 0.1, noiseT * 0.3)).r;
+
+                float fireVal = fireShape * n * 3.5;
+                float smokeVal = smokeShape * sn * 1.5 * uIntensity;
+                
+                // Cores Principais
+                vec3 fireCol = mix(vec3(0.9, 0.2, 0.0), vec3(1.0, 0.8, 0.2), fireVal);
+                if(fireVal > 0.8) fireCol = mix(fireCol, vec3(1.0, 1.0, 0.9), (fireVal - 0.8) * 2.0);
+                vec3 smokeCol = vec3(0.08, 0.08, 0.08); // Cinza muito escuro (carvão)
+                
+                // Núcleo AZUL - Pequeno e firme na base
+                float blueMask = smoothstep(0.15, 0.0, length(p + vec2(0.0, 0.12))) * n * 3.0;
+                vec3 blueCore = vec3(0.0, 0.4, 1.0) * blueMask;
+
+                vec4 tex = texture2D(uSampler, vTextureCoord);
+                
+                // Glow Ambiente
+                float glowMask = smoothstep(1.8, 0.0, length(p * vec2(1.0, 0.6)));
+                vec3 glowCol = vec3(1.0, 0.4, 0.1) * glowMask * 0.5 * uIntensity;
+                
+                vec3 fireBody = (fireCol * fireVal) * (0.4 + uIntensity * 0.6);
+                
+                // Composição: Fundo -> Fumaça (Interpolada) -> Fogo/Glow (Aditivo)
+                vec3 finalRGB = mix(tex.rgb, smokeCol, smokeVal);
+                finalRGB += fireBody + blueCore + glowCol;
+                
+                gl_FragColor = vec4(finalRGB, tex.a);
+            }
+        `;
+
         const globalLightShader = `
     varying vec2 vTextureCoord;
     uniform sampler2D uSampler;
@@ -923,8 +1041,10 @@
             float dist = (i / 16.0) * radius;
             vec2 offset = vec2(cos(angle), sin(angle)) * dist;
             
-            // Amostra apenas o alpha para evitar multiplicar a textura
-            float sampleAlpha = texture2D(uSampler, vTextureCoord + offset).a;
+            // FIX: Wrap Horizontal para amostragem de brilho na emenda 360
+            vec2 sampleUV = vTextureCoord + offset;
+            sampleUV.x = fract(sampleUV.x);
+            float sampleAlpha = texture2D(uSampler, sampleUV).a;
             
             float weight = 1.0 - (i / 16.0);
             glow += sampleAlpha * weight;
@@ -955,37 +1075,42 @@
             uniform vec3 uColor;
 
             float sampleNoise(vec2 uv) {
-                return texture2D(uNoise, mod(uv, 1.0)).r;
+                return texture2D(uNoise, mod(uv, 4.0)).r;
             }
 
             void main() {
                 vec4 color = texture2D(uSampler, vTextureCoord);
                 vec2 uv = vTextureCoord;
                 
-                // Para loop perfeito em texturas repetitivas (mod 1.0),
-                // o deslocamento uTime deve ser um valor inteiro ao final da duração.
+                // Distorção de ruído para variar a densidade espacial
+                float distortion = sampleNoise(uv * 1.2 + uTime * 0.05) * 0.4;
+                
+                // Efeito de Ondas Brutais (Undulation)
+                // Criamos oscilações em frequências diferentes para gerar o movimento de "ondas"
+                float waveX = sin(uv.y * 3.5 + uTime * 1.5) * 0.5;
+                float waveY = cos(uv.x * 2.5 + uTime * 1.2) * 0.4;
+                
                 float rise = uTime; 
-                float drift = uTime * 0.2; 
+                float drift = uTime * 0.6; 
                 
-                // pUV: Escala aumentada para detalhes menores (fininhos)
-                vec2 pUV = vec2(uv.x * 4.0 + drift, uv.y * 1.5 + rise);
+                // FIX: Garantir que o drift horizontal não quebre a continuidade
+                uv.x = fract(uv.x);
+                vec2 pUV = vec2(uv.x * 15.0 + drift + distortion + waveX, 
+                                uv.y * 5.0 + rise + distortion + waveY);
                 
-                // 2. Ruído de Altíssima Frequência (FBM) para ser "extremamente fina"
-                float n = sampleNoise(pUV * 1.0) * 0.5;
-                n += sampleNoise(pUV * 2.0 + 0.33) * 0.25;
+                float n = sampleNoise(pUV * 2.0 + 0.33) * 0.25;
                 n += sampleNoise(pUV * 4.0 + 0.66) * 0.125;
                 n += sampleNoise(pUV * 8.0) * 0.0625;
-                n += sampleNoise(pUV * 16.0) * 0.03125; // Camada extra de micro-detalhe
+                n += sampleNoise(pUV * 16.0) * 0.03125;
+                n += sampleNoise(pUV * 32.0) * 0.0156;
                 
-                // 3. Aumento de Densidade e Contraste
-                n = pow(n * 2.5, 1.4); // Torna a fumaça mais "visível" e densa
+                n = pow(n * 1.6, 1.1); 
                 
-                // 4. Gradiente Vertical (Saindo do chão)
-                // uv.y=1.0 é o chão. O gradiente agora é mais concentrado na base.
-                float verticalGradient = smoothstep(0.1, 0.98, uv.y);
+                // Suavizamos o gradiente para não "cortar" visualmente quando em alta velocidade
+                float verticalGradient = smoothstep(0.3, 1.0, uv.y);
                 
-                // 5. Opacidade controlada pelo slider "Quantidade"
-                float finalAlpha = clamp(n * verticalGradient * uThreshold, 0.0, 0.98);
+                // 5. Opacidade controlada com um teto menor para ser "sutil"
+                float finalAlpha = n * verticalGradient * uThreshold * 3.0;
 
                 // 6. Shading e Cor
                 float shading = smoothstep(0.15, 0.7, n);
@@ -1006,8 +1131,12 @@
             void main() {
                 vec4 color = texture2D(uSampler, vTextureCoord);
                 
-                vec2 uv = vTextureCoord - 0.5;
-                float dist = length(uv);
+                // FIX: Vinheta em ambiente 360 deve afetar apenas os polos (Y) 
+                // para não criar uma mancha preta fixa na visão do usuário
+                float distY = abs(vTextureCoord.y - 0.5) * 2.0;
+                float distX = abs(vTextureCoord.x - 0.5) * 2.0;
+                // No 3D, a vinheta funciona melhor como um escurecimento de teto/chão
+                float dist = length(vec2(distX * 0.2, distY)); 
                 
                 // Cálculo de vinheta mais robusto
                 // O uSize agora empurra o início do escurecimento
@@ -1216,17 +1345,7 @@
                 uDirection: new PIXI.Point(1, 0.3)
             });
 
-            lightFilter = new PIXI.Filter(null, lightShader, {
-                uPos: [0.5, 0.2],
-                uAngle: 90,
-                uSize: 0.5,
-                uSpread: 0.5,
-                uSourceSize: 0,
-                uTime: 0,
-                uFlicker: 0,
-                uColor: [1, 1, 1]
-            });
-
+            fireNoiseTex = createNoiseTexture();
             globalLightFilter = new PIXI.Filter(null, globalLightShader, {
                 uColor: [1, 1, 1],
                 uIntensity: 0.0,
@@ -1248,7 +1367,7 @@
             zoomContainer.filterArea = app.screen;
 
             // Filtros Globais (pós-processamento aplicado sobre tudo na tela)
-            app.stage.filters = [colorFilter, globalLightFilter, vaporFilter, lightFilter, vignetteFilter];
+            updateFiltersArray();
 
             // Ticker Restaurado: Mantém a animação "Ao Vivo" mesmo com o Play parado
             app.ticker.add(() => {
@@ -1287,7 +1406,82 @@
                 document.getElementById('canvas-container').style.transform = `translate(-50%, -50%) scale(${scale})`;
             };
             window.addEventListener('resize', resizePreview); resizePreview();
+            updateLightSelector();
         }
+
+        function updateFiltersArray() {
+            if (!app) return;
+            const activeLightFilters = lightFilters.filter((f, i) => settings.lights[i] && settings.lights[i].active);
+            const activeFireFilters = fireFilters.filter((f, i) => settings.fires[i]);
+            app.stage.filters = [colorFilter, globalLightFilter, vaporFilter, ...activeLightFilters, ...activeFireFilters, vignetteFilter];
+        }
+
+        function updateLightSelector() {
+            const sel = document.getElementById('light-selector');
+            sel.innerHTML = "";
+            settings.lights.forEach((_, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = `Luz ${i + 1}`;
+                sel.appendChild(opt);
+            });
+            sel.value = settings.selectedLightIndex;
+        }
+
+        function updateFireSelector() {
+            const sel = document.getElementById('fire-selector');
+            sel.innerHTML = "";
+            settings.fires.forEach((_, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = `Fogo ${i + 1}`;
+                sel.appendChild(opt);
+            });
+            sel.value = settings.selectedFireIndex;
+        }
+
+        document.getElementById('btn-add-fire').onclick = () => {
+            settings.fires.push({ posX: 0.5, posY: 0.5, size: 1.0, intensity: 1.0 });
+            settings.selectedFireIndex = settings.fires.length - 1;
+            updateFireSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('btn-remove-fire').onclick = () => {
+            if (settings.fires.length === 0) return;
+            settings.fires.splice(settings.selectedFireIndex, 1);
+            settings.selectedFireIndex = Math.max(0, settings.selectedFireIndex - 1);
+            updateFireSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('fire-selector').onchange = (e) => {
+            settings.selectedFireIndex = parseInt(e.target.value);
+            seek(currentTime);
+        };
+
+        document.getElementById('btn-add-light').onclick = () => {
+            settings.lights.push({
+                active: true, posX: 0.5, posY: 0.2, angle: 90, size: 0.5, 
+                spread: 0.5, source: 0, flicker: 0, color: '#ffffff'
+            });
+            settings.selectedLightIndex = settings.lights.length - 1;
+            updateLightSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('btn-remove-light').onclick = () => {
+            if (settings.lights.length <= 1) return;
+            settings.lights.splice(settings.selectedLightIndex, 1);
+            settings.selectedLightIndex = Math.max(0, settings.selectedLightIndex - 1);
+            updateLightSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('light-selector').onchange = (e) => {
+            settings.selectedLightIndex = parseInt(e.target.value);
+            seek(currentTime);
+        };
 
         function paintMask(e) {
             const pos = e.getLocalPosition(app.stage);
@@ -1475,38 +1669,38 @@
         });
 
         document.getElementById('toggle-light').addEventListener('change', (e) => {
-            settings.lightActive = e.target.checked;
+            settings.lights[settings.selectedLightIndex].active = e.target.checked;
             if (!isPlaying) applySettingsToCanvas();
         });
 
-        document.getElementById('light-pos-x').addEventListener('input', (e) => { settings.lightPosX = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
-        document.getElementById('light-pos-y').addEventListener('input', (e) => { settings.lightPosY = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('light-pos-x').addEventListener('input', (e) => { settings.lights[settings.selectedLightIndex].posX = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('light-pos-y').addEventListener('input', (e) => { settings.lights[settings.selectedLightIndex].posY = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
         document.getElementById('light-angle').addEventListener('input', (e) => { 
-            settings.lightAngle = parseInt(e.target.value); 
+            settings.lights[settings.selectedLightIndex].angle = parseInt(e.target.value); 
             document.getElementById('val-light-angle').innerText = settings.lightAngle;
             if(!isPlaying) applySettingsToCanvas(); 
         });
         document.getElementById('light-size').addEventListener('input', (e) => { 
-            settings.lightSize = parseFloat(e.target.value); 
+            settings.lights[settings.selectedLightIndex].size = parseFloat(e.target.value); 
             document.getElementById('val-light-size').innerText = settings.lightSize.toFixed(2);
             if(!isPlaying) applySettingsToCanvas(); 
         });
         document.getElementById('light-spread').addEventListener('input', (e) => { 
-            settings.lightSpread = parseFloat(e.target.value); 
+            settings.lights[settings.selectedLightIndex].spread = parseFloat(e.target.value); 
             document.getElementById('val-light-spread').innerText = settings.lightSpread.toFixed(2);
             if(!isPlaying) applySettingsToCanvas(); 
         });
         document.getElementById('light-source').addEventListener('input', (e) => { 
-            settings.lightSource = parseFloat(e.target.value); 
+            settings.lights[settings.selectedLightIndex].source = parseFloat(e.target.value); 
             document.getElementById('val-light-source').innerText = settings.lightSource.toFixed(2);
             if(!isPlaying) applySettingsToCanvas(); 
         });
         document.getElementById('light-flicker').addEventListener('input', (e) => { 
-            settings.lightFlicker = parseFloat(e.target.value); 
+            settings.lights[settings.selectedLightIndex].flicker = parseFloat(e.target.value); 
             document.getElementById('val-light-flicker').innerText = settings.lightFlicker.toFixed(2);
             if(!isPlaying) applySettingsToCanvas(); 
         });
-        document.getElementById('light-color').addEventListener('input', (e) => { settings.lightColor = e.target.value; if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('light-color').addEventListener('input', (e) => { settings.lights[settings.selectedLightIndex].color = e.target.value; if(!isPlaying) applySettingsToCanvas(); });
 
         document.getElementById('global-light-intensity').addEventListener('input', (e) => {
             settings.globalLightIntensity = parseFloat(e.target.value);
@@ -1519,19 +1713,32 @@
             if (!isPlaying) applySettingsToCanvas();
         });
 
+        document.getElementById('fire-pos-x').addEventListener('input', (e) => { settings.fires[settings.selectedFireIndex].posX = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('fire-pos-y').addEventListener('input', (e) => { settings.fires[settings.selectedFireIndex].posY = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('fire-size').addEventListener('input', (e) => { 
+            settings.fires[settings.selectedFireIndex].size = parseFloat(e.target.value); 
+            document.getElementById('val-fire-size').innerText = settings.fires[settings.selectedFireIndex].size.toFixed(1);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('fire-intensity').addEventListener('input', (e) => { 
+            settings.fires[settings.selectedFireIndex].intensity = parseFloat(e.target.value); 
+            document.getElementById('val-fire-int').innerText = settings.fires[settings.selectedFireIndex].intensity.toFixed(1);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+
+        document.getElementById('btn-kf-fire').addEventListener('click', () => {
+            addKeyframe({
+                type: 'fire',
+                time: currentTime,
+                fires: JSON.parse(JSON.stringify(settings.fires))
+            });
+        });
+
         document.getElementById('btn-kf-light').addEventListener('click', () => {
             addKeyframe({
                 type: 'light',
                 time: currentTime,
-                lightActive: document.getElementById('toggle-light').checked,
-                lightPosX: settings.lightPosX,
-                lightPosY: settings.lightPosY,
-                lightAngle: settings.lightAngle,
-                lightSize: settings.lightSize,
-                lightSpread: settings.lightSpread,
-                lightSource: settings.lightSource,
-                lightFlicker: settings.lightFlicker,
-                lightColor: settings.lightColor
+                lights: JSON.parse(JSON.stringify(settings.lights)) // Captura o estado de todas as luzes
             });
         });
 
@@ -1786,7 +1993,7 @@
                 'shake': 'Camera Shake',
                 'impact': 'Impacto na Água',
                 'color': 'Correção de Cor',
-                'light': 'Iluminação Dinâmica',
+                'light': 'Iluminação',
                 'globalLight': 'Iluminar Imagem',
                 'vignette': 'Vinheta',
                 'vapor': 'Fumaça / Neblina'
@@ -1855,6 +2062,46 @@
 
             for (let i = 0; i < kfs.length - 1; i++) {
                 if (time >= kfs[i].time && time <= kfs[i+1].time) {
+                    if (type === 'fire' && prop === 'fires') {
+                        const f0 = kfs[i].fires;
+                        const f1 = kfs[i+1].fires;
+                        const ratio = (time - kfs[i].time) / (kfs[i+1].time - kfs[i].time);
+                        return f1.map((fire1, idx) => {
+                            const fire0 = f0[idx] || fire1;
+                            return {
+                                posX: fire0.posX + (fire1.posX - fire0.posX) * ratio,
+                                posY: fire0.posY + (fire1.posY - fire0.posY) * ratio,
+                                size: fire0.size + (fire1.size - fire0.size) * ratio,
+                                intensity: fire0.intensity + (fire1.intensity - fire0.intensity) * ratio
+                            };
+                        });
+                    }
+
+                    if (type === 'light' && prop === 'lights') {
+                        const l0 = kfs[i].lights;
+                        const l1 = kfs[i+1].lights;
+                        const ratio = (time - kfs[i].time) / (kfs[i+1].time - kfs[i].time);
+                        
+                        return l1.map((light1, idx) => {
+                            const light0 = l0[idx] || light1; // Fallback se a luz não existia no KF anterior
+                            const toHex = (n) => Math.round(n * 255).toString(16).padStart(2, '0');
+                            const c0 = hexToRgb(light0.color);
+                            const c1 = hexToRgb(light1.color);
+                            
+                            return {
+                                active: light0.active,
+                                posX: light0.posX + (light1.posX - light0.posX) * ratio,
+                                posY: light0.posY + (light1.posY - light0.posY) * ratio,
+                                angle: light0.angle + (light1.angle - light0.angle) * ratio,
+                                size: light0.size + (light1.size - light0.size) * ratio,
+                                spread: light0.spread + (light1.spread - light0.spread) * ratio,
+                                source: light0.source + (light1.source - light0.source) * ratio,
+                                flicker: light0.flicker + (light1.flicker - light0.flicker) * ratio,
+                                color: `#${toHex(c0[0] + (c1[0]-c0[0])*ratio)}${toHex(c0[1] + (c1[1]-c0[1])*ratio)}${toHex(c0[2] + (c1[2]-c0[2])*ratio)}`
+                            };
+                        });
+                    }
+
                     const t0 = kfs[i].time; 
                     const t1 = kfs[i+1].time;
                     const v0 = kfs[i][prop];
@@ -2006,11 +2253,11 @@
             }
 
             // Aplica Vaporização
-            // O shader espera que uTime suba de 0 a N ciclos inteiros para loopar a textura
-            const vaporCycles = Math.max(1, Math.floor(settings.vaporSpeed * duration * 0.5));
+            // Garantimos que o deslocamento final seja um múltiplo de 4.0 para o loop do ruído ser perfeito
+            const vaporCycles = Math.max(1, Math.round(settings.vaporSpeed * duration * 0.1));
             
             vaporFilter.uniforms.uThreshold = settings.vaporProgress;
-            vaporFilter.uniforms.uTime = (animTime / duration) * (vaporCycles * 5.0);
+            vaporFilter.uniforms.uTime = (animTime / duration) * (vaporCycles * 4.0);
             vaporFilter.uniforms.uDuration = duration;
             vaporFilter.uniforms.uSpeed = settings.vaporSpeed;
             vaporFilter.uniforms.uColor = hexToRgb(settings.vaporColor);
@@ -2042,23 +2289,42 @@
                 vignetteFilter.enabled = false;
             }
 
-            // Aplica Iluminação Dinâmica
-            if (settings.lightActive) {
-                lightFilter.uniforms.uPos = [settings.lightPosX, settings.lightPosY];
-                lightFilter.uniforms.uAngle = settings.lightAngle;
-                lightFilter.uniforms.uSize = settings.lightSize;
-                lightFilter.uniforms.uSpread = settings.lightSpread;
-                lightFilter.uniforms.uSourceSize = settings.lightSource;
-                
-                // Normaliza o tempo do flicker para loopar conforme a duração
-                lightFilter.uniforms.uTime = animTime / duration; 
-                
-                lightFilter.uniforms.uFlicker = settings.lightFlicker;
-                lightFilter.uniforms.uColor = hexToRgb(settings.lightColor);
-                lightFilter.enabled = true;
-            } else {
-                lightFilter.enabled = false;
+            // Aplica Fogo Procedural
+            while (fireFilters.length < settings.fires.length) {
+                fireFilters.push(new PIXI.Filter(null, fireShader, {
+                    uNoise: fireNoiseTex, uPos: [0.5, 0.5], uSize: 1.0, uIntensity: 1.0, uTime: 0
+                }));
             }
+            settings.fires.forEach((fire, i) => {
+                const f = fireFilters[i];
+                f.uniforms.uPos = [fire.posX, fire.posY];
+                f.uniforms.uSize = fire.size * 0.3; // Aumentado para o slider ter mais impacto
+                f.uniforms.uIntensity = fire.intensity;
+                f.uniforms.uTime = animTime;
+            });
+
+            // Aplica Iluminação Dinâmica (Múltiplas Luzes)
+            while (lightFilters.length < settings.lights.length) {
+                lightFilters.push(new PIXI.Filter(null, lightShader, {
+                    uPos: [0.5, 0.2], uAngle: 90, uSize: 0.5, uSpread: 0.5, 
+                    uSourceSize: 0, uTime: 0, uFlicker: 0, uColor: [1, 1, 1]
+                }));
+            }
+
+            settings.lights.forEach((l, i) => {
+                const f = lightFilters[i];
+                if (l.active) {
+                    f.uniforms.uPos = [l.posX, l.posY];
+                    f.uniforms.uAngle = l.angle;
+                    f.uniforms.uSize = l.size;
+                    f.uniforms.uSpread = l.spread;
+                    f.uniforms.uSourceSize = l.source;
+                    f.uniforms.uTime = animTime / duration; 
+                    f.uniforms.uFlicker = l.flicker;
+                    f.uniforms.uColor = hexToRgb(l.color);
+                }
+            });
+            updateFiltersArray();
 
             // Aplica Iluminação Global
             globalLightFilter.uniforms.uIntensity = settings.globalLightIntensity;
@@ -2099,15 +2365,8 @@
             settings.contrast = getInterpolatedValue(time, 'contrast', 'color');
             settings.whiteLevel = getInterpolatedValue(time, 'whiteLevel', 'color');
             settings.blackLevel = getInterpolatedValue(time, 'blackLevel', 'color');
-            settings.lightActive = getInterpolatedValue(time, 'lightActive', 'light');
-            settings.lightPosX = getInterpolatedValue(time, 'lightPosX', 'light');
-            settings.lightPosY = getInterpolatedValue(time, 'lightPosY', 'light');
-            settings.lightAngle = getInterpolatedValue(time, 'lightAngle', 'light');
-            settings.lightSize = getInterpolatedValue(time, 'lightSize', 'light');
-            settings.lightSpread = getInterpolatedValue(time, 'lightSpread', 'light');
-            settings.lightSource = getInterpolatedValue(time, 'lightSource', 'light');
-            settings.lightFlicker = getInterpolatedValue(time, 'lightFlicker', 'light');
-            settings.lightColor = getInterpolatedValue(time, 'lightColor', 'light');
+            settings.lights = getInterpolatedValue(time, 'lights', 'light');
+            settings.fires = getInterpolatedValue(time, 'fires', 'fire');
             settings.globalLightIntensity = getInterpolatedValue(time, 'globalLightIntensity', 'globalLight');
             settings.globalLightColor = getInterpolatedValue(time, 'globalLightColor', 'globalLight');
             settings.windStrength = getInterpolatedValue(time, 'windStrength', 'wind');
@@ -2117,6 +2376,8 @@
 
             // OTIMIZAÇÃO: Não atualizar inputs da UI durante o play para não travar a linha do tempo
             if (updateUI && !isPlaying) {
+                const curF = settings.fires[settings.selectedFireIndex];
+                const curL = settings.lights[settings.selectedLightIndex] || settings.lights[0];
                 document.getElementById('toggle-ripple').checked = settings.rippleActive;
                 document.getElementById('ripple-strength').value = settings.rippleStrength;
                 document.getElementById('val-ripple-strength').innerText = Math.round(settings.rippleStrength);
@@ -2156,24 +2417,32 @@
                 document.getElementById('val-vignette-size').innerText = settings.vignetteSize.toFixed(2);
                 document.getElementById('contrast').value = settings.contrast;
                 document.getElementById('val-contrast').innerText = settings.contrast.toFixed(2);
+                if (curF) {
+                    document.getElementById('fire-pos-x').value = curF.posX;
+                    document.getElementById('fire-pos-y').value = curF.posY;
+                    document.getElementById('fire-size').value = curF.size;
+                    document.getElementById('val-fire-size').innerText = curF.size.toFixed(1);
+                    document.getElementById('fire-intensity').value = curF.intensity;
+                    document.getElementById('val-fire-int').innerText = curF.intensity.toFixed(1);
+                }
                 document.getElementById('white-level').value = settings.whiteLevel;
                 document.getElementById('val-white').innerText = settings.whiteLevel.toFixed(2);
                 document.getElementById('black-level').value = settings.blackLevel;
                 document.getElementById('val-black').innerText = settings.blackLevel.toFixed(2);
-                document.getElementById('toggle-light').checked = settings.lightActive;
-                document.getElementById('light-pos-x').value = settings.lightPosX;
-                document.getElementById('light-pos-y').value = settings.lightPosY;
-                document.getElementById('light-angle').value = settings.lightAngle;
-                document.getElementById('val-light-angle').innerText = Math.round(settings.lightAngle);
-                document.getElementById('light-size').value = settings.lightSize;
-                document.getElementById('val-light-size').innerText = settings.lightSize.toFixed(2);
-                document.getElementById('light-spread').value = settings.lightSpread;
-                document.getElementById('val-light-spread').innerText = settings.lightSpread.toFixed(2);
-                document.getElementById('light-source').value = settings.lightSource;
-                document.getElementById('val-light-source').innerText = settings.lightSource.toFixed(2);
-                document.getElementById('light-flicker').value = settings.lightFlicker;
-                document.getElementById('val-light-flicker').innerText = settings.lightFlicker.toFixed(2);
-                document.getElementById('light-color').value = settings.lightColor;
+                document.getElementById('toggle-light').checked = curL.active;
+                document.getElementById('light-pos-x').value = curL.posX;
+                document.getElementById('light-pos-y').value = curL.posY;
+                document.getElementById('light-angle').value = curL.angle;
+                document.getElementById('val-light-angle').innerText = Math.round(curL.angle);
+                document.getElementById('light-size').value = curL.size;
+                document.getElementById('val-light-size').innerText = curL.size.toFixed(2);
+                document.getElementById('light-spread').value = curL.spread;
+                document.getElementById('val-light-spread').innerText = curL.spread.toFixed(2);
+                document.getElementById('light-source').value = curL.source;
+                document.getElementById('val-light-source').innerText = curL.source.toFixed(2);
+                document.getElementById('light-flicker').value = curL.flicker;
+                document.getElementById('val-light-flicker').innerText = curL.flicker.toFixed(2);
+                document.getElementById('light-color').value = curL.color;
                 document.getElementById('global-light-intensity').value = settings.globalLightIntensity;
                 document.getElementById('val-global-light-intensity').innerText = settings.globalLightIntensity.toFixed(1);
                 document.getElementById('global-light-color').value = settings.globalLightColor;
