@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Feather 3D Clone - Mecânica Real</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: rgba(30, 30, 30, 0.75);
+            --panel-border: rgba(255, 255, 255, 0.15);
+            --accent: #0A84FF;
+            --text-main: #FFFFFF;
+            --text-muted: #8E8E93;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+        }
+
+        #canvas-container:active { cursor: grabbing; }
+
+        .glass-panel {
+            position: absolute;
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--panel-border);
+            border-radius: 18px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            color: var(--text-main);
+            display: flex;
+            z-index: 10;
+        }
+
+        #toolbar {
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .tool-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            border: none;
+            background: transparent;
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .tool-btn svg { width: 24px; height: 24px; fill: currentColor; }
+        .tool-btn:hover:not(.active) { background: rgba(255, 255, 255, 0.1); }
+        .tool-btn.active {
+            background: var(--accent);
+            box-shadow: 0 4px 15px rgba(10, 132, 255, 0.4);
+        }
+
+        #size-panel {
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 20px 10px;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .vertical-slider-wrapper {
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            outline: none;
+        }
+
+        .slider-v {
+            width: 150px;
+            height: 6px;
+            transform: rotate(-90deg);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        #size-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+
+        #actions-panel {
+            right: 20px;
+            top: 150px;
+            flex-direction: column;
+            padding: 12px;
+            gap: 15px;
+            align-items: center;
+        }
+
+        #view-gizmo {
+            right: 20px;
+            top: 20px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+        }
+
+        .view-btn {
+            width: 52px;
+            height: 32px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            color: white;
+            font-size: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: uppercase;
+        }
+
+        .view-btn:hover { background: var(--accent); }
+
+        .action-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            padding: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+            width: 100%;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .action-btn:hover { background: rgba(255,255,255,0.2); }
+        .action-btn.danger:hover { background: #FF3B30; }
+
+        #color-swatch {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.8);
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            background-color: #ffffff;
+            transition: transform 0.2s;
+        }
+        
+        #color-swatch:hover { transform: scale(1.05); }
+
+        #color-picker-container {
+            position: absolute;
+            right: 80px;
+            top: 30px;
+            display: none;
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 15px;
+            border-radius: 20px;
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        #view-helper {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="view-helper">MODO CÂMERA (Toque em Desenhar para começar)</div>
+
+    <!-- UI: Seletor de Vistas (Gizmo) -->
+    <div id="view-gizmo" class="glass-panel">
+        <button class="view-btn" data-view="top">Cima</button>
+        <button class="view-btn" data-view="front">Frente</button>
+        <button class="view-btn" data-view="right">Direita</button>
+        <button class="view-btn" data-view="bottom">Baixo</button>
+        <button class="view-btn" data-view="back">Trás</button>
+        <button class="view-btn" data-view="left">Esquerda</button>
+    </div>
+
+    <!-- UI: Tamanho do Pincel -->
+    <div id="size-panel" class="glass-panel">
+        <span id="size-label">0.50</span>
+        <div class="vertical-slider-wrapper">
+            <input type="range" id="size-slider" class="slider-v" min="0.1" max="3.0" step="0.1" value="0.5">
+        </div>
+    </div>
+
+    <!-- UI: Ferramentas -->
+    <div id="toolbar" class="glass-panel">
+        <button id="camera-btn" class="tool-btn active" title="Câmera">
+            <svg viewBox="0 0 24 24"><path d="M21 10.5V9.5C21 8.12 19.88 7 18.5 7C18.2 7 17.92 7.05 17.66 7.14C17.27 5.89 16.09 5 14.67 5C14.33 5 14.01 5.06 13.72 5.17C13.27 3.89 12.06 3 10.67 3C9.19 3 8 4.19 8 5.67V6.15C7.68 6.05 7.35 6 7 6C5.34 6 4 7.34 4 9V14C4 17.87 7.13 21 11 21H13C17.42 21 21 17.42 21 13V10.5ZM19 13C19 16.31 16.31 19 13 19H11C8.24 19 6 16.76 6 14V9C6 8.45 6.45 8 7 8C7.55 8 8 8.45 8 9V12H10V5.67C10 5.3 10.3 5 10.67 5C11.04 5 11.33 5.3 11.33 5.67V12H13.33V7C13.33 6.63 13.63 6.33 14 6.33C14.37 6.33 14.67 6.63 14.67 7V12H16.67V9.5C16.67 9.13 16.97 8.83 17.33 8.83C17.7 8.83 18 9.13 18 9.5V10.5C18 11.33 18.67 12 19 12V13Z"/></svg>
+        </button>
+        <button id="draw-btn" class="tool-btn" title="Desenhar">
+            <svg viewBox="0 0 24 24"><path d="M3 17.25V21H6.75L17.81 9.94L14.06 6.19L3 17.25ZM20.71 7.04C21.1 6.65 21.1 6.02 20.71 5.63L18.37 3.29C17.98 2.9 17.35 2.9 16.96 3.29L15.13 5.12L18.88 8.87L20.71 7.04Z"/></svg>
+        </button>
+        <button id="erase-btn" class="tool-btn" title="Borracha">
+            <svg viewBox="0 0 24 24"><path d="M15.14 3C14.63 3 14.12 3.2 13.73 3.59L2.59 14.73C1.81 15.51 1.81 16.78 2.59 17.56L5.03 20H1V22H10.66L21.41 11.24C22.2 10.46 22.2 9.19 21.41 8.41L16.56 3.56C16.17 3.17 15.65 3 15.14 3ZM15.14 5L19.29 9.15L15.68 12.76L11.53 8.61L15.14 5ZM9.41 10.73L13.56 14.88L8.62 19.82H5.73L3.6 17.69L9.41 10.73Z"/></svg>
+        </button>
+    </div>
+
+    <!-- UI: Ações -->
+    <div id="actions-panel" class="glass-panel">
+        <div id="color-swatch"></div>
+        <div style="width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 5px 0;"></div>
+        <button id="undo-btn" class="action-btn" title="Desfazer">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8C9.85 8 7.45 8.99 5.6 10.6L2 7V16H11L7.38 12.38C8.77 11.22 10.54 10.5 12.5 10.5C16.04 10.5 19.05 12.81 20.1 16L22.47 15.22C21.08 11.03 17.15 8 12.5 8Z"/></svg>
+        </button>
+        <button id="grid-toggle-btn" class="action-btn" title="Mostrar/Esconder Grade">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="currentColor"><path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/></svg>
+        </button>
+        <button id="export-btn" class="action-btn" title="Exportar OBJ">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="currentColor"><path d="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z"/></svg>
+        </button>
+        <button id="screenshot-btn" class="action-btn" title="Tirar Foto PNG">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="currentColor"><path d="M4,4H7L9,2H15L17,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M12,7A5,5 0 0,0 7,12A5,5 0 0,0 12,17A5,5 0 0,0 17,12A5,5 0 0,0 12,7M12,9A3,3 0 0,1 15,12A3,3 0 0,1 12,15A3,3 0 0,1 9,12A3,3 0 0,1 12,9Z"/></svg>
+        </button>
+        <button id="clear-btn" class="action-btn danger" title="Limpar Cena">
+            <svg style="width:16px; height:16px;" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19C6 20.1 6.9 21 8 21H16C17.1 21 18 20.1 18 19V7H6V19ZM19 4H15.5L14.5 3H9.5L8.5 4H5V6H19V4Z"/></svg>
+        </button>
+    </div>
+
+    <div id="color-picker-container">
+        <div id="iro-picker"></div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <!-- Bibliotecas Necessárias -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Utilitário essencial para otimizar os traços sem lag -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/OBJExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
+
+    <script>
+        // CONFIGURAÇÃO CORE
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#1a1a1a');
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(20, 20, 50); // Posição diagonal inicial para mostrar que é 3D
+        // Ajustamos para uma posição inicial frontal e definimos o 'up' explicitamente.
+        // Isso garante que a rotação horizontal e vertical seja feita em relação aos eixos globais.
+        camera.position.set(0, 0, 70); 
+        camera.up.set(0, 1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // CONTROLES DE CÂMERA
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true; // Permite arrastar para os lados/cima/baixo na tela (Estilo Pan do PC)
+        controls.enablePan = true;
+        controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        controls.update();
+
+        // ILUMINAÇÃO "ARGILA"
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // ==========================================
+        // PLANO DE TRABALHO FIXO (O SEGREDO DO 3D)
+        // ==========================================
+        // Malha invisível que recebe a colisão do mouse
+        const workingPlaneGeom = new THREE.PlaneGeometry(200, 200);
+        const workingPlaneMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+        const workingPlane = new THREE.Mesh(workingPlaneGeom, workingPlaneMat);
+        // Colocando o plano em pé (Eixo XY) como um quadro na vida real
+        // workingPlane.rotation.x = 0; -> por padrão o PlaneGeometry já é no eixo XY
+        scene.add(workingPlane);
+
+        // Grade visual para você se orientar no espaço
+        const gridHelper = new THREE.GridHelper(100, 50, 0x0A84FF, 0x444444);
+        gridHelper.rotation.x = Math.PI / 2; // Em pé acompanhando o workingPlane
+        scene.add(gridHelper);
+
+
+        // ESTADO E TOQUE
+        let currentMode = 'camera';
+        let isDrawing = false;
+        let brushSize = 0.5;
+        let brushColor = "#ffffff";
+        let allLines = []; // Array principal que guarda os traços finais
+        let activePointers = new Set(); // Rastreia múltiplos dedos
+        
+        // Variáveis de controle de profundidade (Estilo Feather)
+        let strokePlane = new THREE.Plane();
+        let intersectionPoint = new THREE.Vector3();
+
+        // Pincel Variáveis
+        let currentPressure = 1.0;
+        let currentStrokeGroup = null;
+        let lastPoint = null;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // UI SETUP
+        const viewHelperTxt = document.getElementById('view-helper');
+        
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(mode + '-btn').classList.add('active');
+
+            // Mantemos os controles sempre ativos para permitir Pan/Zoom com 2 dedos em qualquer modo
+            controls.enabled = true;
+
+            if (mode === 'camera') {
+                controls.enableRotate = true;
+                container.style.cursor = 'grab';
+                viewHelperTxt.textContent = "MODO CÂMERA (1 dedo: Girar | 2 dedos: Pan/Zoom)";
+                viewHelperTxt.style.color = "var(--text-muted)";
+            } else {
+                controls.enableRotate = false; // Bloqueia rotação para não estragar o traço
+                if (mode === 'draw') {
+                    container.style.cursor = 'crosshair';
+                    viewHelperTxt.textContent = "MODO DESENHO (1 dedo: Desenha | 2 dedos: Pan/Zoom)";
+                    viewHelperTxt.style.color = "var(--accent)";
+                } else {
+                    container.style.cursor = 'cell';
+                    viewHelperTxt.textContent = "MODO BORRACHA (1 dedo: Apaga | 2 dedos: Pan/Zoom)";
+                    viewHelperTxt.style.color = "#FF3B30";
+                }
+            }
+        }
+
+        document.getElementById('draw-btn').addEventListener('click', () => setMode('draw'));
+        document.getElementById('camera-btn').addEventListener('click', () => setMode('camera'));
+        document.getElementById('erase-btn').addEventListener('click', () => setMode('erase'));
+
+        // CORES E TAMANHO
+        const colorPickerContainer = document.getElementById('color-picker-container');
+        const colorPicker = new iro.ColorPicker("#iro-picker", { width: 160, color: "#ffffff", layoutDirection: 'horizontal' });
+        
+        document.getElementById('color-swatch').addEventListener('click', (e) => {
+            colorPickerContainer.style.display = colorPickerContainer.style.display === 'block' ? 'none' : 'block';
+            e.stopPropagation();
+        });
+        document.addEventListener('click', () => colorPickerContainer.style.display = 'none');
+        colorPickerContainer.addEventListener('click', (e) => e.stopPropagation());
+
+        colorPicker.on('color:change', (color) => {
+            brushColor = color.hexString;
+            document.getElementById('color-swatch').style.backgroundColor = brushColor;
+        });
+
+        document.getElementById('size-slider').addEventListener('input', (e) => {
+            brushSize = parseFloat(e.target.value);
+            document.getElementById('size-label').textContent = brushSize.toFixed(2);
+        });
+
+        // ==========================================
+        // MOTOR DE DESENHO: INTERPOLAÇÃO RÍGIDA SÓLIDA
+        // ==========================================
+
+        function get3DPoint(clientX, clientY) {
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            // No Feather 3D, o desenho prioriza a grade (plano de trabalho)
+            // mas permite "esculpir" sobre traços existentes.
+
+            // DETECÇÃO MÁGICA: Permite desenhar EM CIMA de outras linhas ou no plano fixo!
+            const objectsToTest = [workingPlane, ...allLines];
+            const intersects = raycaster.intersectObjects(objectsToTest, true);
+
+            if (intersects.length > 0) {
+                return intersects[0].point;
+            }
+            return null;
+        }
+
+        function createBrushMaterial() {
+            return new THREE.MeshStandardMaterial({ 
+                color: brushColor,
+                roughness: 0.6,
+                metalness: 0.1
+            });
+        }
+
+        container.addEventListener('pointerdown', (e) => {
+            activePointers.add(e.pointerId);
+            
+            // Rejeição de multi-toque: Se houver mais de um dedo, não desenha
+            if (activePointers.size > 1 || currentMode === 'camera') {
+                // Se estava desenhando e entrou o segundo dedo, cancela o traço atual para não deixar pontos soltos
+                if (isDrawing && currentStrokeGroup) {
+                    scene.remove(currentStrokeGroup);
+                    currentStrokeGroup = null;
+                }
+                isDrawing = false;
+                return;
+            }
+
+            // 1. Define o ponto inicial e a PROFUNDIDADE do traço
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            // Prioriza linhas existentes, senão usa a grade
+            const intersects = raycaster.intersectObjects([...allLines, workingPlane], true);
+            if (intersects.length === 0) return;
+            
+            const startPoint = intersects[0].point;
+            currentPressure = e.pressure > 0 ? e.pressure : 1.0;
+
+            // 2. Cria um plano matemático invisível paralelo à câmera nesta profundidade
+            // Isso permite que o traço "flutue" no 3D de forma consistente
+            const normal = new THREE.Vector3();
+            camera.getWorldDirection(normal).negate(); 
+            strokePlane.setFromNormalAndCoplanarPoint(normal, startPoint);
+
+            if (currentMode === 'erase') {
+                isDrawing = true;
+                eraseStroke(e);
+                return;
+            }
+
+            isDrawing = true;
+            lastPoint = startPoint.clone();
+
+            // Grupo temporário para construir a linha enquanto arrasta o mouse
+            currentStrokeGroup = new THREE.Group();
+            scene.add(currentStrokeGroup);
+
+            // Carimba a primeira esfera arredondada na ponta
+            const mat = createBrushMaterial();
+            currentStrokeGroup.userData.material = mat; // Salva para o merge
+            const initialSize = brushSize * currentPressure;
+            const startSphere = new THREE.Mesh(new THREE.SphereGeometry(initialSize, 12, 12), mat);
+            startSphere.position.copy(startPoint);
+            currentStrokeGroup.add(startSphere);
+
+            container.setPointerCapture(e.pointerId);
+        });
+
+        container.addEventListener('pointermove', (e) => {
+            if (!isDrawing || activePointers.size > 1) return;
+
+            if (currentMode === 'erase') {
+                eraseStroke(e);
+                return;
+            }
+
+            // Usa o plano de profundidade travado no pointerdown
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            
+            if (!raycaster.ray.intersectPlane(strokePlane, intersectionPoint)) return;
+            const newPoint = intersectionPoint.clone();
+            const dist = lastPoint.distanceTo(intersectionPoint);
+            
+            // Atualiza pressão (Apple Pencil ou S-Pen)
+            currentPressure = e.pressure > 0 ? e.pressure : 1.0;
+            const dynamicSize = brushSize * currentPressure;
+
+            // O segredo do pincel Feather: Só cria geometria nova se andou o suficiente.
+            // Impede lag e tremedeira. Interpola linearmente usando um Cilindro.
+            if (dist > brushSize * 0.2) {
+                const mat = currentStrokeGroup.userData.material;
+                const prevSize = currentStrokeGroup.children.length > 0 ? currentStrokeGroup.children[currentStrokeGroup.children.length-1].geometry.parameters.radiusTop || dynamicSize : dynamicSize;
+                
+                // 1. Cria Cilindro entre os pontos (com transição de diâmetro baseada na pressão)
+                const cylinderGeom = new THREE.CylinderGeometry(dynamicSize, prevSize, dist, 10, 1, false);
+                const cylinder = new THREE.Mesh(cylinderGeom, mat);
+                
+                // Posiciona no meio entre os dois pontos
+                cylinder.position.copy(lastPoint).lerp(newPoint, 0.5);
+                // Gira para olhar para o próximo ponto
+                cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), newPoint.clone().sub(lastPoint).normalize());
+                
+                currentStrokeGroup.add(cylinder);
+
+                // 2. Cria Esfera na junta (para fazer a curva perfeita sem buracos)
+                const sphereGeom = new THREE.SphereGeometry(dynamicSize, 12, 12);
+                const sphere = new THREE.Mesh(sphereGeom, mat);
+                sphere.position.copy(newPoint);
+                currentStrokeGroup.add(sphere);
+
+                lastPoint = newPoint;
+            }
+        });
+
+        container.addEventListener('pointerup', (e) => {
+            activePointers.delete(e.pointerId);
+            
+            if (!isDrawing) return;
+            if (activePointers.size > 0) return; // Aguarda soltar todos os dedos
+            isDrawing = false;
+
+            if (currentMode === 'draw' && currentStrokeGroup && currentStrokeGroup.children.length > 0) {
+                // ==========================================
+                // OTIMIZAÇÃO EXTREMA: BAKE DO TRAÇO
+                // ==========================================
+                // Em vez de deixar milhares de esferas e cilindros pesando o navegador,
+                // fundimos tudo em UMA única malha de geometria final assim que você solta o mouse.
+                
+                currentStrokeGroup.updateMatrixWorld();
+                const geometries = [];
+                const mat = currentStrokeGroup.userData.material;
+
+                currentStrokeGroup.children.forEach(child => {
+                    const geom = child.geometry.clone();
+                    geom.applyMatrix4(child.matrixWorld);
+                    geometries.push(geom);
+                });
+
+                // Merge via BufferGeometryUtils
+                const mergedGeom = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+                const finalMesh = new THREE.Mesh(mergedGeom, mat);
+                
+                // Substitui o grupo pela malha final
+                scene.remove(currentStrokeGroup);
+                scene.add(finalMesh);
+                allLines.push(finalMesh);
+            }
+            currentStrokeGroup = null;
+        });
+
+        container.addEventListener('pointercancel', (e) => {
+            activePointers.delete(e.pointerId);
+            isDrawing = false;
+        });
+
+        // BORRACHA
+        function eraseStroke(e) {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Só testa os traços
+            const intersects = raycaster.intersectObjects(allLines, false);
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                scene.remove(object);
+                object.geometry.dispose();
+                object.material.dispose();
+                allLines = allLines.filter(line => line !== object);
+            }
+        }
+
+        // LÓGICA DE TROCA DE VISTA
+        function setView(view) {
+            // Calcula a distância atual para manter o zoom constante
+            const dist = camera.position.distanceTo(controls.target);
+            const target = controls.target.clone();
+            
+            camera.up.set(0, 1, 0); // Reset do UP padrão
+            
+            switch(view) {
+                case 'front':  camera.position.set(target.x, target.y, target.z + dist); break;
+                case 'back':   camera.position.set(target.x, target.y, target.z - dist); break;
+                case 'top':    
+                    camera.position.set(target.x, target.y + dist, target.z); 
+                    camera.up.set(0, 0, -1); // Ajuste para não "capotar" a câmera no topo
+                    break;
+                case 'bottom': 
+                    camera.position.set(target.x, target.y - dist, target.z); 
+                    camera.up.set(0, 0, 1);
+                    break;
+                case 'left':   camera.position.set(target.x - dist, target.y, target.z); break;
+                case 'right':  camera.position.set(target.x + dist, target.y, target.z); break;
+            }
+            
+            controls.update();
+        }
+
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', () => setView(btn.dataset.view));
+        });
+
+        // LIMPAR TUDO / DESFAZER
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            allLines.forEach(line => {
+                scene.remove(line);
+                line.geometry.dispose();
+                line.material.dispose();
+            });
+            allLines = [];
+        });
+
+        document.getElementById('undo-btn').addEventListener('click', () => {
+            if (allLines.length > 0) {
+                const lastLine = allLines.pop();
+                scene.remove(lastLine);
+                lastLine.geometry.dispose();
+                lastLine.material.dispose();
+            }
+        });
+
+        // FUNÇÕES DE EXPORTAÇÃO
+        function downloadFile(content, fileName, contentType) {
+            const a = document.createElement("a");
+            const file = new Blob([content], { type: contentType });
+            a.href = URL.createObjectURL(file);
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            if (allLines.length === 0) return alert("Nada para exportar!");
+            
+            const exporter = new THREE.OBJExporter();
+            // Criamos um grupo temporário apenas para exportar os traços sem a grade
+            const exportGroup = new THREE.Group();
+            allLines.forEach(line => exportGroup.add(line.clone()));
+            
+            const result = exporter.parse(exportGroup);
+            downloadFile(result, 'meu_desenho_3d.obj', 'text/plain');
+        });
+
+        // TOGGLE DA GRADE
+        document.getElementById('grid-toggle-btn').addEventListener('click', () => {
+            gridHelper.visible = !gridHelper.visible;
+        });
+
+        document.getElementById('screenshot-btn').addEventListener('click', () => {
+            // Esconde a grade temporariamente para a foto ficar limpa
+            // Salva o estado atual da grade e a esconde para a foto
+            const wasGridVisible = gridHelper.visible;
+            gridHelper.visible = false;
+            renderer.render(scene, camera);
+            
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = 'feather_3d_snapshot.png';
+            link.href = dataURL;
+            link.click();
+            
+            gridHelper.visible = true; // Mostra a grade de volta
+            gridHelper.visible = wasGridVisible; // Restaura o estado original
+        });
+
+        // RESPONSIVIDADE
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // LOOP DE RENDERIZAÇÃO
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            // LÓGICA ESTILO FEATHER 3D:
+            // Faz a grade e o plano de colisão seguirem a rotação da câmera (Billboarding).
+            // Isso permite que você desenhe sempre "de frente", criando volume ao girar.
+            workingPlane.quaternion.copy(camera.quaternion);
+            gridHelper.quaternion.copy(camera.quaternion);
+            gridHelper.rotateX(Math.PI / 2); // Ajuste para alinhar o plano XZ do GridHelper com o XY da câmera
+
+            // Mantém o plano de desenho centralizado no "alvo" da câmera (OrbitControls target)
+            workingPlane.position.copy(controls.target);
+            gridHelper.position.copy(controls.target);
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

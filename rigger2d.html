@@ -4,6 +4,7 @@
     <title>Rigger 2D</title>
     <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" rel="stylesheet">
    <script src="https://cdn.jsdelivr.net/npm/webm-muxer@3.0.1/build/webm-muxer.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         :root {
             box-sizing: border-box;
@@ -46,7 +47,8 @@
             font-family: 'Architects Daughter', cursive; 
             margin: 0;
             overflow: hidden;
-            height: 100vh; 
+            height: 100vh;
+            height: 100dvh; 
             display: flex; 
             flex-direction: column; 
             /* Otimização para Tablet */
@@ -58,15 +60,16 @@
         
         #toolbar { 
             background: var(--bg-panel); 
-            padding: 8px 16px; 
+            padding: 2px 6px; 
             display: flex; 
-            flex-wrap: wrap;
+            flex-wrap: nowrap; 
             justify-content: flex-start; 
-            gap: 12px; 
+            gap: 4px; 
             align-items: center; 
             border-bottom: 1px solid var(--border-color); 
             z-index: 10; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            overflow: visible;
         }
         
         #viewport { 
@@ -106,7 +109,7 @@
         }
 
         button { 
-            padding: 6px 14px; 
+            padding: 2px 6px; 
             cursor: pointer; 
             border: 1px solid transparent; 
             border-radius: 3px; 
@@ -114,7 +117,7 @@
             background: var(--bg-button); 
             color: var(--text-main); 
             transition: all 0.15s ease; 
-            font-size: 11px;
+            font-size: 10px;
             letter-spacing: 0.5px;
             touch-action: manipulation;
         }
@@ -125,6 +128,7 @@
         .btn-move { border-bottom: 2px solid var(--accent-blue); }
         .btn-lattice { border-bottom: 2px solid #00f3ff; }
         .btn-global { border-bottom: 2px solid var(--accent-orange); }
+        #layers-panel button.active { border-color: #00ff88; color: #00ff88; }
         .btn-cam { border-bottom: 2px solid #ffffff; }
         .btn-delete { border-bottom: 2px solid var(--accent-red); }
 
@@ -136,16 +140,16 @@
 
         #timeline-container { 
             background: var(--bg-panel); 
-            padding: 8px 16px; 
+            padding: 4px 10px; 
             border-top: 1px solid var(--border-color); 
             display: flex; 
             flex-direction: column; 
             gap: 10px;
             height: auto;
-            min-height: 200px;
+            min-height: 180px;
         }
-        .timeline-controls { display: flex; flex-direction: column; gap: 8px; }
-        .controls-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .timeline-controls { display: flex; flex-direction: row; gap: 4px; align-items: center; overflow: visible; }
+        .controls-row { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
         
         #frame-input { 
             background: #000; 
@@ -190,13 +194,20 @@
             border-radius: 4px;
             display: flex;
             flex-direction: column;
+            padding: 0;
+        }
+
+        .side-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
             padding: 12px;
+            min-height: 0;
         }
 
         .layer-item {
             background: var(--bg-button);
             border: 1px solid var(--border-color);
-            padding: 8px 12px;
             padding: 6px 8px;
             border-radius: 3px;
             margin-bottom: 8px;
@@ -333,15 +344,48 @@
             left: 0;
             margin-top: 4px;
         }
-        .dropdown-content button {
+        
+        /* Sidebar Rig Pro Integration */
+        .control-group { border-bottom: 1px solid #333; padding-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+        .control-group label { font-size: 10px; color: #00ff88; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }
+        .joy-base { width: 80px; height: 80px; border: 2px solid #00ff88; border-radius: 50%; position: relative; background: #050505; margin: 10px auto; cursor: crosshair; box-shadow: 0 0 10px rgba(0,255,136,0.15); }
+        #knob, #knobEye { width: 12px; height: 12px; background: #fff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; border: 1px solid #000; box-shadow: 0 0 5px rgba(255,255,255,0.5); }
+        #knobEye { background: #00ff88; border: 1px solid #000; }
+        .sidebar-span { font-size: 10px; color: #00ff88; display: flex; justify-content: space-between; font-weight: 500; }
+        
+        input[type="range"].green-slider { 
+            accent-color: #00ff88; 
+            background: #1a1a1a;
+            border: 1px solid #00ff88; 
+            height: 10px;
+            border-radius: 4px;
+            outline: 1px solid #ffffff;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        input[type="range"].green-slider::-webkit-slider-runnable-track {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+        
+        #layers-panel {
+            overflow-y: auto;
+            padding: 15px !important;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+         .dropdown-content button {
             background: transparent;
             border: none;
             border-radius: 0;
-            padding: 10px 14px;
+            padding: 6px 10px;
             width: 100%;
             text-align: left;
             display: block;
-            font-size: 11px;
+            font-size: 10px;
             border-bottom: 1px solid #1a1a1a;
         }
         .dropdown-content button:hover { background: #333; }
@@ -455,9 +499,10 @@
             #toolbar { gap: 6px; padding: 5px 10px; }
             button { padding: 4px 8px; font-size: 10px; }
             #layers-panel, #poses-panel { width: 200px; }
+            #timeline-container { min-height: 140px; gap: 5px; padding: 4px 8px; }
             .timeline-controls { gap: 6px; align-items: center; }
-            .controls-row { justify-content: center; width: 100%; }
-            #timeline-visual-area { height: 100px; }
+            .controls-row { justify-content: flex-start; width: 100%; flex-wrap: wrap; row-gap: 4px; }
+            #timeline-visual-area { height: 90px; }
             .track-label { width: 80px; font-size: 8px; }
         }
     </style>
@@ -507,25 +552,67 @@
 
     <div style="border-left: 1px solid var(--border-color); height: 20px; margin: 0 5px;"></div>
     <div class="label-group" style="display:flex; gap:10px; font-size:10px;">
-        <label>Fps <input type="number" id="fps-input" min="1" max="60" step="1" value="1" style="width:45px;" oninput="seek(currentFrame)"></label>
+        <label>Fps <input type="number" id="fps-input" min="1" max="24" step="1" value="1" style="width:45px;" oninput="seek(currentFrame)"></label>
     </div>
     <input type="file" id="audio-import" accept="audio/*" style="display:none" multiple onchange="importAudio(this)">
 </div>
 
 <div id="viewport">
     <div id="layers-panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
-            <span style="font-weight: bold; font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">CAMADAS</span>
-            <div style="display:flex; gap:4px;">
-                <button onclick="importLayerFromFile()" style="padding: 2px 6px; font-size: 9px; background: #222;" title="Importar">📥</button>
-                <button onclick="createFolder()" style="padding: 2px 6px; font-size: 9px; background: #222;" title="Nova Pasta">📂+</button>
+        <div class="control-group">
+            <label>Ferramentas de Face</label>
+            <div style="display:flex; gap:5px;">
+                <button id="btn-rig-head" onclick="setRigMode('head')" style="flex:1; font-size:9px;">Ajustar Cabeça</button>
+                <button id="btn-rig-exp" onclick="setRigMode('exp')" style="flex:1; font-size:9px;">Pins Face</button>
             </div>
         </div>
-        <input type="file" id="bg-upload" accept="image/*" style="display:none">
-        <div id="item-bg" class="layer-item" onclick="selectLayer('bg')">
-            Background <button class="btn-import-small" onclick="event.stopPropagation(); document.getElementById('bg-upload').click();">📁</button>
+
+        <div class="control-group">
+            <label>Cabeça (Giro 3D)</label>
+            <div class="sidebar-span">Raio Rosto</div>
+            <input type="range" id="radiusSlider" class="green-slider" min="50" max="600" value="220" oninput="updateExprVal()">
+            <div class="joy-base" id="joy"><div id="knob"></div></div>
+            <div class="sidebar-span">Inclinação</div>
+            <input type="range" id="tiltSlider" class="green-slider" min="-1" max="1" step="0.01" value="0" oninput="updateExprVal()">
         </div>
-        <div id="layers-list"></div>
+
+        <div class="control-group">
+            <label>Olhos & Olhar</label>
+            <div class="sidebar-span">Influência</div>
+            <input type="range" id="pinRadiusSlider" class="green-slider" min="1" max="150" value="45" oninput="updateExprVal()">
+            <div class="joy-base" id="joyEye"><div id="knobEye"></div></div>
+            <div class="sidebar-span">Piscar</div>
+            <input type="range" id="blinkSlider" class="green-slider" min="0" max="1" step="0.01" value="0" oninput="updateExprVal()">
+        </div>
+
+        <div class="control-group">
+            <label>Boca</label>
+            <div class="sidebar-span">Influência</div>
+            <input type="range" id="mouthRadiusSlider" class="green-slider" min="10" max="250" value="30" oninput="updateExprVal()">
+            <div class="sidebar-span">Triste / Feliz</div>
+            <input type="range" id="smileSlider" class="green-slider" min="-1.2" max="1.2" step="0.01" value="0" oninput="updateExprVal()">
+            <div class="sidebar-span">Rotação</div>
+            <input type="range" id="mouthRotSlider" class="green-slider" min="-45" max="45" step="1" value="0" oninput="updateExprVal()">
+            <div class="sidebar-span">Abertura</div>
+            <input type="range" id="openSlider" class="green-slider" min="-1.5" max="1.5" step="0.01" value="0" oninput="updateExprVal()">
+            <div class="sidebar-span">Largura</div>
+            <input type="range" id="stretchSlider" class="green-slider" min="-0.8" max="1.5" step="0.01" value="0" oninput="updateExprVal()">
+        </div>
+
+        <div class="control-group">
+            <label>Sobrancelhas</label>
+            <div class="sidebar-span">Influência</div>
+            <input type="range" id="browRadiusSlider" class="green-slider" min="5" max="150" value="15" oninput="updateExprVal()">
+            <div class="sidebar-span">Altura</div>
+            <input type="range" id="browHeightSlider" class="green-slider" min="-30" max="30" value="0" oninput="updateExprVal()">
+            <div class="sidebar-span">Inclinação</div>
+            <input type="range" id="browTiltSlider" class="green-slider" min="-1" max="1" step="0.1" value="0" oninput="updateExprVal()">
+        </div>
+        
+        <div class="control-group" style="border:none">
+            <button onclick="resetHeadRig()" style="border-color:#00ff88; color:#00ff88; width: 100%;">Resetar Face</button>
+            <div style="font-size: 8px; color: #444; margin-top: 5px;">Use 'Ajustar Cabeça' para posicionar o pivô (ponto verde).</div>
+        </div>
     </div>
 
     <div id="canvas-card">
@@ -533,14 +620,30 @@
     </div>
 
     <div id="poses-panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
-            <span style="font-size: 11px; color: var(--accent-orange); font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">POSES</span>
-            <div style="display:flex; gap:4px;">
-                <button onclick="saveCurrentPoseToList()" style="padding: 2px 6px; font-size: 9px; background: #222;">+ Salvar</button>
-                <button onclick="createPoseFolder()" style="padding: 2px 6px; font-size: 9px; background: #222;">+ Pasta</button>
+        <div class="side-section" style="border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
+                <span style="font-weight: bold; font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">CAMADAS</span>
+                <div style="display:flex; gap:4px;">
+                    <button onclick="importLayerFromFile()" style="padding: 2px 6px; font-size: 9px; background: #222;" title="Importar">📥</button>
+                    <button onclick="createFolder()" style="padding: 2px 6px; font-size: 9px; background: #222;" title="Nova Pasta">📂+</button>
+                </div>
             </div>
+            <input type="file" id="bg-upload" accept="image/*" style="display:none">
+            <div id="item-bg" class="layer-item" onclick="selectLayer('bg')">
+                Background <button class="btn-import-small" onclick="event.stopPropagation(); document.getElementById('bg-upload').click();">📁</button>
+            </div>
+            <div id="layers-list"></div>
         </div>
-        <div id="poses-list"></div>
+        <div class="side-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
+                <span style="font-size: 11px; color: var(--accent-orange); font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">POSES</span>
+                <div style="display:flex; gap:4px;">
+                    <button onclick="saveCurrentPoseToList()" style="padding: 2px 6px; font-size: 9px; background: #222;">+ Salvar</button>
+                    <button onclick="createPoseFolder()" style="padding: 2px 6px; font-size: 9px; background: #222;">+ Pasta</button>
+                </div>
+            </div>
+            <div id="poses-list"></div>
+        </div>
     </div>
 </div>
 
@@ -566,8 +669,7 @@
 <div id="timeline-container">
     <div class="timeline-controls">
         <div class="controls-row">
-            <span style="font-family: 'Architects Daughter', cursive; font-size: 14px; color: var(--text-dim); font-weight: bold; margin-right: 10px; white-space: nowrap;">Rigger 2D</span>
-            <button id="playBtn" onclick="togglePlay()" style="min-width: 100px; background: var(--bg-button);">▶ Play</button>
+            <button id="playBtn" onclick="togglePlay()" style="min-width: 80px; background: var(--bg-button);">▶ Play</button>
             <input type="file" id="asset-upload" style="display:none" accept="image/*">
             <div style="border-left: 1px solid var(--border-color); height: 20px; margin: 0 5px;"></div>
             <button onclick="stepFrame(-1)">◀ Anterior</button>
@@ -580,8 +682,7 @@
             <button onclick="stepFrame(1)">Próximo ▶</button>
             <button onclick="setKeyframe(false)" style="border-bottom: 2px solid var(--accent-orange);" title="Cria um keyframe na pose interpolada atual (Inbetween)">Keyframe</button>
             <button id="togglePinsBtn" onclick="togglePins()" style="font-size: 10px;">Ocultar Pins</button>
-        </div>
-        <div class="controls-row">
+            <div style="border-left: 1px solid var(--border-color); height: 20px; margin: 0 5px;"></div>
             <button onclick="copyPose()" style="font-size: 10px;">Copiar Pose</button>
             <button onclick="pastePose()" style="font-size: 10px;">Colar Pose</button>
             <div class="range-group">
@@ -674,7 +775,7 @@
     // Mantemos a resolução interna definida (1920x1080) para não pixelar
     const FW = 1920;
     const FH = 1080;
-    const GRID = 16; 
+    const GRID = 32; 
     
     let layers = [];
     let activeLayerIndex = -1;
@@ -707,11 +808,23 @@
     let hoveredPin = null;
     let dragTarget = null;
     let selectedAudioClip = null;
+    
+    // Variáveis FaceRig Integration
+    let rigMode = 'none';
+    let draggingJoy = null;
+    const radiusSlider = document.getElementById('radiusSlider');
+    const pinRadiusSlider = document.getElementById('pinRadiusSlider');
+    const mouthRadiusSlider = document.getElementById('mouthRadiusSlider');
+    const browRadiusSlider = document.getElementById('browRadiusSlider');
+
     let draggedAudioClip = null;
     let audioDragStartX = 0;
     let audioDragStartY = 0;
     let audioInitialStartFrame = 0;
     let audioInitialLane = 0;
+    
+    let isMouseDownOnCanvas = false;
+
     let resizingAudioClip = null;
     let resizeSide = null;
     let audioResizeStartX = 0;
@@ -801,6 +914,27 @@
         }
     }
 
+    function initFaceRigProps(l, w, h) {
+        l.headRadius = 220;
+        l.headFocus = { x: w / 2, y: h / 3 };
+        l.headRot = { x: 0, y: 0 };
+        l.eyeRot = { x: 0, y: 0 };
+        l.exprValues = {
+            blink: 0, smile: 0, stretch: 0, open: 0,
+            browH: 0, browT: 0, tilt: 0, mouthRot: 0,
+            pinRad: 45, mouthRad: 30, browRad: 15
+        };
+        l.exprPins = [
+            { x: w * 0.46, y: h * 0.32 }, // Olho Esquerdo
+            { x: w * 0.54, y: h * 0.32 }, // Olho Direito
+            { x: w * 0.5, y: h * 0.42 },  // Boca
+            { x: w * 0.43, y: h * 0.28 }, // Sobrancelha Esq Ext
+            { x: w * 0.47, y: h * 0.28 }, // Sobrancelha Esq Int
+            { x: w * 0.53, y: h * 0.28 }, // Sobrancelha Dir Int
+            { x: w * 0.57, y: h * 0.28 }  // Sobrancelha Dir Ext
+        ];
+    }
+
     function addLayer(name, imageObj) {
         // Se não estiver no primeiro frame e já existirem keyframes, importa como invisível
         const layer = {
@@ -818,6 +952,7 @@
             visible: true,
             poses: []
         };
+        initFaceRigProps(layer, imageObj.width, imageObj.height);
         layers.push(layer);
 
         // Sincroniza keyframes existentes para que conheçam a nova camada
@@ -832,14 +967,20 @@
                     z: 0,
                     parentId: null,
                     visible: !isBefore,
-                    assetIndex: 0 
+                    assetIndex: 0,
+                    exprPins: layer.exprPins.map(p => ({...p})),
+                    headRot: { x: 0, y: 0 },
+                    eyeRot: { x: 0, y: 0 },
+                    exprValues: { ...layer.exprValues },
+                    headFocus: { ...layer.headFocus },
+                    headRadius: layer.headRadius
                 });
             }
         });
 
         selectLayer(layers.length - 1);
         initMesh();
-        layer.mesh = [...mesh];
+        layer.mesh = mesh.map(m => ({...m}));
         setKeyframe(false);
     }
 
@@ -939,11 +1080,18 @@
             }
         }
 
+        initFaceRigProps(layer, imageObj.width, imageObj.height);
         keyframes.forEach(kf => {
             const isBefore = kf.frame < Math.round(currentFrame);
             kf.layerStates.push({
                 pins: [], gPos: {x:0, y:0}, gScale: 1, gRotation: 0, z: 0,
-                parentId: parentUid, visible: !isBefore, assetIndex: 0
+                parentId: parentUid, visible: !isBefore, assetIndex: 0,
+                exprPins: layer.exprPins.map(p => ({...p})),
+                headRot: { x: 0, y: 0 },
+                eyeRot: { x: 0, y: 0 },
+                exprValues: { ...layer.exprValues },
+                headFocus: { ...layer.headFocus },
+                headRadius: layer.headRadius
             });
         });
     }
@@ -1023,10 +1171,38 @@
             gPos = l.gPos || {x:0, y:0};
             gScale = l.gScale;
             gRotation = l.gRotation;
+            syncRigProUI(l);
         }
         
         updateLayersUI();
         updatePosesUI();
+    }
+
+    function syncRigProUI(l) {
+        if (!l || l.isFolder) return;
+        radiusSlider.value = l.headRadius || 220;
+        
+        const v = l.exprValues || {};
+        pinRadiusSlider.value = v.pinRad || 45;
+        mouthRadiusSlider.value = v.mouthRad || 30;
+        browRadiusSlider.value = v.browRad || 15;
+        
+        document.getElementById('blinkSlider').value = v.blink || 0;
+        document.getElementById('smileSlider').value = v.smile || 0;
+        document.getElementById('mouthRotSlider').value = v.mouthRot || 0;
+        document.getElementById('stretchSlider').value = v.stretch || 0;
+        document.getElementById('openSlider').value = v.open || 0;
+        document.getElementById('browHeightSlider').value = v.browH || 0;
+        document.getElementById('browTiltSlider').value = v.browT || 0;
+        document.getElementById('tiltSlider').value = v.tilt || 0;
+        
+        const hRot = l.headRot || {x:0, y:0};
+        const eRot = l.eyeRot || {x:0, y:0};
+        document.getElementById('knob').style.left = (hRot.x + 1) * 40 + "px";
+        document.getElementById('knob').style.top = (hRot.y + 1) * 40 + "px";
+        document.getElementById('knobEye').style.left = (eRot.x + 1) * 40 + "px";
+        document.getElementById('knobEye').style.top = (eRot.y + 1) * 40 + "px";
+        
     }
 
     function changeZoom(factor) {
@@ -1820,6 +1996,7 @@
     function setMode(m) {
         // Reset de estados de interação para evitar que o desenho "grude" ao trocar de ferramenta
         dragTarget = null;
+        rigMode = 'none';
         wasTransforming = false;
         draggedAudioClip = null;
         resizingAudioClip = null;
@@ -1847,6 +2024,13 @@
         dragTarget = null;
     }
 
+    function setRigMode(m) {
+        rigMode = (rigMode === m) ? 'none' : m;
+        document.getElementById('btn-rig-head').classList.toggle('active', rigMode === 'head');
+        document.getElementById('btn-rig-exp').classList.toggle('active', rigMode === 'exp');
+        draw();
+    }
+
     function getFps() {
         const val = parseFloat(document.getElementById('fps-input').value);
         return isNaN(val) ? 24 : Math.max(1, Math.min(60, val));
@@ -1871,7 +2055,14 @@
             z: l.z || 0,
             visible: l.visible !== false,
             parentId: l.parentId,
-            assetIndex: l.activeAssetIndex || 0
+            assetIndex: l.activeAssetIndex || 0,
+            exprPins: (l.exprPins || []).map(p => ({ x: p.x, y: p.y })),
+            headRot: { ...l.headRot },
+            eyeRot: { ...l.eyeRot },
+            exprValues: { ...l.exprValues },
+            headFocus: { ...l.headFocus },
+            headRadius: l.headRadius,
+            useHeadRig: l.useHeadRig !== false
         }));
 
         // Remove se já existir no mesmo frame
@@ -2130,6 +2321,7 @@
             l.gRotation = clipboardPose.gRotation;
             l.visible = clipboardPose.visible !== false;
             l.activeAssetIndex = clipboardPose.assetIndex || 0;
+            if (clipboardPose.exprValues) l.exprValues = { ...clipboardPose.exprValues };
 
             // Sincroniza ponteiros globais
             pins = l.pins;
@@ -2257,7 +2449,7 @@
             // Se a visibilidade mudou ou o asset (imagem) mudou, tratamos como um "Switch"
             // Nesses casos, não interpolamos a posição/deformação para evitar "fantasmas"
             const isSwitching = (l1.visible !== l2.visible || l1.assetIndex !== l2.assetIndex);
-            const it = isSwitching ? 0 : easedT;
+            const it = easedT; // Interpola sempre para garantir que o movimento do rosto não trave
 
             return {
                 pins: l1.pins.map((p1_pin, j) => {
@@ -2277,6 +2469,29 @@
                 gRotation: l1.gRotation + (l2.gRotation - l1.gRotation) * it,
                 z: (l1.z || 0) + ((l2.z || 0) - (l1.z || 0)) * it,
                 visible: l1.visible !== false,
+                exprPins: (l1.exprPins || []).map((p1, j) => {
+                    const p2 = (l2.exprPins && l2.exprPins[j]) ? l2.exprPins[j] : p1;
+                    return { x: p1.x + (p2.x - p1.x) * it, y: p1.y + (p2.y - p1.y) * it };
+                }),
+                headRot: { 
+                    x: l1.headRot.x + (l2.headRot.x - l1.headRot.x) * it, 
+                    y: l1.headRot.y + (l2.headRot.y - l1.headRot.y) * it 
+                },
+                eyeRot: { 
+                    x: (l1.eyeRot?.x || 0) + ((l2.eyeRot?.x || 0) - (l1.eyeRot?.x || 0)) * it, 
+                    y: (l1.eyeRot?.y || 0) + ((l2.eyeRot?.y || 0) - (l1.eyeRot?.y || 0)) * it 
+                },
+                exprValues: Object.keys(l1.exprValues || {
+                    blink: 0, smile: 0, stretch: 0, open: 0, browH: 0, browT: 0, tilt: 0, mouthRot: 0, pinRad: 45, mouthRad: 30, browRad: 15
+                }).reduce((acc, k) => ({ 
+                    ...acc, 
+                    [k]: l1.exprValues[k] + ((l2.exprValues[k] ?? l1.exprValues[k]) - l1.exprValues[k]) * it 
+                }), {}),
+                headRadius: (l1.headRadius || 0) + ((l2.headRadius || 0) - (l1.headRadius || 0)) * it,
+                headFocus: { 
+                    x: (l1.headFocus?.x ?? (layers[i]?.assets[0]?.img?.width / 2 || 0)) + ((l2.headFocus?.x ?? l1.headFocus?.x ?? (layers[i]?.assets[0]?.img?.width / 2 || 0)) - (l1.headFocus?.x ?? (layers[i]?.assets[0]?.img?.width / 2 || 0))) * it,
+                    y: (l1.headFocus?.y ?? (layers[i]?.assets[0]?.img?.height / 3 || 0)) + ((l2.headFocus?.y ?? l1.headFocus?.y ?? (layers[i]?.assets[0]?.img?.height / 3 || 0)) - (l1.headFocus?.y ?? (layers[i]?.assets[0]?.img?.height / 3 || 0))) * it
+                },
                 assetIndex: l1.assetIndex || 0,
                 parentId: l1.parentId
             };
@@ -2372,6 +2587,14 @@
             l.z = state.z || 0;
             l.visible = state.visible !== false;
             // Sênior Fix: Só altera o parentId se ele estiver definido no keyframe.
+            if (state.parentId !== undefined) l.parentId = state.parentId;
+            
+            l.exprPins = (state.exprPins || []).map(p => ({...p}));
+            l.headRot = { ...state.headRot };
+            l.eyeRot = { ...state.eyeRot };
+            l.exprValues = { ...state.exprValues };
+            l.headFocus = { ...state.headFocus };
+            l.headRadius = state.headRadius;
             // Isso evita que camadas "fujam" das pastas ao carregar projetos antigos.
             if (state.parentId !== undefined) l.parentId = state.parentId;
             
@@ -2391,6 +2614,7 @@
         if (activeLayerIndex !== -1 && layers[activeLayerIndex]) {
             const l = layers[activeLayerIndex];
             pins = l.pins; gPos = l.gPos; gScale = l.gScale; gRotation = l.gRotation;
+            syncRigProUI(l);
         } else if (activeLayerIndex === 'bg') {
             gPos = bgTransform.gPos; gScale = bgTransform.gScale; gRotation = bgTransform.gRotation;
         }
@@ -2798,6 +3022,12 @@
                 z: l.z || 0,
                 visible: l.visible !== false,
                 poses: l.poses || [],
+                headRadius: l.headRadius,
+                headFocus: l.headFocus,
+                headRot: l.headRot,
+                eyeRot: l.eyeRot,
+                exprValues: l.exprValues,
+                exprPins: l.exprPins,
                 type: 'image', // Always 'image' now
                 assets: (l.isFolder || !l.assets) ? [] : await Promise.all(l.assets.map(async a => ({
                     name: a.name, imgData: imageToDataURL(a.img)
@@ -2861,7 +3091,18 @@
                             z: lData.z || 0,
                             visible: lData.visible !== false,
                             poses: lData.poses || [],
-                            type: 'image'
+                            type: 'image',
+                            // Inicializa ou preserva propriedades de Rig de Face na importação
+                            headRadius: lData.headRadius || 220,
+                            headFocus: lData.headFocus ? { ...lData.headFocus } : null,
+                            headRot: lData.headRot || { x: 0, y: 0 },
+                            eyeRot: lData.eyeRot || { x: 0, y: 0 },
+                            exprValues: lData.exprValues || { 
+                                blink: 0, smile: 0, stretch: 0, open: 0, 
+                                browH: 0, browT: 0, tilt: 0, mouthRot: 0, 
+                                pinRad: 45, mouthRad: 30, browRad: 15 
+                            },
+                            exprPins: lData.exprPins || []
                         };
 
                         if (!lData.isFolder && lData.assets) {
@@ -2882,6 +3123,15 @@
                                             layer.mesh.push({ x: px, y: py, ox: px, oy: py });
                                         }
                                     }
+                                }
+                            }
+                            // Garante que pins de face existam mesmo em importações de versões antigas
+                            if (!layer.isFolder && layer.assets && layer.assets.length > 0) {
+                                const imgRef = layer.assets[0].img;
+                                if (!layer.exprPins || layer.exprPins.length === 0) {
+                                    initFaceRigProps(layer, imgRef.width, imgRef.height);
+                                } else if (!layer.headFocus || (layer.headFocus.x === 0 && layer.headFocus.y === 0)) {
+                                    layer.headFocus = { x: imgRef.width / 2, y: imgRef.height / 3 };
                                 }
                             }
                         }
@@ -2906,9 +3156,15 @@
                                 gScale: layer.gScale,
                                 gRotation: layer.gRotation,
                                 z: layer.z || 0,
-                                visible: kf.frame < currentF ? false : (lData.visible !== false),
+                            visible: kf.frame < currentF ? false : (layer.visible !== false),
                                 assetIndex: 0,
-                                parentId: layer.parentId
+                            parentId: layer.parentId,
+                            exprPins: (layer.exprPins || []).map(p => ({...p})),
+                            headRot: { ...layer.headRot },
+                            eyeRot: { ...layer.eyeRot },
+                            exprValues: { ...layer.exprValues },
+                            headFocus: { ...layer.headFocus },
+                            headRadius: layer.headRadius
                             });
                         });
                         if (layer.pins && layer.pins.length > 0) updateDeform(layer);
@@ -3198,10 +3454,26 @@ function handlePoseDrop(toIndex, toRoot = false) {
         draw();
     }
 
+    function updateExprVal() {
+        const l = layers[activeLayerIndex];
+        if (!l) return;
+        l.headRadius = parseFloat(radiusSlider.value);
+        const newVals = {
+            pinRad: parseFloat(pinRadiusSlider.value), mouthRad: parseFloat(mouthRadiusSlider.value), browRad: parseFloat(browRadiusSlider.value),
+            mouthRot: parseFloat(document.getElementById('mouthRotSlider').value),
+            blink: parseFloat(document.getElementById('blinkSlider').value), smile: parseFloat(document.getElementById('smileSlider').value),
+            stretch: parseFloat(document.getElementById('stretchSlider').value), open: parseFloat(document.getElementById('openSlider').value),
+            browH: parseFloat(document.getElementById('browHeightSlider').value), browT: parseFloat(document.getElementById('browTiltSlider').value),
+            tilt: parseFloat(document.getElementById('tiltSlider').value)
+        };
+        l.exprValues = { ...(l.exprValues || {}), ...newVals };
+        syncRigProUI(l); updateDeform(l); draw();
+        setKeyframe(false);
+    }
+
     function updateSelectedPinsRadius(val) {
         currentPinRadius = parseFloat(val);
         const currentF = Math.round(currentFrame);
-        
         if (activeLayerIndex !== -1 && activeLayerIndex !== 'bg') {
             const layer = layers[activeLayerIndex];
             // Atualiza o raio de influência para todos os pins selecionados
@@ -3227,6 +3499,18 @@ function handlePoseDrop(toIndex, toRoot = false) {
         const slider = document.getElementById('influence-slider');
         slider.value = 100;
         updateSelectedPinsRadius(100);
+    }
+
+    function resetHeadRig() {
+        const l = layers[activeLayerIndex]; if (!l) return;
+        l.headRot = {x:0, y:0}; l.eyeRot = {x:0, y:0};
+        const v = l.exprValues || { pinRad: 45, mouthRad: 30, browRad: 15 };
+        l.exprValues = { 
+            ...v, // Mantém os valores de influência (pinRad, mouthRad, browRad)
+            blink: 0, smile: 0, stretch: 0, open: 0, 
+            browH: 0, browT: 0, tilt: 0, mouthRot: 0 
+        };
+        syncRigProUI(l); updateDeform(l); draw();
     }
 
     function imageToDataURL(img) {
@@ -3314,14 +3598,97 @@ function handlePoseDrop(toIndex, toRoot = false) {
         const viewMat = new DOMMatrix();
         viewMat.translateSelf(FW/2 + camOffset.x, FH/2 + camOffset.y);
         viewMat.scaleSelf(camZoom, camZoom);
-        viewMat.translateSelf(-FW/2, -FH/2);
+         viewMat.translateSelf(-FW/2, -FH/2);
+         const m = viewMat.multiply(getGlobalMatrix()).inverse();
+         const pt = new DOMPoint(rawX, rawY).matrixTransform(m);
+         return { x: pt.x, y: pt.y };
+     }
+ 
+     // Handlers para Joysticks
+     document.getElementById('joy').onpointerdown = (e) => { 
+         e.preventDefault(); 
+         e.target.setPointerCapture(e.pointerId); 
+         draggingJoy = 'head'; 
+     };
+     document.getElementById('joyEye').onpointerdown = (e) => { 
+         e.preventDefault(); 
+         e.target.setPointerCapture(e.pointerId); 
+         draggingJoy = 'eye'; 
+     };
+ 
+     window.addEventListener('pointermove', (e) => {
+         if (draggingJoy && activeLayerIndex !== -1) {
+             const l = layers[activeLayerIndex];
+             const targetJoyId = draggingJoy === 'head' ? 'joy' : 'joyEye';
+             const targetJoy = document.getElementById(targetJoyId);
+             const rect = targetJoy.getBoundingClientRect();
+             const rx = Math.max(-1, Math.min(1, ((e.clientX - rect.left) / rect.width) * 2 - 1));
+             const ry = Math.max(-1, Math.min(1, ((e.clientY - rect.top) / rect.height) * 2 - 1));
+             
+             if (draggingJoy === 'head') {
+                 l.headRot = { x: rx, y: ry };
+                 document.getElementById('knob').style.left = (rx + 1) * 40 + "px";
+                 document.getElementById('knob').style.top = (ry + 1) * 40 + "px";
+             } else {
+                 l.eyeRot = { x: rx, y: ry };
+                 document.getElementById('knobEye').style.left = (rx + 1) * 40 + "px";
+                 document.getElementById('knobEye').style.top = (ry + 1) * 40 + "px";
+             }
+             updateDeform(l); draw();
+         }
+     });
+ 
+     window.addEventListener('pointerup', (e) => {
+         if (draggingJoy) {
+             draggingJoy = null;
+             setKeyframe(false);
+         }
+         
+         if (isMouseDownOnCanvas && rigMode !== 'none') {
+             setKeyframe(false);
+         }
+         isMouseDownOnCanvas = false;
+     });
+ 
+    let lastFrameTime = 0;
 
-        // Converte a coordenada do mouse para o espaço transformado do desenho
-        const m = viewMat.multiply(getGlobalMatrix()).inverse();
-        const pt = new DOMPoint(rawX, rawY).matrixTransform(m);
-        
-        return { x: pt.x, y: pt.y };
-    }
+    canvas.addEventListener('pointerdown', (e) => {
+        isMouseDownOnCanvas = true;
+        const l = layers[activeLayerIndex];
+        const c = getCoords(e);
+        const gMat = getGlobalMatrix();
+        const visualScale = Math.sqrt(gMat.a * gMat.a + gMat.b * gMat.b) * camZoom;
+
+        if (rigMode === 'head' && l) {
+            if (Math.hypot(l.headFocus.x - c.x, l.headFocus.y - c.y) < (60 / visualScale)) {
+                dragTarget = { type: 'headFocus' };
+            } else {
+                l.headFocus = { x: c.x, y: c.y };
+                dragTarget = { type: 'headFocus' };
+            }
+            return;
+        }
+        if (rigMode === 'exp' && l) {
+            let foundIdx = -1;
+            l.exprPins.forEach((p, i) => {
+                if (Math.hypot(p.x - c.x, p.y - c.y) < (80 / visualScale)) foundIdx = i;
+            });
+            if (foundIdx !== -1) {
+                dragTarget = { type: 'expr', index: foundIdx };
+                return;
+            }
+        }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+        if (isMouseDownOnCanvas && dragTarget) {
+             const l = layers[activeLayerIndex];
+             const c = getCoords(e);
+             if (dragTarget.type === 'headFocus') l.headFocus = { x: c.x, y: c.y };
+             else if (dragTarget.type === 'expr') l.exprPins[dragTarget.index] = { x: c.x, y: c.y };
+             updateDeform(l); draw();
+        }
+    });
 
     canvas.onpointerdown = (e) => {
         // Captura o ponteiro para que o movimento continue mesmo fora do canvas (Pro behavior)
@@ -3455,8 +3822,8 @@ function handlePoseDrop(toIndex, toRoot = false) {
         // Panning da Câmera (Botão do meio ou Alt+Click)
         if (e.buttons === 4 || (e.buttons === 1 && (e.altKey || panMode))) {
             // Divide pelo zoom para o movimento ser 1:1 com o mouse na tela
-            camOffset.x += (rawX - lastRawMousePos.x) / camZoom;
-            camOffset.y += (rawY - lastRawMousePos.y) / camZoom;
+            camOffset.x += (rawX - lastRawMousePos.x) * 2.5 / camZoom;
+            camOffset.y += (rawY - lastRawMousePos.y) * 2.5 / camZoom;
             updateViewSlidersUI();
             lastRawMousePos = { x: rawX, y: rawY };
             draw();
@@ -3674,11 +4041,84 @@ function movePinAndChildren(parent, dx, dy, visited = new Set()) {
      */
     function updateDeform(targetLayer) {
         const lPins = targetLayer ? targetLayer.pins : pins;
+        const l = targetLayer || layers[activeLayerIndex];
+        if (!l || l.isFolder || !l.mesh) return;
+
+        // --- PASS 1: FaceRig Warp ---
+        const hRad = Math.max(1, l.headRadius || 220);
+        const hRot = l.headRot || {x:0, y:0};
+        const eRot = l.eyeRot || {x:0, y:0};
+        const fHead = l.headFocus || {x: FW/2, y: FH/3};
+        const v = l.exprValues || {};
+        const exprPins = l.exprPins || [];
+
+        l.mesh.forEach(m => {
+            let tx = m.ox, ty = m.oy;
+            let maxEyeWeight = 0, blinkShift = 0, blinkExpand = 0, mouthShiftY = 0, mouthShiftX = 0, browShiftY = 0;
+            
+            exprPins.forEach((exp, idx) => {
+                let edx = m.ox - exp.x, edy = m.oy - exp.y;
+                let edist = Math.sqrt(edx*edx + edy*edy);
+                if (idx < 2 && edist < v.pinRad) {
+                    let weight = Math.pow(Math.max(0, 1 - (edist / v.pinRad)), 0.5);
+                    if (weight > maxEyeWeight) {
+                        maxEyeWeight = weight;
+                        blinkShift = (exp.y - m.oy) * v.blink * weight * 1.5;
+                        blinkExpand = (m.ox - exp.x) * v.blink * weight * 0.3;
+                    }
+                } else if (idx === 2) {
+                    let eDist = Math.sqrt(Math.pow(edx/1.8, 2) + Math.pow(edy, 2));
+                    if (eDist < v.mouthRad) {
+                        let w = Math.pow(Math.max(0, 1 - (eDist / v.mouthRad)), 0.7);
+                        if (v.mouthRot) {
+                            const angle = (v.mouthRot * Math.PI) / 180 * w;
+                            const cosA = Math.cos(angle), sinA = Math.sin(angle);
+                            const rx = tx - exp.x, ry = ty - exp.y;
+                            tx = exp.x + (rx * cosA - ry * sinA);
+                            ty = exp.y + (rx * sinA + ry * cosA);
+                        }
+                        mouthShiftY += (exp.y - m.oy) * v.open * w + (Math.pow(edx, 2) / (v.mouthRad || 1)) * 0.5 * -v.smile * w;
+                        mouthShiftX += (m.ox - exp.x) * v.stretch * w;
+                    }
+                } else if (idx >= 3 && idx <= 6 && edist < v.browRad) {
+                    let w = Math.pow(Math.max(0, 1 - (edist / v.browRad)), 0.7);
+                    browShiftY += (-v.browH) * w + ((idx === 4 || idx === 5) ? v.browT * 20 : -v.browT * 20) * w;
+                }
+            });
+
+            tx += (eRot.x * 85 * maxEyeWeight) + blinkExpand + mouthShiftX;
+            ty += (eRot.y * 60 * maxEyeWeight) + blinkShift + mouthShiftY + browShiftY;
+            
+            let dxH = tx - fHead.x, dyH = ty - fHead.y;
+            let distH = Math.sqrt(dxH*dxH + dyH*dyH);
+            let normDist = Math.min(1, distH / hRad);
+            let headInf = (normDist < 1) ? (1 - (3 * normDist ** 2 - 2 * normDist ** 3)) : 0;
+            tx += (hRot.x * 120 * headInf); 
+            ty += (hRot.y * 90 * headInf);
+
+            const tiltAngle = (v.tilt || 0) * 0.5 * headInf;
+            if (tiltAngle !== 0) {
+                const cosA = Math.cos(tiltAngle), sinA = Math.sin(tiltAngle);
+                const pivotY = fHead.y + hRad;
+                const rx = tx - fHead.x, ry = ty - pivotY;
+                tx = fHead.x + (rx * cosA - ry * sinA);
+                ty = pivotY + (rx * sinA + ry * cosA);
+            }
+            m.tx = tx; m.ty = ty; // Salva posições temporárias do FaceRig
+        });
+
+        // --- PASS 2: Body MLS Deform ---
         const lMesh = targetLayer ? targetLayer.mesh : mesh;
-        if (lPins.length < 1) return;
+        if (lPins.length < 1) {
+            lMesh.forEach(m => {
+                m.x = m.tx || m.ox;
+                m.y = m.ty || m.oy;
+            });
+            return;
+        }
 
         // MATEMÁTICA "META DRAWING" - Kernels Suaves e Preservação de Volume (Efeito Sanfonado)
-        const expoente = 1.25; // Expoente menor = influência mais espalhada e "arredondada"
+        const expoente = 2.0; // Expoente menor = influência mais espalhada e "arredondada"
         const pinsData = lPins.map(p => {
             const hasParent = p.parentId !== null && lPins[p.parentId];
             const parent = hasParent ? lPins[p.parentId] : null;
@@ -3731,12 +4171,13 @@ function movePinAndChildren(parent, dx, dy, visited = new Set()) {
             }
 
             if (sumW < 0.000001) return;
-
+            const tx = (m.tx !== undefined) ? m.tx : m.ox;
+            const ty = (m.ty !== undefined) ? m.ty : m.oy;
             let pStar = { x: 0, y: 0 }, qStar = { x: 0, y: 0 };
             for (let i = 0; i < pinsData.length; i++) {
                 const pin = pinsData[i];
                 const w = weights[i];
-
+                
                 if (pin.hasParent) {
                     const t = getProjectionFactor(m.ox, m.oy, pin.parentOx, pin.parentOy, pin.ox, pin.oy);
                     pStar.x += w * (pin.parentOx + t * (pin.ox - pin.parentOx));
@@ -3767,7 +4208,7 @@ function movePinAndChildren(parent, dx, dy, visited = new Set()) {
             const mag = Math.hypot(fr.x, fr.y) || 0.0001;
             const cos = fr.x / mag;
             const sin = fr.y / mag;
-            const diffM = { x: m.ox - pStar.x, y: m.oy - pStar.y };
+            const diffM = { x: tx - pStar.x, y: ty - pStar.y };
             m.x = qStar.x + (diffM.x * cos - diffM.y * sin);
             m.y = qStar.y + (diffM.x * sin + diffM.y * cos);
         });
@@ -3884,7 +4325,14 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
                         sumW += w;
                     });
 
-                    const pinZ = (l.z || 0) + (sumW > 0 ? (sumZ / sumW) : 0);
+                    // FaceRig Depth Boost
+                    const fHead = l.headFocus || { x: FW / 2, y: FH / 3 };
+                    const hRad = Math.max(1, l.headRadius || 220);
+                    const dxH = centerX - fHead.x, dyH = centerY - fHead.y;
+                    const distH = Math.sqrt(dxH * dxH + dyH * dyH);
+                    const headInf = (distH < hRad) ? (1 + (1 - distH / hRad) * 0.1) : 0;
+
+                    const pinZ = (l.z || 0) + (sumW > 0 ? (sumZ / sumW) : 0) + headInf;
                     allTriangles.push({ tri, z: (pinZ * 1000) + idx, gMat: finalGMat, img: currentImg, refImg });
                 });
             }
@@ -3935,6 +4383,59 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
     function drawUI(lPins, gMat, targetCtx = ctx, isMedia = false, width = 0, height = 0) {
         targetCtx.save();
         targetCtx.setTransform(gMat);
+
+        // --- FaceRig Guides Integration ---
+        const l = (activeLayerIndex !== -1 && activeLayerIndex !== 'bg') ? layers[activeLayerIndex] : null;
+        if (l && !l.isFolder) {
+            const s = Math.sqrt(gMat.a * gMat.a + gMat.b * gMat.b);
+            if (rigMode === 'head' && showPins) {
+                targetCtx.beginPath();
+                targetCtx.arc(l.headFocus.x, l.headFocus.y, l.headRadius, 0, Math.PI*2);
+                targetCtx.strokeStyle = "#00ff88"; targetCtx.lineWidth = 4 / s; targetCtx.stroke();
+                targetCtx.fillStyle = "#00ff88"; targetCtx.beginPath(); targetCtx.arc(l.headFocus.x, l.headFocus.y, 5/s, 0, 7); targetCtx.fill();
+            }
+            if ((rigMode === 'exp' || rigMode === 'head') && showPins) {
+                const labels = ["OLHO 1", "OLHO 2", "BOCA", "SOMB 1A", "SOMB 1B", "SOMB 2A", "SOMB 2B"];
+                const v = l.exprValues || { pinRad: 45, mouthRad: 30, browRad: 15 };
+                
+                // Visual Boca
+                if (l.exprPins && l.exprPins.length >= 3) {
+                    const m = l.exprPins[2], mWidth = 45 * (1 + (v.stretch || 0)), mSmile = (v.smile || 0) * 45;
+                    targetCtx.save();
+                    targetCtx.translate(m.x, m.y);
+                    targetCtx.rotate((v.mouthRot || 0) * Math.PI / 180);
+                    targetCtx.beginPath(); targetCtx.lineWidth = 3 / s; targetCtx.strokeStyle = "#00ff88";
+                    targetCtx.moveTo(-mWidth, 0); targetCtx.bezierCurveTo(-mWidth/2, mSmile, mWidth/2, mSmile, mWidth, 0);
+                    targetCtx.stroke();
+                    targetCtx.restore();
+                }
+                // Visual Sobrancelhas
+                targetCtx.lineWidth = 3 / s; targetCtx.strokeStyle = "#00ff88";
+                if (l.exprPins && l.exprPins.length >= 5) {
+                    targetCtx.beginPath(); targetCtx.moveTo(l.exprPins[3].x, l.exprPins[3].y); targetCtx.lineTo(l.exprPins[4].x, l.exprPins[4].y); targetCtx.stroke();
+                }
+                if (l.exprPins && l.exprPins.length >= 7) {
+                    targetCtx.beginPath(); targetCtx.moveTo(l.exprPins[5].x, l.exprPins[5].y); targetCtx.lineTo(l.exprPins[6].x, l.exprPins[6].y); targetCtx.stroke();
+                }
+                // Pins Face
+                if (l.exprPins) l.exprPins.forEach((p, i) => {
+                    let infRad = (i < 2) ? v.pinRad : (i === 2 ? v.mouthRad : v.browRad);
+                    let color = "#00ff88";
+
+                    targetCtx.beginPath();
+                    targetCtx.arc(p.x, p.y, (infRad || 10), 0, Math.PI * 2);
+                    targetCtx.strokeStyle = color; targetCtx.lineWidth = 2 / s; targetCtx.stroke();
+
+                    targetCtx.fillStyle = color;
+                    targetCtx.beginPath(); targetCtx.arc(p.x, p.y, 5 / s, 0, 7); targetCtx.fill();
+                    targetCtx.strokeStyle = "white"; targetCtx.lineWidth = 1 / s; targetCtx.stroke();
+                    targetCtx.font = `bold ${Math.round(10/s)}px Arial`;
+                    targetCtx.fillStyle = "white"; targetCtx.textAlign = "center";
+                    targetCtx.fillText(labels[i] || "PIN", p.x, p.y - (12 / s));
+                });
+            }
+        }
+
 
         // --- NOVA RENDERIZAÇÃO DE OSSOS (ESTILO META AI / CURVAS SUAVES) ---
         lPins.forEach(p => {
