@@ -126,7 +126,7 @@
         
         .btn-add { border-bottom: 2px solid var(--accent-green); }
         .btn-move { border-bottom: 2px solid var(--accent-blue); }
-        .btn-lattice { border-bottom: 2px solid #00f3ff; }
+        .btn-lattice { border-bottom: 2px solid #ffffff; }
         .btn-global { border-bottom: 2px solid var(--accent-orange); }
         #layers-panel button.active { border-color: #00ff88; color: #00ff88; }
         .btn-cam { border-bottom: 2px solid #ffffff; }
@@ -225,8 +225,8 @@
         }
 
         .layer-item.dragging { opacity: 0.4; border: 1px dashed var(--accent-blue); transform: scale(0.98); }
-        #layers-list::-webkit-scrollbar { width: 4px; }
-        #layers-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        #layers-list::-webkit-scrollbar, #poses-list::-webkit-scrollbar { width: 4px; }
+        #layers-list::-webkit-scrollbar-thumb, #poses-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 
         .rename-input {
             background: #000;
@@ -348,7 +348,7 @@
         /* Sidebar Rig Pro Integration */
         .control-group { border-bottom: 1px solid #333; padding-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
         .control-group label { font-size: 10px; color: #00ff88; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }
-        .joy-base { width: 80px; height: 80px; border: 2px solid #00ff88; border-radius: 50%; position: relative; background: #050505; margin: 10px auto; cursor: crosshair; box-shadow: 0 0 10px rgba(0,255,136,0.15); }
+        .joy-base { width: 80px; height: 80px; border: 2px solid #00ff88; border-radius: 50%; position: relative; background: #050505; margin: 10px auto; cursor: crosshair; box-shadow: 0 0 10px rgba(0,255,136,0.15); touch-action: none; }
         #knob, #knobEye { width: 12px; height: 12px; background: #fff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; border: 1px solid #000; box-shadow: 0 0 5px rgba(255,255,255,0.5); }
         #knobEye { background: #00ff88; border: 1px solid #000; }
         .sidebar-span { font-size: 10px; color: #00ff88; display: flex; justify-content: space-between; font-weight: 500; }
@@ -442,9 +442,9 @@
         .audio-block {
             position: absolute;
             height: 24px;
-            background: rgba(0, 243, 255, 0.2);
-            border: 1px solid #00f3ff;
-            color: #00f3ff;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid #777777;
+            color: #dddddd;
             font-size: 10px;
             padding: 2px 6px;
             border-radius: 2px;
@@ -473,7 +473,7 @@
             top: 0;
             width: 2px;
             height: 100%;
-            background: #ff4444;
+            background: #ffffff;
             z-index: 30;
             pointer-events: none;
         }
@@ -492,6 +492,42 @@
             background: var(--accent-blue);
             border-radius: 50%;
             cursor: pointer;
+        }
+
+        /* Estilos das abas do painel lateral direito */
+        .panel-tabs {
+            display: flex;
+            background: #181818;
+            border-bottom: 1px solid var(--border-color);
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            overflow: hidden;
+        }
+        .panel-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--text-dim);
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            outline: none;
+        }
+        .panel-tab:hover {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-main);
+        }
+        .panel-tab.active {
+            color: #ffffff;
+            border-bottom: 3px solid #ffffff;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         /* Ajustes para Tablets */
@@ -523,6 +559,7 @@
             <button onclick="saveProject(); closeFileMenu();">💾 Salvar Projeto</button>
             <button onclick="loadProject(); closeFileMenu();">📂 Carregar Projeto</button>
             <button onclick="exportVideo(this); closeFileMenu();">🎬 Exportar Vídeo</button>
+            <button onclick="exportPngSequence(); closeFileMenu();">🖼️ Exportar Sequência PNG (Transparente)</button>
         </div>
     </div>
 
@@ -580,9 +617,10 @@
             <label>Olhos & Olhar</label>
             <div class="sidebar-span">Influência</div>
             <input type="range" id="pinRadiusSlider" class="green-slider" min="1" max="150" value="45" oninput="updateExprVal()">
-            <div class="joy-base" id="joyEye"><div id="knobEye"></div></div>
-            <div class="sidebar-span">Piscar</div>
-            <input type="range" id="blinkSlider" class="green-slider" min="0" max="1" step="0.01" value="0" oninput="updateExprVal()">
+            <div class="sidebar-span">Pálpebra Cima</div>
+            <input type="range" id="blinkTopSlider" class="green-slider" min="0" max="1" step="0.01" value="0" oninput="updateExprVal()">
+            <div class="sidebar-span">Pálpebra Baixo</div>
+            <input type="range" id="blinkBottomSlider" class="green-slider" min="0" max="1" step="0.01" value="0" oninput="updateExprVal()">
         </div>
 
         <div class="control-group">
@@ -620,7 +658,11 @@
     </div>
 
     <div id="poses-panel">
-        <div class="side-section" style="border-bottom: 1px solid var(--border-color);">
+        <div class="panel-tabs">
+            <button id="tab-layers" class="panel-tab active" onclick="switchRightTab('layers')">Camadas</button>
+            <button id="tab-poses" class="panel-tab" onclick="switchRightTab('poses')">Poses</button>
+        </div>
+        <div id="section-layers" class="side-section right-tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
                 <span style="font-weight: bold; font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">CAMADAS</span>
                 <div style="display:flex; gap:4px;">
@@ -634,7 +676,7 @@
             </div>
             <div id="layers-list"></div>
         </div>
-        <div class="side-section">
+        <div id="section-poses" class="side-section right-tab-content" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
                 <span style="font-size: 11px; color: var(--accent-orange); font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">POSES</span>
                 <div style="display:flex; gap:4px;">
@@ -920,7 +962,7 @@
         l.headRot = { x: 0, y: 0 };
         l.eyeRot = { x: 0, y: 0 };
         l.exprValues = {
-            blink: 0, smile: 0, stretch: 0, open: 0,
+            blinkTop: 0, blinkBottom: 0, smile: 0, stretch: 0, open: 0,
             browH: 0, browT: 0, tilt: 0, mouthRot: 0,
             pinRad: 45, mouthRad: 30, browRad: 15
         };
@@ -1187,7 +1229,8 @@
         mouthRadiusSlider.value = v.mouthRad || 30;
         browRadiusSlider.value = v.browRad || 15;
         
-        document.getElementById('blinkSlider').value = v.blink || 0;
+        document.getElementById('blinkTopSlider').value = v.blinkTop || 0;
+        document.getElementById('blinkBottomSlider').value = v.blinkBottom || 0;
         document.getElementById('smileSlider').value = v.smile || 0;
         document.getElementById('mouthRotSlider').value = v.mouthRot || 0;
         document.getElementById('stretchSlider').value = v.stretch || 0;
@@ -1197,11 +1240,8 @@
         document.getElementById('tiltSlider').value = v.tilt || 0;
         
         const hRot = l.headRot || {x:0, y:0};
-        const eRot = l.eyeRot || {x:0, y:0};
         document.getElementById('knob').style.left = (hRot.x + 1) * 40 + "px";
         document.getElementById('knob').style.top = (hRot.y + 1) * 40 + "px";
-        document.getElementById('knobEye').style.left = (eRot.x + 1) * 40 + "px";
-        document.getElementById('knobEye').style.top = (eRot.y + 1) * 40 + "px";
         
     }
 
@@ -1332,10 +1372,10 @@
             if (folderChildren.length > 1) {
                 const switchWrap = document.createElement('div');
                 switchWrap.id = 'folder-switch-container';
-                switchWrap.style.cssText = "margin: 10px 0; padding: 10px; background: rgba(0,243,255,0.05); border: 1px solid #00f3ff; border-radius: 4px; display: flex; flex-direction: column; gap: 5px;";
+                switchWrap.style.cssText = "margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 4px; display: flex; flex-direction: column; gap: 5px;";
                 
                 const header = document.createElement('div');
-                header.style.cssText = "display: flex; justify-content: space-between; font-size: 10px; color: #00f3ff; font-weight: bold;";
+                header.style.cssText = "display: flex; justify-content: space-between; font-size: 10px; color: #ffffff; font-weight: bold;";
                 header.innerHTML = `<span>SWITCH: ${folderToSwitch.name}</span>`;
                 
                 const nameLabel = document.createElement('span');
@@ -1931,7 +1971,7 @@
 
             const delBtn = document.createElement('span');
             delBtn.innerText = '✕';
-            delBtn.style.cssText = "position:absolute; left:2px; top:4px; cursor:pointer; background:#ff4444; color:white; border-radius:50%; width:14px; height:14px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:bold;";
+            delBtn.style.cssText = "position:absolute; left:2px; top:4px; cursor:pointer; background:#444444; color:white; border-radius:50%; width:14px; height:14px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:bold;";
             delBtn.onmousedown = (e) => {
                 e.stopPropagation(); // Impede que o clique selecione/arraste o áudio
                 deleteAudioClip(clip.id);
@@ -2482,7 +2522,7 @@
                     y: (l1.eyeRot?.y || 0) + ((l2.eyeRot?.y || 0) - (l1.eyeRot?.y || 0)) * it 
                 },
                 exprValues: Object.keys(l1.exprValues || {
-                    blink: 0, smile: 0, stretch: 0, open: 0, browH: 0, browT: 0, tilt: 0, mouthRot: 0, pinRad: 45, mouthRad: 30, browRad: 15
+                    blinkTop: 0, blinkBottom: 0, smile: 0, stretch: 0, open: 0, browH: 0, browT: 0, tilt: 0, mouthRot: 0, pinRad: 45, mouthRad: 30, browRad: 15
                 }).reduce((acc, k) => ({ 
                     ...acc, 
                     [k]: l1.exprValues[k] + ((l2.exprValues[k] ?? l1.exprValues[k]) - l1.exprValues[k]) * it 
@@ -2997,6 +3037,80 @@
         }
     }
 
+    async function exportPngSequence() {
+        if (keyframes.length < 2) {
+            alert("Adicione pelo menos 2 poses (keyframes) em frames diferentes para poder exportar a sequência PNG.");
+            return;
+        }
+
+        let dirHandle;
+        try {
+            dirHandle = await window.showDirectoryPicker();
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                alert("Erro ao selecionar a pasta: " + e.message);
+            }
+            return;
+        }
+
+        const wasPlaying = isPlaying;
+        if (wasPlaying) togglePlay();
+
+        const originalFrame = currentFrame;
+        showLoadingModal("Preparando exportação PNG...");
+
+        const projectFps = getFps();
+        const exportFps = 24; // FPS padrão de exportação
+        const lastKF = keyframes.length > 0 ? keyframes[keyframes.length - 1].frame : 1;
+        const cycleFrames = Math.max(1, lastKF - 1);
+        const totalDurationSeconds = cycleFrames / projectFps;
+        const totalExportFrames = Math.max(1, Math.round(totalDurationSeconds * exportFps));
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = FW; 
+        exportCanvas.height = FH;
+        const eCtx = exportCanvas.getContext('2d', { alpha: true });
+
+        try {
+            for (let i = 0; i < totalExportFrames; i++) {
+                const progress = i / totalExportFrames;
+                const f = 1 + progress * cycleFrames;
+                
+                seek(f, true);
+                await waitVideosReady();
+                
+                eCtx.clearRect(0, 0, FW, FH);
+                // Usamos ignoreBg = true para exportar com transparência
+                draw(false, eCtx, true);
+
+                showLoadingModal(`Exportando PNG: ${Math.round(progress * 100)}% (${i + 1}/${totalExportFrames})`);
+
+                const blob = await new Promise(resolve => exportCanvas.toBlob(resolve, 'image/png'));
+                const fileName = `frame_${String(i).padStart(5, '0')}.png`;
+                
+                const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+
+                // Pequena pausa para evitar travamento do navegador
+                if (i % 5 === 0) {
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+            showLoadingModal("Exportação concluída com sucesso!");
+            setTimeout(hideLoadingModal, 1500);
+        } catch (err) {
+            alert("Ocorreu um erro durante a exportação PNG: " + err.message);
+            console.error("Erro na exportação PNG:", err);
+            hideLoadingModal();
+        } finally {
+            currentFrame = originalFrame;
+            seek(currentFrame);
+            if (wasPlaying) togglePlay();
+        }
+    }
+
     async function exportLayer(idx) {
         if (idx === -1 || idx === 'bg') return;
         const rootLayer = layers[idx];
@@ -3098,7 +3212,7 @@
                             headRot: lData.headRot || { x: 0, y: 0 },
                             eyeRot: lData.eyeRot || { x: 0, y: 0 },
                             exprValues: lData.exprValues || { 
-                                blink: 0, smile: 0, stretch: 0, open: 0, 
+                                blinkTop: 0, blinkBottom: 0, smile: 0, stretch: 0, open: 0, 
                                 browH: 0, browT: 0, tilt: 0, mouthRot: 0, 
                                 pinRad: 45, mouthRad: 30, browRad: 15 
                             },
@@ -3461,7 +3575,9 @@ function handlePoseDrop(toIndex, toRoot = false) {
         const newVals = {
             pinRad: parseFloat(pinRadiusSlider.value), mouthRad: parseFloat(mouthRadiusSlider.value), browRad: parseFloat(browRadiusSlider.value),
             mouthRot: parseFloat(document.getElementById('mouthRotSlider').value),
-            blink: parseFloat(document.getElementById('blinkSlider').value), smile: parseFloat(document.getElementById('smileSlider').value),
+            blinkTop: parseFloat(document.getElementById('blinkTopSlider').value),
+            blinkBottom: parseFloat(document.getElementById('blinkBottomSlider').value),
+            smile: parseFloat(document.getElementById('smileSlider').value),
             stretch: parseFloat(document.getElementById('stretchSlider').value), open: parseFloat(document.getElementById('openSlider').value),
             browH: parseFloat(document.getElementById('browHeightSlider').value), browT: parseFloat(document.getElementById('browTiltSlider').value),
             tilt: parseFloat(document.getElementById('tiltSlider').value)
@@ -3507,7 +3623,7 @@ function handlePoseDrop(toIndex, toRoot = false) {
         const v = l.exprValues || { pinRad: 45, mouthRad: 30, browRad: 15 };
         l.exprValues = { 
             ...v, // Mantém os valores de influência (pinRad, mouthRad, browRad)
-            blink: 0, smile: 0, stretch: 0, open: 0, 
+            blinkTop: 0, blinkBottom: 0, smile: 0, stretch: 0, open: 0, 
             browH: 0, browT: 0, tilt: 0, mouthRot: 0 
         };
         syncRigProUI(l); updateDeform(l); draw();
@@ -3610,48 +3726,21 @@ function handlePoseDrop(toIndex, toRoot = false) {
          e.target.setPointerCapture(e.pointerId); 
          draggingJoy = 'head'; 
      };
-     document.getElementById('joyEye').onpointerdown = (e) => { 
-         e.preventDefault(); 
-         e.target.setPointerCapture(e.pointerId); 
-         draggingJoy = 'eye'; 
-     };
  
      window.addEventListener('pointermove', (e) => {
-         if (draggingJoy && activeLayerIndex !== -1) {
+         if (draggingJoy && draggingJoy === 'head' && activeLayerIndex !== -1) {
              const l = layers[activeLayerIndex];
-             const targetJoyId = draggingJoy === 'head' ? 'joy' : 'joyEye';
-             const targetJoy = document.getElementById(targetJoyId);
+             const targetJoy = document.getElementById('joy');
              const rect = targetJoy.getBoundingClientRect();
              const rx = Math.max(-1, Math.min(1, ((e.clientX - rect.left) / rect.width) * 2 - 1));
              const ry = Math.max(-1, Math.min(1, ((e.clientY - rect.top) / rect.height) * 2 - 1));
-             
-             if (draggingJoy === 'head') {
-                 l.headRot = { x: rx, y: ry };
-                 document.getElementById('knob').style.left = (rx + 1) * 40 + "px";
-                 document.getElementById('knob').style.top = (ry + 1) * 40 + "px";
-             } else {
-                 l.eyeRot = { x: rx, y: ry };
-                 document.getElementById('knobEye').style.left = (rx + 1) * 40 + "px";
-                 document.getElementById('knobEye').style.top = (ry + 1) * 40 + "px";
-             }
+             l.headRot = { x: rx, y: ry };
+             document.getElementById('knob').style.left = (rx + 1) * 40 + "px";
+             document.getElementById('knob').style.top = (ry + 1) * 40 + "px";
              updateDeform(l); draw();
          }
      });
  
-     window.addEventListener('pointerup', (e) => {
-         if (draggingJoy) {
-             draggingJoy = null;
-             setKeyframe(false);
-         }
-         
-         if (isMouseDownOnCanvas && rigMode !== 'none') {
-             setKeyframe(false);
-         }
-         isMouseDownOnCanvas = false;
-     });
- 
-    let lastFrameTime = 0;
-
     canvas.addEventListener('pointerdown', (e) => {
         isMouseDownOnCanvas = true;
         const l = layers[activeLayerIndex];
@@ -3796,15 +3885,27 @@ function handlePoseDrop(toIndex, toRoot = false) {
         draw();
     };
 
-    window.onpointerup = (e) => {
-        // Libera a captura do ponteiro para garantir que o tablet pare de enviar eventos ao canvas
-        try {
-            canvas.releasePointerCapture(e.pointerId);
-        } catch (err) {}
-
-        if (wasTransforming && (mode === 'move')) {
+    // Função única e robusta para encerrar qualquer arrasto (Mouse, Touch ou Caneta)
+    const stopAllInteractions = (e) => {
+        if (draggingJoy) {
+            draggingJoy = null;
             setKeyframe(false);
         }
+
+        if (isMouseDownOnCanvas) {
+            if (wasTransforming || mode === 'move' || rigMode !== 'none') {
+                setKeyframe(false);
+            }
+            isMouseDownOnCanvas = false;
+        }
+
+        // Libera a captura do ponteiro do elemento que a detém
+        try {
+            if (e && e.target && e.target.releasePointerCapture) {
+                e.target.releasePointerCapture(e.pointerId);
+            }
+        } catch (err) {}
+
         wasTransforming = false;
         interactionStartedOnCanvas = false;
         dragTarget = null;
@@ -3812,6 +3913,9 @@ function handlePoseDrop(toIndex, toRoot = false) {
         resizingAudioClip = null;
         draw();
     };
+
+    window.addEventListener('pointerup', stopAllInteractions);
+    window.addEventListener('pointercancel', stopAllInteractions);
 
     window.onpointermove = (e) => {
         const c = getCoords(e);
@@ -4063,23 +4167,64 @@ function movePinAndChildren(parent, dx, dy, visited = new Set()) {
                     let weight = Math.pow(Math.max(0, 1 - (edist / v.pinRad)), 0.5);
                     if (weight > maxEyeWeight) {
                         maxEyeWeight = weight;
-                        blinkShift = (exp.y - m.oy) * v.blink * weight * 1.5;
-                        blinkExpand = (m.ox - exp.x) * v.blink * weight * 0.3;
+                        let isUpper = (m.oy < exp.y);
+                        let blinkVal = isUpper ? (v.blinkTop ?? 0) : (v.blinkBottom ?? 0);
+                        blinkShift = (exp.y - m.oy) * blinkVal * weight * 1.5;
+                        blinkExpand = (m.ox - exp.x) * blinkVal * weight * 0.3;
                     }
                 } else if (idx === 2) {
-                    let eDist = Math.sqrt(Math.pow(edx/1.8, 2) + Math.pow(edy, 2));
-                    if (eDist < v.mouthRad) {
-                        let w = Math.pow(Math.max(0, 1 - (eDist / v.mouthRad)), 0.7);
-                        if (v.mouthRot) {
-                            const angle = (v.mouthRot * Math.PI) / 180 * w;
-                            const cosA = Math.cos(angle), sinA = Math.sin(angle);
-                            const rx = tx - exp.x, ry = ty - exp.y;
-                            tx = exp.x + (rx * cosA - ry * sinA);
-                            ty = exp.y + (rx * sinA + ry * cosA);
-                        }
-                        mouthShiftY += (exp.y - m.oy) * v.open * w + (Math.pow(edx, 2) / (v.mouthRad || 1)) * 0.5 * -v.smile * w;
-                        mouthShiftX += (m.ox - exp.x) * v.stretch * w;
+                    // --- ALGORITMO PROFISSIONAL DE BOCA ---
+                    const mouthW = (v.mouthRad || 30) * 0.8;
+                    const lx = exp.x - mouthW; // Canto esquerdo
+                    const rx = exp.x + mouthW; // Canto direito
+                    const bx = exp.x;          // Centro da boca
+                    
+                    const distL = Math.hypot(m.ox - lx, m.oy - exp.y);
+                    const distR = Math.hypot(m.ox - rx, m.oy - exp.y);
+                    const distC = Math.hypot(m.ox - bx, m.oy - exp.y);
+                    
+                    const wL = Math.max(0, 1 - distL / (v.mouthRad || 30));
+                    const wR = Math.max(0, 1 - distR / (v.mouthRad || 30));
+                    const wC = Math.max(0, 1 - distC / (v.mouthRad || 30));
+                    
+                    const smoothL = 3 * wL**2 - 2 * wL**3;
+                    const smoothR = 3 * wR**2 - 2 * wR**3;
+                    const smoothC = 3 * wC**2 - 2 * wC**3;
+                    
+                    // 1. Sorriso (Smile): Eleva os cantos e alarga de forma arqueada e natural
+                    const smileVal = v.smile || 0;
+                    const smileX_L = -smileVal * 12 * smoothL;
+                    const smileY_L = -smileVal * 20 * smoothL;
+                    const smileX_R = smileVal * 12 * smoothR;
+                    const smileY_R = -smileVal * 20 * smoothR;
+                    const smileY_C = -smileVal * 5 * smoothC;
+                    
+                    // 2. Abertura (Open): Desloca principalmente o lábio inferior para baixo
+                    const openVal = v.open || 0;
+                    let openY = 0;
+                    if (m.oy > exp.y) {
+                        openY = openVal * 28 * smoothC;
+                    } else {
+                        openY = openVal * 6 * smoothC; // Lábio superior move-se muito menos
                     }
+                    
+                    // 3. Esticar (Stretch): Alarga ou encurta os cantos horizontalmente
+                    const stretchVal = v.stretch || 0;
+                    const stretchX_L = -stretchVal * 18 * smoothL;
+                    const stretchX_R = stretchVal * 18 * smoothR;
+                    
+                    // Rotação local da boca
+                    if (v.mouthRot) {
+                        const angle = (v.mouthRot * Math.PI) / 180 * smoothC;
+                        const cosA = Math.cos(angle), sinA = Math.sin(angle);
+                        const rx_rot = tx - exp.x, ry_rot = ty - exp.y;
+                        tx = exp.x + (rx_rot * cosA - ry_rot * sinA);
+                        ty = exp.y + (rx_rot * sinA + ry_rot * cosA);
+                    }
+                    
+                    // Acúmulo de deslocamento final
+                    mouthShiftX += (smileX_L + smileX_R + stretchX_L + stretchX_R);
+                    mouthShiftY += (smileY_L + smileY_R + smileY_C + openY);
                 } else if (idx >= 3 && idx <= 6 && edist < v.browRad) {
                     let w = Math.pow(Math.max(0, 1 - (edist / v.browRad)), 0.7);
                     browShiftY += (-v.browH) * w + ((idx === 4 || idx === 5) ? v.browT * 20 : -v.browT * 20) * w;
@@ -4460,7 +4605,7 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
                         targetCtx.lineTo(p.x, p.y);
                     }
 
-                    targetCtx.strokeStyle = isBoneSelected ? "#00f3ff" : "rgba(255, 255, 255, 0.35)";
+                    targetCtx.strokeStyle = isBoneSelected ? "#ffffff" : "rgba(255, 255, 255, 0.35)";
                     targetCtx.lineWidth = 3 / camZoom;
                     targetCtx.lineCap = "round";
                     targetCtx.lineJoin = "round";
@@ -4480,7 +4625,7 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
             if (isSelected || isHovered) {
                 targetCtx.beginPath();
                 targetCtx.arc(p.x, p.y, p.radius || 100, 0, Math.PI * 2);
-                targetCtx.strokeStyle = isSelected ? "rgba(0, 243, 255, 0.35)" : "rgba(255, 255, 255, 0.15)";
+                targetCtx.strokeStyle = isSelected ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.15)";
                 targetCtx.setLineDash([5, 5]);
                 targetCtx.lineWidth = 1 / camZoom;
                 targetCtx.stroke();
@@ -4491,7 +4636,7 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
             targetCtx.beginPath(); 
             targetCtx.arc(p.x, p.y, pinVisualSize * 0.7, 0, Math.PI * 2); 
             
-            targetCtx.fillStyle = isSelected ? "#00f3ff" : (p === hoveredPin ? "#ffffff" : "rgba(255,255,255,0.9)");
+            targetCtx.fillStyle = isSelected ? "#ffffff" : (p === hoveredPin ? "#cccccc" : "rgba(170,170,170,0.9)");
             targetCtx.fill();
 
             targetCtx.strokeStyle = "#000";
@@ -4502,7 +4647,7 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
             const z = p.z || 0;
             if (z !== 0) {
                 targetCtx.save();
-                targetCtx.fillStyle = z > 0 ? "#00f3ff" : "#ff4444";
+                targetCtx.fillStyle = z > 0 ? "#ffffff" : "#888888";
                 targetCtx.font = "bold 9px monospace";
                 targetCtx.textAlign = "center";
                 targetCtx.fillText(z > 0 ? "+" + z : z, p.x, p.y - 10);
@@ -4571,6 +4716,23 @@ function draw(showUI = true, targetCtx = ctx, ignoreBg = false) {
 
     function reset() { 
         location.reload();
+    }
+
+    function switchRightTab(tabName) {
+        document.querySelectorAll('.right-tab-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        document.querySelectorAll('.panel-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        if (tabName === 'layers') {
+            document.getElementById('section-layers').style.display = 'flex';
+            document.getElementById('tab-layers').classList.add('active');
+        } else if (tabName === 'poses') {
+            document.getElementById('section-poses').style.display = 'flex';
+            document.getElementById('tab-poses').classList.add('active');
+        }
     }
 
     // Inicialização do sistema para corrigir os bugs de interface inicial

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -10,7 +11,13 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-        body { font-family: 'Inter', sans-serif; background-color: #121212; color: #e0e0e0; touch-action: none; overflow: hidden; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            touch-action: none;
+            overflow: hidden;
+        }
 
         /* Checkerboard Background */
         .bg-checkerboard {
@@ -25,10 +32,22 @@
         }
 
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1a1a1a; }
-        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
 
         /* Range Slider Styling */
         input[type="range"] {
@@ -40,13 +59,18 @@
             cursor: pointer;
             margin: 5px 0;
         }
-        input[type="range"]:focus { outline: none; }
+
+        input[type="range"]:focus {
+            outline: none;
+        }
+
         input[type="range"]::-webkit-slider-runnable-track {
             width: 100%;
             height: 4px;
             background: #333;
             border-radius: 2px;
         }
+
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
@@ -56,10 +80,14 @@
             background: #3b82f6;
             margin-top: -5px;
             border: 2px solid #1a1a1a;
-            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
             transition: transform 0.1s;
         }
-        input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.2); background: #60a5fa; }
+
+        input[type="range"]:hover::-webkit-slider-thumb {
+            transform: scale(1.2);
+            background: #60a5fa;
+        }
 
         /* Input Number Styling */
         input[type="number"] {
@@ -73,58 +101,125 @@
             width: 50px;
             text-align: right;
         }
-        input[type="number"]:focus { outline: none; border-color: #3b82f6; }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
 
         /* Hide spinners from number inputs */
         input[type=number] {
-            -moz-appearance: textfield; /* Firefox */
+            -moz-appearance: textfield;
+            /* Firefox */
             appearance: textfield;
         }
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { 
-            -webkit-appearance: none; 
-            margin: 0; 
+
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
 
-        .control-group { margin-bottom: 14px; }
-        .control-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; color: #aaa; font-weight: 500; }
-        
-        .accordion-header { cursor: pointer; padding: 8px 0; border-top: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #888; }
-        .accordion-header:hover { color: #fff; }
-        .accordion-content { display: none; padding-bottom: 10px; }
-        .accordion-content.active { display: block; }
-        .fa-chevron-down { transition: transform 0.2s; }
-        .active .fa-chevron-down { transform: rotate(180deg); }
+        .control-group {
+            margin-bottom: 14px;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 11px;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        .accordion-header {
+            cursor: pointer;
+            padding: 8px 0;
+            border-top: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+        }
+
+        .accordion-header:hover {
+            color: #fff;
+        }
+
+        .accordion-content {
+            display: none;
+            padding-bottom: 10px;
+        }
+
+        .accordion-content.active {
+            display: block;
+        }
+
+        .fa-chevron-down {
+            transition: transform 0.2s;
+        }
+
+        .active .fa-chevron-down {
+            transform: rotate(180deg);
+        }
 
         @media (max-width: 1024px) {
-            aside.w-72 { width: 240px; }
-            .control-label { font-size: 10px; }
-            input[type="number"] { width: 40px; font-size: 10px; }
-            header .text-xs { padding: 4px 8px; }
-        }
+            aside.w-72 {
+                width: 240px;
+            }
 
+            .control-label {
+                font-size: 10px;
+            }
+
+            input[type="number"] {
+                width: 40px;
+                font-size: 10px;
+            }
+
+            header .text-xs {
+                padding: 4px 8px;
+            }
+        }
     </style>
 </head>
+
 <body class="h-screen flex flex-col overflow-hidden bg-[#0d0d0d]">
 
     <!-- Header -->
     <header class="h-12 bg-[#1a1a1a] border-b border-[#333] flex items-center justify-between px-4 shrink-0 z-20">
         <div class="flex items-center gap-3">
             <i class="fas fa-layer-group text-blue-500"></i>
-            <span class="font-bold text-sm tracking-wide text-gray-200">Chromakey <span class="font-normal text-gray-500">Estúdio</span></span>
+            <span class="font-bold text-sm tracking-wide text-gray-200">Chromakey <span
+                    class="font-normal text-gray-500">Estúdio</span></span>
         </div>
         <div class="flex items-center gap-3">
-            <button id="btnExportImage" class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <button id="btnExportImage"
+                class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
                 <i class="fas fa-camera"></i> Salvar Foto
             </button>
-            <div class="flex items-center gap-2 bg-[#222] px-2 py-1 rounded border border-[#333]" title="Taxa de Quadros (12-30)">
+            <div class="flex items-center gap-2 bg-[#222] px-2 py-1 rounded border border-[#333]"
+                title="Taxa de Quadros (12-30)">
                 <span class="text-[10px] text-gray-300 font-bold">FPS</span>
-                <input type="number" id="exportFps" value="24" min="12" max="30" class="w-10 p-0 bg-transparent border-none text-xs text-center focus:outline-none" style="color: white;">
+                <input type="number" id="exportFps" value="24" min="12" max="30"
+                    class="w-10 p-0 bg-transparent border-none text-xs text-center focus:outline-none"
+                    style="color: white;">
             </div>
-            <button id="btnExportSequence" class="text-xs bg-purple-700 hover:bg-purple-600 text-white px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <button id="btnExportSequence"
+                class="text-xs bg-purple-700 hover:bg-purple-600 text-white px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
                 <i class="fas fa-video"></i> Exportar Vídeo
             </button>
-            <button id="btnExportPngSequence" class="text-xs bg-orange-700 hover:bg-orange-600 text-white px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <button id="btnExportPngSequence"
+                class="text-xs bg-orange-700 hover:bg-orange-600 text-white px-3 py-1.5 rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
                 <i class="fas fa-images"></i> Seq. PNG
             </button>
         </div>
@@ -132,49 +227,61 @@
 
     <!-- Main Workspace -->
     <main class="flex-1 flex overflow-hidden relative">
-        
+
         <!-- Overlay Render -->
         <div id="exportOverlay" class="absolute inset-0 bg-black/90 z-50 hidden flex-col items-center justify-center">
             <div class="w-80 text-center space-y-4">
                 <div class="relative w-16 h-16 mx-auto">
                     <div class="absolute inset-0 border-4 border-gray-700 rounded-full"></div>
-                    <div class="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
+                    <div
+                        class="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin">
+                    </div>
                 </div>
                 <h2 class="text-lg font-bold text-white">Renderizando Vídeo...</h2>
                 <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
                     <div id="progressBar" class="bg-blue-500 h-full w-0 transition-all duration-100"></div>
                 </div>
                 <p id="progressText" class="text-xs font-mono text-blue-400">0%</p>
-                <button id="cancelExportBtn" class="text-xs text-red-400 hover:text-red-300 underline mt-2">Cancelar</button>
+                <button id="cancelExportBtn"
+                    class="text-xs text-red-400 hover:text-red-300 underline mt-2">Cancelar</button>
             </div>
         </div>
 
         <!-- Viewer -->
         <section class="flex-1 bg-[#0d0d0d] relative flex flex-col min-w-0 h-full">
-            
+
             <!-- View Options Toolbar -->
-            <div class="absolute top-4 left-1/2 -translate-x-1/2 bg-[#1f1f1f]/90 backdrop-blur px-3 py-1.5 rounded border border-[#333] flex gap-4 z-30 shadow-lg">
-                <button id="viewFinal" class="view-btn text-[10px] font-bold text-blue-400 border-b-2 border-blue-400 px-1">FINAL RESULT</button>
-                <button id="viewMatte" class="view-btn text-[10px] font-bold text-gray-400 hover:text-white px-1">SCREEN MATTE</button>
-                <button id="viewSource" class="view-btn text-[10px] font-bold text-gray-400 hover:text-white px-1">SOURCE</button>
+            <div
+                class="absolute top-4 left-1/2 -translate-x-1/2 bg-[#1f1f1f]/90 backdrop-blur px-3 py-1.5 rounded border border-[#333] flex gap-4 z-30 shadow-lg">
+                <button id="viewFinal"
+                    class="view-btn text-[10px] font-bold text-blue-400 border-b-2 border-blue-400 px-1">FINAL
+                    RESULT</button>
+                <button id="viewMatte" class="view-btn text-[10px] font-bold text-gray-400 hover:text-white px-1">SCREEN
+                    MATTE</button>
+                <button id="viewSource"
+                    class="view-btn text-[10px] font-bold text-gray-400 hover:text-white px-1">SOURCE</button>
             </div>
 
             <!-- Viewport Area -->
             <div class="flex-1 relative overflow-hidden w-full bg-[#111]">
-                
+
                 <!-- Empty State -->
-                <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center select-none pointer-events-none z-10">
-                    <div class="w-16 h-16 border border-dashed border-gray-600 rounded flex items-center justify-center mb-3 text-gray-600">
+                <div id="emptyState"
+                    class="absolute inset-0 flex flex-col items-center justify-center select-none pointer-events-none z-10">
+                    <div
+                        class="w-16 h-16 border border-dashed border-gray-600 rounded flex items-center justify-center mb-3 text-gray-600">
                         <i class="fas fa-plus text-xl"></i>
                     </div>
                     <p class="text-gray-500 text-xs">Arraste Vídeo ou Foto aqui</p>
                 </div>
 
                 <!-- Canvas Container -->
-                <div id="canvasContainer" class="absolute inset-0 flex items-center justify-center hidden overflow-hidden p-8">
-                    <div id="canvasWrapper" class="relative transition-transform duration-200 ease-out flex items-center justify-center origin-center max-w-full max-h-full bg-checkerboard">
-                        <canvas id="outputCanvas" class="block shadow-2xl border border-[#333] bg-transparent" 
-                                style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                <div id="canvasContainer"
+                    class="absolute inset-0 flex items-center justify-center hidden overflow-hidden p-8">
+                    <div id="canvasWrapper"
+                        class="relative transition-transform duration-200 ease-out flex items-center justify-center origin-center max-w-full max-h-full bg-checkerboard">
+                        <canvas id="outputCanvas" class="block shadow-2xl border border-[#333] bg-transparent"
+                            style="max-width: 100%; max-height: 100%; object-fit: contain;">
                         </canvas>
                     </div>
                 </div>
@@ -182,13 +289,17 @@
 
             <!-- Timeline / Controls -->
             <div class="h-12 bg-[#1a1a1a] border-t border-[#333] flex items-center px-4 gap-4 shrink-0 z-20 relative">
-                <button id="playPauseBtn" class="text-gray-300 hover:text-white w-6 disabled:opacity-30"><i class="fas fa-play"></i></button>
-                <button id="restartBtn" class="text-gray-400 hover:text-white w-6 disabled:opacity-30"><i class="fas fa-undo"></i></button>
+                <button id="playPauseBtn" class="text-gray-300 hover:text-white w-6 disabled:opacity-30"><i
+                        class="fas fa-play"></i></button>
+                <button id="restartBtn" class="text-gray-400 hover:text-white w-6 disabled:opacity-30"><i
+                        class="fas fa-undo"></i></button>
                 <span id="timeDisplay" class="text-[10px] font-mono text-gray-500 w-20 text-center">00:00:00</span>
-                
+
                 <!-- Timeline Bar -->
                 <div class="flex-1 h-1 bg-[#333] rounded relative cursor-pointer group" id="timelineTrack">
-                    <div id="timelinePlayhead" class="absolute top-1/2 -translate-y-1/2 left-0 w-2 h-2 bg-blue-500 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div id="timelinePlayhead"
+                        class="absolute top-1/2 -translate-y-1/2 left-0 w-2 h-2 bg-blue-500 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                    </div>
                 </div>
 
                 <div class="flex items-center gap-2 pl-4 border-l border-[#333]">
@@ -207,12 +318,13 @@
             </div>
 
             <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
-                
+
                 <!-- File Input -->
                 <div class="bg-[#222] p-2 rounded border border-[#333] mb-4">
                     <label class="block w-full cursor-pointer">
                         <span class="sr-only">Escolher arquivo</span>
-                        <input type="file" id="fileUpload" accept="video/*,image/*" class="block w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-900 file:text-blue-300 hover:file:bg-blue-800"/>
+                        <input type="file" id="fileUpload" accept="video/*,image/*"
+                            class="block w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-900 file:text-blue-300 hover:file:bg-blue-800" />
                     </label>
                     <p class="text-[9px] text-gray-500 mt-1 text-center">Suporta Vídeos e Imagens</p>
                 </div>
@@ -223,11 +335,14 @@
                         <div class="control-label">
                             <span>Screen Colors (<span id="colorCount">1</span>)</span>
                             <div class="flex gap-2">
-                                <i class="fas fa-trash-alt cursor-pointer hover:text-red-400" id="clearColors" title="Limpar cores"></i>
-                                <i class="fas fa-eye-dropper cursor-pointer hover:text-blue-400" id="pickScreenColor" title="Adicionar cor da tela"></i>
+                                <i class="fas fa-trash-alt cursor-pointer hover:text-red-400" id="clearColors"
+                                    title="Limpar cores"></i>
+                                <i class="fas fa-eye-dropper cursor-pointer hover:text-blue-400" id="pickScreenColor"
+                                    title="Adicionar cor da tela"></i>
                             </div>
                         </div>
-                        <div id="colorList" class="flex flex-wrap gap-1 min-h-[28px] bg-[#222] rounded border border-[#333] p-1">
+                        <div id="colorList"
+                            class="flex flex-wrap gap-1 min-h-[28px] bg-[#222] rounded border border-[#333] p-1">
                             <!-- Chips -->
                         </div>
                     </div>
@@ -256,25 +371,25 @@
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="accordion-content">
-                         <div class="grid grid-cols-2 gap-2">
-                             <div class="control-group mb-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="control-group mb-2">
                                 <div class="control-label"><span>Esq (Left)</span></div>
                                 <input type="range" id="rngCropLeft" min="0" max="50" value="0" class="h-2">
-                             </div>
-                             <div class="control-group mb-2">
+                            </div>
+                            <div class="control-group mb-2">
                                 <div class="control-label"><span>Dir (Right)</span></div>
                                 <input type="range" id="rngCropRight" min="0" max="50" value="0" class="h-2">
-                             </div>
-                             <div class="control-group mb-2">
+                            </div>
+                            <div class="control-group mb-2">
                                 <div class="control-label"><span>Topo (Top)</span></div>
                                 <input type="range" id="rngCropTop" min="0" max="50" value="0" class="h-2">
-                             </div>
-                             <div class="control-group mb-2">
+                            </div>
+                            <div class="control-group mb-2">
                                 <div class="control-label"><span>Base (Bottom)</span></div>
                                 <input type="range" id="rngCropBottom" min="0" max="50" value="0" class="h-2">
-                             </div>
-                         </div>
-                         <p class="text-[9px] text-gray-500 mt-1">Corta bordas indesejadas.</p>
+                            </div>
+                        </div>
+                        <p class="text-[9px] text-gray-500 mt-1">Corta bordas indesejadas.</p>
                     </div>
                 </div>
 
@@ -335,7 +450,7 @@
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <div class="accordion-content active">
-                         <div class="control-group">
+                        <div class="control-group">
                             <div class="control-label">
                                 <span>Despill Saturation</span>
                                 <input type="number" id="numDespillSat" value="0" min="0" max="100">
@@ -352,9 +467,9 @@
                         </div>
                     </div>
                 </div>
-                
+
             </div>
-            
+
             <div class="p-2 bg-[#111] text-[9px] text-center text-gray-600 border-t border-[#333]">
                 Keylight WebGL 2.0 (GPU Accelerated)
             </div>
@@ -392,7 +507,7 @@
         const timeDisplay = document.getElementById('timeDisplay');
         const timelineTrack = document.getElementById('timelineTrack');
         const timelinePlayhead = document.getElementById('timelinePlayhead');
-        
+
         // State
         let sourceType = 'none'; // 'video' or 'image'
         let sourceImage = new Image();
@@ -405,7 +520,7 @@
             matte: document.getElementById('viewMatte'),
             source: document.getElementById('viewSource')
         };
-        let currentView = 'final'; 
+        let currentView = 'final';
 
         // Picker
         const pickScreenColorBtn = document.getElementById('pickScreenColor');
@@ -428,7 +543,7 @@
             alphaGamma: 1.0
         };
 
-        let keyColors = [{r:0, g:255, b:0}]; // Initial Green
+        let keyColors = [{ r: 0, g: 255, b: 0 }]; // Initial Green
 
         // --- WEBGL SETUP ---
         let gl = outputCanvas.getContext('webgl', { preserveDrawingBuffer: true, premultipliedAlpha: false, alpha: true });
@@ -583,15 +698,15 @@
         const positionBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            -1, -1,  1, -1, -1,  1,
-            -1,  1,  1, -1,  1,  1,
+            -1, -1, 1, -1, -1, 1,
+            -1, 1, 1, -1, 1, 1,
         ]), gl.STATIC_DRAW);
 
         const texCoordBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-            0, 1,  1, 1,  0, 0,
-            0, 0,  1, 1,  1, 0,
+            0, 1, 1, 1, 0, 0,
+            0, 0, 1, 1, 1, 0,
         ]), gl.STATIC_DRAW);
 
         // Attributes
@@ -629,7 +744,7 @@
             viewMode: gl.getUniformLocation(program, "u_viewMode"),
         };
 
-        window.toggleAccordion = function(element) {
+        window.toggleAccordion = function (element) {
             element.classList.toggle('active');
             const content = element.nextElementSibling;
             content.classList.toggle('active');
@@ -638,12 +753,12 @@
         function setupSyncedInput(rangeId, numberId, paramKey, scale = 1, offset = 0) {
             const range = document.getElementById(rangeId);
             const number = document.getElementById(numberId);
-            if(!range) return;
-            
+            if (!range) return;
+
             const update = (val) => {
                 val = parseFloat(val);
                 range.value = val;
-                if(number) number.value = val;
+                if (number) number.value = val;
                 params[paramKey] = (val - offset) / scale;
                 // Force a redraw even if paused
                 if (!isPlaying && sourceType !== 'none') {
@@ -651,8 +766,8 @@
                 }
             };
             range.addEventListener('input', (e) => update(e.target.value));
-            if(number) number.addEventListener('input', (e) => update(e.target.value));
-            
+            if (number) number.addEventListener('input', (e) => update(e.target.value));
+
             params[paramKey] = (parseFloat(range.value) - offset) / scale;
         }
 
@@ -661,9 +776,9 @@
         setupSyncedInput('rngBalance', 'numBalance', 'balance', 100);
         setupSyncedInput('rngClipBlack', 'numClipBlack', 'clipBlack', 100);
         setupSyncedInput('rngClipWhite', 'numClipWhite', 'clipWhite', 100);
-        setupSyncedInput('rngShrinkGrow', 'numShrinkGrow', 'shrinkGrow', 10); 
-        setupSyncedInput('rngPreBlur', 'numPreBlur', 'preBlur', 1); 
-        setupSyncedInput('rngDespillSat', 'numDespillSat', 'despillSat', 100); 
+        setupSyncedInput('rngShrinkGrow', 'numShrinkGrow', 'shrinkGrow', 10);
+        setupSyncedInput('rngPreBlur', 'numPreBlur', 'preBlur', 1);
+        setupSyncedInput('rngDespillSat', 'numDespillSat', 'despillSat', 100);
         setupSyncedInput('rngEdgeLuma', 'numEdgeLuma', 'edgeLuma', 1);
         setupSyncedInput('rngCropLeft', null, 'cropLeft', 100);
         setupSyncedInput('rngCropRight', null, 'cropRight', 100);
@@ -675,21 +790,21 @@
         let isPicking = false;
 
         pickScreenColorBtn.addEventListener('click', () => {
-            isPicking = !isPicking;
-            pickScreenColorBtn.classList.toggle('text-blue-400', isPicking);
-            outputCanvas.style.cursor = isPicking ? 'crosshair' : 'default';
+            isPicking = true;
+            pickScreenColorBtn.classList.add('text-blue-400');
+            outputCanvas.style.cursor = 'crosshair';
         });
 
         outputCanvas.addEventListener('click', (e) => {
             if (!isPicking) return;
-            
+
             // Create temp canvas to read pixel color from source
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = outputCanvas.width;
             tempCanvas.height = outputCanvas.height;
             const tCtx = tempCanvas.getContext('2d');
-            
-            if(sourceType === 'video') tCtx.drawImage(sourceVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            if (sourceType === 'video') tCtx.drawImage(sourceVideo, 0, 0, tempCanvas.width, tempCanvas.height);
             else if (sourceType === 'image') tCtx.drawImage(sourceImage, 0, 0, tempCanvas.width, tempCanvas.height);
 
             const rect = outputCanvas.getBoundingClientRect();
@@ -701,9 +816,14 @@
             const p = tCtx.getImageData(x, y, 1, 1).data;
             addColor(p[0], p[1], p[2]);
 
+            // Desativa o picker após selecionar a cor
+            isPicking = false;
+            pickScreenColorBtn.classList.remove('text-blue-400');
+            outputCanvas.style.cursor = 'default';
+
             // --- AUTO ADJUST (UNIVERSAL) ---
             // Reseta para valores seguros que funcionam bem com o novo algoritmo de distância
-            
+
             // Balance (Tolerância): 15% (Remove cores muito próximas)
             const newBal = 0;
             document.getElementById('rngBalance').value = newBal;
@@ -735,8 +855,8 @@
         }
 
         function addColor(r, g, b) {
-            if (keyColors.length >= 100) return; 
-            keyColors.push({r, g, b});
+            if (keyColors.length >= 100) return;
+            keyColors.push({ r, g, b });
             renderColorList();
         }
 
@@ -745,13 +865,13 @@
             renderColorList();
             requestAnimationFrame(processFrame);
         }
-        
+
         document.getElementById('clearColors').onclick = () => {
             keyColors = [];
             renderColorList();
             requestAnimationFrame(processFrame);
         };
-        
+
         renderColorList(); // Initial render
 
         Object.keys(viewBtns).forEach(key => {
@@ -779,18 +899,18 @@
         fileUpload.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             const url = URL.createObjectURL(file);
             emptyState.classList.add('hidden');
             canvasContainer.classList.remove('hidden');
-            
+
             // Reset previous state
             cancelAnimationFrame(animationFrameId);
             sourceVideo.pause();
             isPlaying = false;
             playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
             sourceVideo.src = '';
-            
+
             if (file.type.startsWith('image/')) {
                 // Handle Image
                 sourceType = 'image';
@@ -798,10 +918,10 @@
                     outputCanvas.width = sourceImage.width;
                     outputCanvas.height = sourceImage.height;
                     gl.viewport(0, 0, outputCanvas.width, outputCanvas.height);
-                    
+
                     const isVertical = sourceImage.height > sourceImage.width;
                     setZoom(isVertical ? 50 : 100);
-                    
+
                     // UI Updates
                     btnExportSequence.disabled = true;
                     btnExportSequence.classList.add('opacity-50', 'cursor-not-allowed');
@@ -811,26 +931,26 @@
                     playPauseBtn.disabled = true;
                     restartBtn.disabled = true;
                     timeDisplay.innerText = "FOTO";
-                    
+
                     // Start loop (needed for realtime slider adjustments even for static image)
-                    startRenderLoop(); 
+                    startRenderLoop();
                 };
                 sourceImage.src = url;
-                
+
             } else if (file.type.startsWith('video/')) {
                 // Handle Video
                 sourceType = 'video';
                 sourceVideo.src = url;
                 sourceVideo.load();
-                
+
                 sourceVideo.onloadedmetadata = () => {
                     outputCanvas.width = sourceVideo.videoWidth;
                     outputCanvas.height = sourceVideo.videoHeight;
                     gl.viewport(0, 0, outputCanvas.width, outputCanvas.height);
-                    
+
                     const isVertical = sourceVideo.videoHeight > sourceVideo.videoWidth;
                     setZoom(isVertical ? 50 : 100);
-                    
+
                     // UI Updates
                     btnExportSequence.disabled = false;
                     btnExportSequence.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -839,7 +959,7 @@
                     btnExportImage.disabled = false;
                     playPauseBtn.disabled = false;
                     restartBtn.disabled = false;
-                    
+
                     // Não dar play automático, apenas mostrar o primeiro frame
                     sourceVideo.currentTime = 0;
                 };
@@ -847,7 +967,7 @@
                 // Garante que o primeiro frame seja desenhado assim que os dados estiverem prontos
                 sourceVideo.onloadeddata = () => {
                     // Correção: Força o vídeo para o início se estiver em outro tempo (ex: 5s)
-                    if(sourceVideo.currentTime > 0.1) sourceVideo.currentTime = 0;
+                    if (sourceVideo.currentTime > 0.1) sourceVideo.currentTime = 0;
                     requestAnimationFrame(processFrame);
                 };
             }
@@ -855,18 +975,18 @@
 
         // Video Controls
         playPauseBtn.addEventListener('click', () => {
-            if(sourceType !== 'video') return;
-            if(sourceVideo.paused) playVideo(); else pauseVideo();
+            if (sourceType !== 'video') return;
+            if (sourceVideo.paused) playVideo(); else pauseVideo();
         });
 
         restartBtn.addEventListener('click', () => {
-            if(sourceType !== 'video') return;
+            if (sourceType !== 'video') return;
             sourceVideo.currentTime = 0;
             playVideo();
         });
 
         function playVideo() {
-            if(sourceType !== 'video') return;
+            if (sourceType !== 'video') return;
             sourceVideo.play();
             isPlaying = true;
             playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
@@ -874,7 +994,7 @@
         }
 
         function pauseVideo() {
-            if(sourceType !== 'video') return;
+            if (sourceType !== 'video') return;
             sourceVideo.pause();
             isPlaying = false;
             playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
@@ -885,7 +1005,7 @@
             const cur = sourceVideo.currentTime;
             const dur = sourceVideo.duration || 0;
             timeDisplay.innerText = new Date(cur * 1000).toISOString().substr(11, 8);
-            
+
             // Atualiza a posição da bolinha (se não estiver arrastando manualmente)
             if (dur > 0 && !isScrubbing) {
                 timelinePlayhead.style.left = (cur / dur * 100) + '%';
@@ -918,7 +1038,7 @@
             // Calcula posição do mouse relativa à barra (0 a 1)
             const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
             const pct = x / rect.width;
-            
+
             if (sourceVideo.duration) {
                 sourceVideo.currentTime = pct * sourceVideo.duration;
                 timelinePlayhead.style.left = (pct * 100) + '%';
@@ -933,10 +1053,10 @@
         // --- RENDER LOOP ---
         function startRenderLoop() {
             cancelAnimationFrame(animationFrameId);
-            
+
             const loop = () => {
                 processFrame();
-                
+
                 // Keep looping if: 
                 // 1. It's a playing video OR 
                 // 2. It's an image (so we can see slider changes instantly)
@@ -958,7 +1078,7 @@
             // Upload Texture
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            
+
             if (sourceType === 'video') {
                 // Evita tela preta: só atualiza se o vídeo tiver dados suficientes (HAVE_CURRENT_DATA = 2)
                 if (sourceVideo.readyState >= 2) {
@@ -970,12 +1090,12 @@
 
             // Update Uniforms
             gl.uniform2f(locs.texSize, outputCanvas.width, outputCanvas.height);
-            
+
             const colorData = [];
-            keyColors.forEach(c => colorData.push(c.r/255, c.g/255, c.b/255));
+            keyColors.forEach(c => colorData.push(c.r / 255, c.g / 255, c.b / 255));
             gl.uniform3fv(locs.keyColors, new Float32Array(colorData));
             gl.uniform1i(locs.keyCount, keyColors.length);
-            
+
             gl.uniform1f(locs.gain, params.gain);
             gl.uniform1f(locs.balance, params.balance);
             gl.uniform1f(locs.clipBlack, params.clipBlack);
@@ -985,7 +1105,7 @@
             gl.uniform1f(locs.shrinkGrow, params.shrinkGrow);
             gl.uniform1f(locs.preBlur, params.preBlur);
             gl.uniform4f(locs.crop, params.cropLeft, params.cropRight, params.cropTop, params.cropBottom);
-            
+
             let mode = 0;
             if (currentView === 'matte') mode = 1;
             if (currentView === 'source') mode = 2;
@@ -1009,7 +1129,7 @@
         // --- EXPORT PNG SEQUENCE (FOLDER OR ZIP) ---
         btnExportSequence.addEventListener('click', async () => {
             if (isExporting || sourceType !== 'video') return;
-            
+
             if (typeof VideoEncoder === 'undefined') {
                 alert("Seu navegador não suporta a API WebCodecs. Use Chrome ou Edge atualizados.");
                 return;
@@ -1018,10 +1138,10 @@
             isExporting = true;
             exportOverlay.classList.remove('hidden');
             exportOverlay.classList.add('flex');
-            
+
             sourceVideo.pause();
             currentView = 'final';
-            
+
             let fps = parseInt(exportFpsInput.value) || 30;
             const width = outputCanvas.width;
             const height = outputCanvas.height;
@@ -1075,7 +1195,7 @@
                 if (isExporting) {
                     await videoEncoder.flush();
                     muxer.finalize();
-                    
+
                     const blob = new Blob([target.buffer], { type: 'video/webm' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -1093,15 +1213,15 @@
         // --- EXPORT PNG SEQUENCE (FOLDER) ---
         btnExportPngSequence.addEventListener('click', async () => {
             if (isExporting || sourceType !== 'video') return;
-            
+
             try {
                 // Solicita ao usuário que escolha uma pasta para salvar os arquivos
                 const dirHandle = await window.showDirectoryPicker();
-                
+
                 isExporting = true;
                 exportOverlay.classList.remove('hidden');
                 exportOverlay.classList.add('flex');
-                
+
                 const title = exportOverlay.querySelector('h2');
                 const originalTitle = title.innerText;
                 title.innerText = "Exportando Sequência PNG...";
@@ -1109,7 +1229,7 @@
                 sourceVideo.pause();
                 const prevView = currentView;
                 currentView = 'final'; // Garante que exporta o resultado com transparência
-                
+
                 let fps = parseInt(exportFpsInput.value) || 24;
                 const duration = sourceVideo.duration;
                 const totalFrames = Math.floor(duration * fps);
@@ -1127,7 +1247,7 @@
                     // Converte o canvas para Blob PNG (Preserva transparência)
                     const blob = await new Promise(resolve => outputCanvas.toBlob(resolve, 'image/png'));
                     const fileName = `frame_${String(i).padStart(5, '0')}.png`;
-                    
+
                     // Salva o arquivo na pasta selecionada
                     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
                     const writable = await fileHandle.createWritable();
@@ -1179,7 +1299,7 @@
             isExporting = false;
             exportOverlay.classList.add('hidden');
             exportOverlay.classList.remove('flex');
-            if(sourceType === 'video') {
+            if (sourceType === 'video') {
                 sourceVideo.loop = true;
                 sourceVideo.muted = false;
                 sourceVideo.currentTime = 0;
@@ -1188,4 +1308,5 @@
         }
     </script>
 </body>
+
 </html>
