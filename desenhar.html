@@ -229,12 +229,16 @@
         }
 
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
+        .offscreen-canvas { opacity: 0; pointer-events: none; z-index: -10; } /* FIX: Mantém no DOM para evitar descarte de RAM no iOS */
 
         #bgCanvas { z-index: 0; pointer-events: none; }
         .layer-canvas { pointer-events: none; }
         #layer0 { z-index: 1; }
         #layer1 { z-index: 2; }
         #layer2 { z-index: 3; }
+        #layer3 { z-index: 4; }
+        #layer4 { z-index: 5; }
+        #layer5 { z-index: 6; }
         #onionCanvas { opacity: 0.35; pointer-events: none; z-index: 10; }
         #uiCanvas { pointer-events: none; z-index: 20; }
         #mainCanvas { pointer-events: auto; } 
@@ -328,7 +332,7 @@
             <input type="file" id="projectInput" accept=".json" style="display: none;">
             <div class="fps-control">
                 <span>FPS: <span id="fpsValue">24</span></span>
-                <input type="range" id="fpsSlider" min="1" max="60" value="24">
+                <input type="range" id="fpsSlider" min="1" max="24" value="24">
             </div>
             <div class="onion-control">
                 <span>Onion <input type="checkbox" id="onionToggle" checked></span>
@@ -362,14 +366,17 @@
                 <button class="icon-btn" id="layersBtn" title="Camadas">≡</button>
                 <div class="layers-dropdown" id="layersDropdown">
                     <div style="font-size: 10px; color: #888; margin-bottom: 5px;">CAMADAS DO FRAME</div>
-                    <div class="layer-item" onclick="switchLayer(2)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 2)">👁️</span> 3 <span id="l2-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(5)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 5)">👁️</span> 6 <button class="merge-btn" onclick="mergeLayers(event, 5, 4)" title="Mesclar com 5">▼</button><span id="l5-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(4)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 4)">👁️</span> 5 <button class="merge-btn" onclick="mergeLayers(event, 4, 5)" title="Mesclar com 6">▲</button> <button class="merge-btn" onclick="mergeLayers(event, 4, 3)" title="Mesclar com 4">▼</button><span id="l4-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(3)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 3)">👁️</span> 4 <button class="merge-btn" onclick="mergeLayers(event, 3, 4)" title="Mesclar com 5">▲</button> <button class="merge-btn" onclick="mergeLayers(event, 3, 2)" title="Mesclar com 3">▼</button><span id="l3-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(2)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 2)">👁️</span> 3 <button class="merge-btn" onclick="mergeLayers(event, 2, 3)" title="Mesclar com 4">▲</button> <button class="merge-btn" onclick="mergeLayers(event, 2, 1)" title="Mesclar com 2">▼</button><span id="l2-stat"></span></div>
                     <div class="layer-item active" onclick="switchLayer(1)">
                         <span class="visibility-btn" onclick="toggleLayerVisibility(event, 1)">👁️</span> 2 
-                        <button class="merge-btn" onclick="mergeLayers(event, 2, 1)" title="Puxar camada 3 para esta">▲</button> 
-                        <button class="merge-btn" onclick="mergeLayers(event, 0, 1)" title="Puxar camada 1 para esta">▼</button>
+                        <button class="merge-btn" onclick="mergeLayers(event, 1, 2)" title="Mesclar com 3">▲</button> 
+                        <button class="merge-btn" onclick="mergeLayers(event, 1, 0)" title="Mesclar com 1">▼</button>
                         <span id="l1-stat"></span>
                     </div>
-                    <div class="layer-item" onclick="switchLayer(0)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 0)">👁️</span> 1 <span id="l0-stat"></span></div>
+                    <div class="layer-item" onclick="switchLayer(0)"><span class="visibility-btn" onclick="toggleLayerVisibility(event, 0)">👁️</span> 1 <button class="merge-btn" onclick="mergeLayers(event, 0, 1)" title="Mesclar com 2">▲</button><span id="l0-stat"></span></div>
                     <button class="icon-btn" id="soloModeBtn" title="Modo Solo (Melhora Performance)" style="font-size: 10px; width: 100%; margin-top: 5px; border: 1px solid #444;">MODO SOLO: OFF</button>
                 </div>
             </div>
@@ -443,8 +450,17 @@
             <canvas id="layer0" class="layer-canvas" width="1920" height="1080"></canvas>
             <canvas id="layer1" class="layer-canvas" width="1920" height="1080"></canvas>
             <canvas id="layer2" class="layer-canvas" width="1920" height="1080"></canvas>
+            <canvas id="layer3" class="layer-canvas" width="1920" height="1080"></canvas>
+            <canvas id="layer4" class="layer-canvas" width="1920" height="1080"></canvas>
+            <canvas id="layer5" class="layer-canvas" width="1920" height="1080"></canvas>
             <canvas id="onionCanvas" width="1920" height="1080"></canvas>
             <canvas id="uiCanvas" width="1920" height="1080"></canvas>
+            
+            <!-- Offscreen canvases anexados ao DOM para previnir GC na RAM do iOS/Android -->
+            <canvas id="snapshotCanvas" class="offscreen-canvas" width="1920" height="1080"></canvas>
+            <canvas id="selectionCanvas" class="offscreen-canvas" width="1920" height="1080"></canvas>
+            <canvas id="clipboardCanvas" class="offscreen-canvas" width="1920" height="1080"></canvas>
+            
             <canvas id="mainCanvas" width="1920" height="1080"></canvas>
             <canvas id="playbackCanvas" width="1920" height="1080"></canvas>
             <canvas id="drawingCanvas" width="1920" height="1080"></canvas>
@@ -468,7 +484,6 @@
     </div>
 
     <script>
-        // Removido "desynchronized: true" para compatibilidade total e captura perfeita
         const mainCanvas = document.getElementById('mainCanvas');
         const ctx = mainCanvas.getContext('2d');
         const onionCanvas = document.getElementById('onionCanvas');
@@ -478,23 +493,27 @@
         const playbackCanvas = document.getElementById('playbackCanvas');
         const pCtx = playbackCanvas.getContext('2d');
         const drawingCanvas = document.getElementById('drawingCanvas');
+        const dCtx = drawingCanvas.getContext('2d');
+        
+        // Referências do DOM em vez de criação dinâmica (Evita memory leak / descarte de canvas no iOS)
+        const snapshotCanvas = document.getElementById('snapshotCanvas');
+        const snapCtx = snapshotCanvas.getContext('2d');
+        const selectionCanvas = document.getElementById('selectionCanvas');
+        const sCtx = selectionCanvas.getContext('2d');
+        const clipboardCanvas = document.getElementById('clipboardCanvas');
+        
         const colorIndicator = document.getElementById('colorIndicator');
         const colorPanel = document.getElementById('colorPanel');
         const sbSquare = document.getElementById('sbSquare');
         const sbCursor = document.getElementById('sbCursor');
         const hueSliderCustom = document.getElementById('hueSliderCustom');
         const nativeColorPicker = document.getElementById('nativeColorPicker');
-        const dCtx = drawingCanvas.getContext('2d');
-        const selectionCanvas = document.createElement('canvas'); 
         const workspace = document.querySelector('.workspace');
         const bgCanvas = document.getElementById('bgCanvas');
         const bgCtx = bgCanvas.getContext('2d');
         const bgInput = document.getElementById('bgInput');
         const clearBgBtn = document.getElementById('clearBgBtn');
         const bgImgBtn = document.getElementById('bgImgBtn');
-        const snapshotCanvas = document.createElement('canvas'); 
-        const snapCtx = snapshotCanvas.getContext('2d');
-        const sCtx = selectionCanvas.getContext('2d');
         
         let warpMesh = [];
         const WARP_GRID = 20;
@@ -543,13 +562,13 @@
         const onionToggle = document.getElementById('onionToggle');
         const onionOpacitySlider = document.getElementById('onionOpacitySlider');
 
-        let frames = [{ layers: [null, null, null], duration: 1 }]; 
+        let frames = [{ layers: [null, null, null, null, null, null], duration: 1 }]; 
         let currentFrameIndex = 0;
         let activeLayerIndex = 1;
-        let layerVisibility = [true, true, true];
+        let layerVisibility = [true, true, true, true, true, true];
         let undoStack = [], redoStack = [];
         let isHistoryAction = false;
-        let hasUnsavedChanges = false; // TRAVA DE SEGURANÇA PARA NÃO DELETAR FRAMES VAZIOS
+        let hasUnsavedChanges = false;
         let soloMode = false;
         let isExporting = false;
 
@@ -656,10 +675,26 @@
             updateColorFromHSV();
         }
 
-        const originalSample = sampleColor;
-        sampleColor = (x, y) => {
-            originalSample(x, y);
-            syncCustomPicker(nativeColorPicker.value);
+        let sampleColorFn = (x, y) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            tCtx.fillStyle = 'white'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(bgCanvas, 0, 0);
+
+            for (let i = 0; i < 6; i++) {
+                if (i === activeLayerIndex) tCtx.drawImage(mainCanvas, 0, 0);
+                else {
+                    const lCanvas = document.getElementById(`layer${i}`);
+                    tCtx.drawImage(lCanvas, 0, 0);
+                }
+            }
+            const pixel = tCtx.getImageData(x, y, 1, 1).data;
+            const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+            nativeColorPicker.value = hex; cachedColor = hex;
+            syncCustomPicker(hex);
+            currentTool = 'brush'; updateToolUI();
         };
 
         let isDrawing = false;
@@ -672,9 +707,9 @@
         let cachedSize = 3;
         let cachedOpacity = 100;
 
-        let clipboardCanvas = null;
         let clipboardBox = null;
         let clipboardCorners = null;
+        let hasClipboard = false;
         let selectionPath = [];
         let isTransforming = false;
         let selectionBox = { x: 0, y: 0, w: 0, h: 0, angle: 0, scale: 1 };
@@ -871,17 +906,15 @@
 
         function startDrawing(e) {
             if (isPlaying) return;
-            isDrawing = true;
+            if (isDrawing) return; // Otimização Palm Rejection: Ignora toque secundário
             
-            snapshotCanvas.width = mainCanvas.width;
-            snapshotCanvas.height = mainCanvas.height;
-            snapCtx.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
-            snapCtx.drawImage(mainCanvas, 0, 0);
+            isDrawing = true;
+            try { mainCanvas.setPointerCapture(e.pointerId); } catch(err) {}
 
             const pos = getMousePos(e); 
             
             if (currentTool === 'eyedropper') {
-                sampleColor(pos.x, pos.y);
+                sampleColorFn(pos.x, pos.y);
                 isDrawing = false; return;
             }
             
@@ -920,14 +953,36 @@
             cachedOpacity = parseFloat(document.getElementById('brushOpacity').value);
             cachedColor = nativeColorPicker.value;
 
-            dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-            dCtx.beginPath();
-            dCtx.arc(lastX, lastY, cachedSize / 2, 0, Math.PI * 2);
-            dCtx.globalCompositeOperation = 'source-over';
-            dCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
-            dCtx.fill();
+            // Sensibilidade de Pressão da Caneta (Pen Pressure)
+            let pressure = (e.pointerType === 'pen' && e.pressure !== undefined) ? e.pressure : 1;
+            if (e.pointerType === 'pen' && pressure === 0) pressure = 0.05;
+            let currentSize = cachedSize * (0.2 + 0.8 * pressure);
+
+            // DIRECT DRAW OPTIMIZATION: Bypassa buffer secundário se a opacidade é 100% (evita memory leaks / desaparecimentos de strokes)
+            const isDirectDraw = cachedOpacity == 100;
+            const targetCtx = isDirectDraw ? ctx : dCtx;
+
+            if (!isDirectDraw) {
+                // Apenas redimensiona se absolutamente necessário
+                if (snapshotCanvas.width !== mainCanvas.width) snapshotCanvas.width = mainCanvas.width;
+                if (snapshotCanvas.height !== mainCanvas.height) snapshotCanvas.height = mainCanvas.height;
+                
+                snapCtx.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+                snapCtx.drawImage(mainCanvas, 0, 0);
+                dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            }
+
+            targetCtx.beginPath();
+            targetCtx.arc(lastX, lastY, currentSize / 2, 0, Math.PI * 2);
+            targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+            targetCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
+            targetCtx.fill();
             
-            triggerRenderLiveStroke();
+            if (!isDirectDraw) {
+                triggerRenderLiveStroke();
+            } else {
+                hasUnsavedChanges = true;
+            }
         }
 
         function draw(e) {
@@ -979,27 +1034,39 @@
                 return;
             }
 
-            dCtx.beginPath();
-            dCtx.lineCap = 'round'; dCtx.lineJoin = 'round';
-            dCtx.globalCompositeOperation = 'source-over';
-            dCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
-            dCtx.lineWidth = cachedSize; 
+            const isDirectDraw = cachedOpacity == 100;
+            const targetCtx = isDirectDraw ? ctx : dCtx;
+
+            targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
+            targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+            targetCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
 
             for (const event of events) {
                 const pos = getMousePos(event);
                 if (Math.hypot(pos.x - lastX, pos.y - lastY) < 0.5) continue;
+                
+                // Mapeamento dinâmico de pressão por segmento
+                let pressure = (event.pointerType === 'pen' && event.pressure !== undefined) ? event.pressure : 1;
+                if (event.pointerType === 'pen' && pressure === 0) pressure = 0.05;
+                let currentSize = cachedSize * (0.2 + 0.8 * pressure);
 
                 const targetX = lastX + (pos.x - lastX); const targetY = lastY + (pos.y - lastY);
                 const midX = (lastX + targetX) / 2; const midY = (lastY + targetY) / 2;
 
-                dCtx.moveTo(lastMidX, lastMidY);
-                dCtx.quadraticCurveTo(lastX, lastY, midX, midY);
+                targetCtx.beginPath();
+                targetCtx.lineWidth = currentSize;
+                targetCtx.moveTo(lastMidX, lastMidY);
+                targetCtx.quadraticCurveTo(lastX, lastY, midX, midY);
+                targetCtx.stroke();
 
                 lastX = targetX; lastY = targetY; lastMidX = midX; lastMidY = midY;
             }
-            dCtx.stroke();
 
-            triggerRenderLiveStroke();
+            if (!isDirectDraw) {
+                triggerRenderLiveStroke();
+            } else {
+                hasUnsavedChanges = true;
+            }
         }
 
         let renderPending = false;
@@ -1020,31 +1087,49 @@
             ctx.restore();
             renderPending = false;
             
-            hasUnsavedChanges = true; // MARCA QUE HOUVE ALTERAÇÃO
+            hasUnsavedChanges = true;
         }
 
         function stopDrawing(e) {
-            if (isDrawing) {
-                if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket' && e) {
-                    const pos = getMousePos(e);
-                    dCtx.beginPath();
-                    dCtx.moveTo(lastMidX, lastMidY);
-                    dCtx.quadraticCurveTo(lastX, lastY, pos.x, pos.y);
-                    dCtx.stroke();
-                }
-                
-                forceRenderLiveStroke(); 
+            if (!isDrawing) return;
+            
+            if (e && e.pointerId) {
+                try { mainCanvas.releasePointerCapture(e.pointerId); } catch(err) {}
+            }
 
-                dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-                isDrawing = false;
-                draggedWarpPoint = null;
+            if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket' && e && e.type !== 'pointercancel') {
+                const pos = getMousePos(e);
+                const isDirectDraw = cachedOpacity == 100;
+                const targetCtx = isDirectDraw ? ctx : dCtx;
                 
-                if ((currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp') && !isTransforming && selectionPath.length > 3) {
-                    createSelection();
-                } else if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket') {
-                    transformMode = null;
-                    saveFrameState(currentFrameIndex);
+                let pressure = (e.pointerType === 'pen' && e.pressure !== undefined) ? e.pressure : 1;
+                if (e.pointerType === 'pen' && pressure === 0) pressure = 0.05;
+                let currentSize = cachedSize * (0.2 + 0.8 * pressure);
+
+                targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
+                targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+                targetCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
+                
+                targetCtx.beginPath();
+                targetCtx.lineWidth = currentSize;
+                targetCtx.moveTo(lastMidX, lastMidY);
+                targetCtx.quadraticCurveTo(lastX, lastY, pos.x, pos.y);
+                targetCtx.stroke();
+                
+                if (!isDirectDraw) {
+                    forceRenderLiveStroke(); 
+                    dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
                 }
+            }
+            
+            isDrawing = false;
+            draggedWarpPoint = null;
+            
+            if ((currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp') && !isTransforming && selectionPath.length > 3) {
+                createSelection();
+            } else if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket') {
+                transformMode = null;
+                saveFrameState(currentFrameIndex);
             }
         }
 
@@ -1054,27 +1139,6 @@
             uiCtx.beginPath(); uiCtx.moveTo(selectionPath[0].x, selectionPath[0].y);
             selectionPath.forEach(p => uiCtx.lineTo(p.x, p.y));
             uiCtx.stroke(); uiCtx.setLineDash([]);
-        }
-
-        function sampleColor(x, y) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
-            const tCtx = tempCanvas.getContext('2d');
-
-            tCtx.fillStyle = 'white'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tCtx.drawImage(bgCanvas, 0, 0);
-
-            for (let i = 0; i < 3; i++) {
-                if (i === activeLayerIndex) tCtx.drawImage(mainCanvas, 0, 0);
-                else {
-                    const lCanvas = document.getElementById(`layer${i}`);
-                    tCtx.drawImage(lCanvas, 0, 0);
-                }
-            }
-            const pixel = tCtx.getImageData(x, y, 1, 1).data;
-            const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
-            nativeColorPicker.value = hex; cachedColor = hex;
-            currentTool = 'brush'; updateToolUI();
         }
 
         function createSelection() {
@@ -1303,9 +1367,14 @@
 
         function handleCopy() {
             if (!isTransforming) return;
-            clipboardCanvas = document.createElement('canvas'); clipboardCanvas.width = selectionCanvas.width; clipboardCanvas.height = selectionCanvas.height;
-            const cbCtx = clipboardCanvas.getContext('2d'); cbCtx.drawImage(selectionCanvas, 0, 0);
-            clipboardBox = { ...selectionBox }; clipboardCorners = selectionCorners.map(c => ({...c}));
+            const cbCtx = clipboardCanvas.getContext('2d');
+            clipboardCanvas.width = selectionCanvas.width;
+            clipboardCanvas.height = selectionCanvas.height;
+            cbCtx.clearRect(0, 0, clipboardCanvas.width, clipboardCanvas.height);
+            cbCtx.drawImage(selectionCanvas, 0, 0);
+            clipboardBox = { ...selectionBox }; 
+            clipboardCorners = selectionCorners.map(c => ({...c}));
+            hasClipboard = true;
         }
 
         function handleCut() {
@@ -1318,9 +1387,10 @@
         }
 
         function handlePaste() {
-            if (!clipboardCanvas) return;
+            if (!hasClipboard) return;
             finishSelection(); 
-            selectionCanvas.width = clipboardCanvas.width; selectionCanvas.height = clipboardCanvas.height;
+            selectionCanvas.width = clipboardCanvas.width; 
+            selectionCanvas.height = clipboardCanvas.height;
             sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
             sCtx.drawImage(clipboardCanvas, 0, 0);
             selectionBox = { ...clipboardBox }; selectionCorners = clipboardCorners.map(c => ({...c}));
@@ -1344,9 +1414,12 @@
             }
         }
 
-        mainCanvas.addEventListener('pointerdown', startDrawing);
+        // --- ATTACH EVENT LISTENERS COM PREVENÇÕES ANTI-BUGS ---
+        mainCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); startDrawing(e); });
         window.addEventListener('pointermove', draw); 
         window.addEventListener('pointerup', stopDrawing);
+        window.addEventListener('pointercancel', stopDrawing);
+        mainCanvas.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
         workspace.addEventListener('mousedown', (e) => { if(e.target === workspace) finishSelection(); });
 
         // SALVAMENTO BLINDADO: Só atualiza se houver alteração real
@@ -1415,7 +1488,7 @@
             finishSelection(); 
             if (frames.length <= 1) {
                 ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-                frames = [{ layers: [null, null, null], duration: 1 }];
+                frames = [{ layers: [null, null, null, null, null, null], duration: 1 }];
                 currentFrameIndex = 0; 
                 hasUnsavedChanges = false;
                 renderTimeline(true); updateLayerIndicators(); return;
@@ -1435,7 +1508,6 @@
 
         async function loadFrame(index) {
             finishSelection(); 
-            // Se houve alteração no quadro, garante o salvamento antes de trocar
             if (!isHistoryAction && frames[currentFrameIndex] && currentFrameIndex !== index) {
                 await saveFrameState(currentFrameIndex);
             }
@@ -1445,7 +1517,7 @@
             const activeData = frames[index].layers[activeLayerIndex];
             if (activeData) ctx.drawImage(activeData, 0, 0);
 
-            hasUnsavedChanges = false; // Novo quadro aberto, está "limpo" até você desenhar
+            hasUnsavedChanges = false; 
 
             updateOnionSkin(); refreshLayerDisplay(); renderTimeline();
 
@@ -1454,7 +1526,7 @@
         }
 
         function updateLayerIndicators() {
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 6; i++) {
                 const stat = document.getElementById(`l${i}-stat`);
                 stat.textContent = frames[currentFrameIndex].layers[i] ? "●" : "○";
             }
@@ -1467,7 +1539,7 @@
             canvasContainer.style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
 
             document.querySelectorAll('.layer-item').forEach((el, i) => {
-                const layerIdx = 2 - i; 
+                const layerIdx = 5 - i; 
                 el.classList.toggle('active', layerIdx === activeLayerIndex);
                 const visBtn = el.querySelector('.visibility-btn');
                 if (visBtn) {
@@ -1476,7 +1548,7 @@
                 }
             });
 
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < 6; i++) {
                 const lCanvas = document.getElementById(`layer${i}`);
                 const lCtx = lCanvas.getContext('2d');
                 lCanvas.style.visibility = (layerVisibility[i] && !soloMode) ? 'visible' : 'hidden';
@@ -1492,7 +1564,7 @@
 
         async function addBlankFrame() {
             if (isPlaying) return; finishSelection(); await saveFrameState(currentFrameIndex);
-            frames.splice(currentFrameIndex + 1, 0, { layers: [null, null, null], duration: 1 });
+            frames.splice(currentFrameIndex + 1, 0, { layers: [null, null, null, null, null, null], duration: 1 });
             await loadFrame(currentFrameIndex + 1);
         }
 
@@ -1555,7 +1627,7 @@
                 if (withBackground) {
                     tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height); tCtx.drawImage(bgCanvas, 0, 0);
                 }
-                for(let l = 0; l < 3; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
+                for(let l = 0; l < 6; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
                 const base64Data = tempCanvas.toDataURL('image/png').split(',')[1];
                 imgFolder.file(`frame_${String(i + 1).padStart(3, '0')}.png`, base64Data, {base64: true});
             }
@@ -1583,7 +1655,7 @@
                     let targetFrame = 0;
                     for (let j = 0; j < frameStarts.length; j++) { if (frameStarts[j] <= currentTimeInTicks) targetFrame = j; else break; }
                     tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-                    for(let l = 0; l < 3; l++) { const layerData = frames[targetFrame].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
+                    for(let l = 0; l < 6; l++) { const layerData = frames[targetFrame].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
                     const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
                     const fileName = `frame_${String(i + 1).padStart(5, '0')}.png`;
                     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
@@ -1602,7 +1674,7 @@
 
             const muxer = new WebMMuxer.Muxer({
                 target: new WebMMuxer.ArrayBufferTarget(),
-                video: { codec: withTransparency ? 'V_VP8' : 'V_VP9', width: tempCanvas.width, height: tempCanvas.height, frameRate: parseInt(fps) }
+                video: { codec: withTransparency ? 'V_VP8' : 'V_VP9', width: tempCanvas.width, height: tempCanvas.height, frameRate: 24 }
             });
 
             const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => console.error(e) });
@@ -1612,7 +1684,7 @@
             for (let i = 0; i < frames.length; i++) {
                 tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
                 if (!withTransparency) { tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height); tCtx.drawImage(bgCanvas, 0, 0); }
-                for(let l = 0; l < 3; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
+                for(let l = 0; l < 6; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
 
                 const durationTicks = (frames[i].duration || 1);
                 const frame = new VideoFrame(tempCanvas, { timestamp: currentTick * tickDuration, duration: durationTicks * tickDuration });
@@ -1650,7 +1722,11 @@
             reader.onload = async (event) => {
                 const data = JSON.parse(event.target.result);
                 fps = data.fps || 24; document.getElementById('fpsSlider').value = fps; document.getElementById('fpsValue').textContent = fps;
-                if (data.layerVisibility) layerVisibility = data.layerVisibility;
+                
+                if (data.layerVisibility) {
+                    layerVisibility = data.layerVisibility;
+                    while (layerVisibility.length < 6) layerVisibility.push(true);
+                }
 
                 const bgImg = new Image();
                 bgImg.onload = () => { bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgCtx.drawImage(bgImg, 0, 0); };
@@ -1662,6 +1738,7 @@
                         const img = new Image(); img.src = l; await new Promise(res => img.onload = res);
                         return await createImageBitmap(img);
                     }));
+                    while (layers.length < 6) layers.push(null);
                     return { layers, duration: f.duration || 1 };
                 }));
 
@@ -1738,7 +1815,6 @@
             renderTimeline(true); 
         }
 
-        // MINIATURA BLINDADA: Desenha TODAS as camadas (composição perfeita)
         async function updateSingleThumbnail(index) {
             const thumb = document.getElementById(`thumb-${index}`);
             if (!thumb) return;
@@ -1754,8 +1830,7 @@
             const tCtx = canvas.getContext('2d');
             tCtx.clearRect(0, 0, 160, 90);
             
-            // Empilha e desenha a camada 0, depois a 1, depois a 2 (respeitando visibilidade)
-            for (let l = 0; l < 3; l++) {
+            for (let l = 0; l < 6; l++) {
                 const layerData = frames[index].layers[l];
                 if (layerData) {
                     tCtx.drawImage(layerData, 0, 0, 160, 90);
@@ -1838,7 +1913,7 @@
                         pCtx.fillStyle = 'white'; pCtx.fillRect(0, 0, playbackCanvas.width, playbackCanvas.height);
                         pCtx.drawImage(bgCanvas, 0, 0);
 
-                        for (let l = 0; l < 3; l++) {
+                        for (let l = 0; l < 6; l++) {
                             const layerData = frames[playIndex].layers[l];
                             if (layerData) pCtx.drawImage(layerData, 0, 0);
                         }
@@ -1861,6 +1936,9 @@
             document.getElementById('layer0').style.display = display;
             document.getElementById('layer1').style.display = display;
             document.getElementById('layer2').style.display = display;
+            document.getElementById('layer3').style.display = display;
+            document.getElementById('layer4').style.display = display;
+            document.getElementById('layer5').style.display = display;
             const onion = document.getElementById('onionCanvas');
             if (onion) onion.style.display = display;
         }
