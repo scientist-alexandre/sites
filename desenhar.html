@@ -174,18 +174,21 @@
         }
 
         .sidebar-left {
-            display: flex; flex-direction: column; gap: 20px; z-index: 10;
-            background: rgba(34, 34, 34, 0.8); padding: 20px 10px;
-            border-radius: 20px; pointer-events: none; backdrop-filter: blur(5px); margin-right: 20px;
+            position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 15px; z-index: 10;
+            background: rgba(34, 34, 34, 0.8); padding: 15px 10px;
+            border-radius: 20px; pointer-events: none; backdrop-filter: blur(5px);
+            max-height: 95%; overflow-y: auto; overflow-x: hidden;
         }
-        .presets-container { display: flex; flex-direction: column; justify-content: space-between; height: 120px; margin-right: 6px; }
+        .sidebar-left::-webkit-scrollbar { display: none; }
+        .presets-container { display: flex; flex-direction: column; justify-content: space-between; height: 100px; margin-right: 6px; }
         .preset-dot { width: 6px; height: 6px; background: #444; border-radius: 50%; cursor: pointer; transition: 0.2s; border: 1px solid #666; }
         .preset-dot:hover { background: var(--active-blue); transform: scale(1.5); }
         .slider-container { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 12px; color: #aaa; }
         .slider-row { display: flex; align-items: center; }
         .slider-value { font-size: 10px; color: var(--active-blue); font-weight: bold; margin-bottom: -2px; }
         .sidebar-left > * { pointer-events: auto; }
-        .sidebar-left input[type="range"] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; appearance: slider-vertical; width: 8px; height: 120px; cursor: pointer; }
+        .sidebar-left input[type="range"] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; appearance: slider-vertical; width: 8px; height: 100px; cursor: pointer; }
 
         /* Controles Top Bar */
         .fps-control, .onion-control, .bucket-control {
@@ -222,14 +225,23 @@
         .dropdown-content a:hover { background-color: #333; color: #fff; }
         .bg-control { display: flex; align-items: center; }
 
-        /* Container do Canvas */
         .canvas-container {
-            width: 100%; height: auto; max-width: 100%; max-height: 100%; aspect-ratio: 16 / 9;
-            background-color: #ffffff; box-shadow: 0 0 30px rgba(0,0,0,0.8); position: relative; border-radius: 4px;
+            width: 100%;
+            height: 100%;
+            max-width: calc((100vh - 160px) * 16 / 9);
+            aspect-ratio: 16 / 9;
+            background-color: #ffffff; 
+            box-shadow: 0 0 30px rgba(0,0,0,0.8); 
+            position: relative; 
+            border-radius: 4px;
+            flex-shrink: 1;
         }
 
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
-        .offscreen-canvas { opacity: 0; pointer-events: none; z-index: -10; } /* FIX: Mantém no DOM para evitar descarte de RAM no iOS */
+        .canvas-container > canvas:not(.offscreen-canvas) { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; 
+        }
+
+        .offscreen-canvas { display: none; } 
 
         #bgCanvas { z-index: 0; pointer-events: none; }
         .layer-canvas { pointer-events: none; }
@@ -331,8 +343,8 @@
             <input type="file" id="importInput" accept="image/*" style="display: none;">
             <input type="file" id="projectInput" accept=".json" style="display: none;">
             <div class="fps-control">
-                <span>FPS: <span id="fpsValue">24</span></span>
-                <input type="range" id="fpsSlider" min="1" max="24" value="24">
+                <span>FPS: <span id="fpsValue">8</span></span>
+                <input type="range" id="fpsSlider" min="1" max="24" value="8">
             </div>
             <div class="onion-control">
                 <span>Onion <input type="checkbox" id="onionToggle" checked></span>
@@ -456,7 +468,6 @@
             <canvas id="onionCanvas" width="1920" height="1080"></canvas>
             <canvas id="uiCanvas" width="1920" height="1080"></canvas>
             
-            <!-- Offscreen canvases anexados ao DOM para previnir GC na RAM do iOS/Android -->
             <canvas id="snapshotCanvas" class="offscreen-canvas" width="1920" height="1080"></canvas>
             <canvas id="selectionCanvas" class="offscreen-canvas" width="1920" height="1080"></canvas>
             <canvas id="clipboardCanvas" class="offscreen-canvas" width="1920" height="1080"></canvas>
@@ -495,13 +506,19 @@
         const drawingCanvas = document.getElementById('drawingCanvas');
         const dCtx = drawingCanvas.getContext('2d');
         
-        // Referências do DOM em vez de criação dinâmica (Evita memory leak / descarte de canvas no iOS)
         const snapshotCanvas = document.getElementById('snapshotCanvas');
         const snapCtx = snapshotCanvas.getContext('2d');
         const selectionCanvas = document.getElementById('selectionCanvas');
         const sCtx = selectionCanvas.getContext('2d');
         const clipboardCanvas = document.getElementById('clipboardCanvas');
         
+        // FIX DE DESEMPENHO (PERFORMANCE): Canvas global reaproveitado para operações pesadas
+        // Impede que o software engasgue alocando memória 1920x1080 toda vez que salva o frame.
+        const sharedUtilCanvas = document.createElement('canvas');
+        sharedUtilCanvas.width = 1920;
+        sharedUtilCanvas.height = 1080;
+        const sharedUtilCtx = sharedUtilCanvas.getContext('2d', { willReadFrequently: true });
+
         const colorIndicator = document.getElementById('colorIndicator');
         const colorPanel = document.getElementById('colorPanel');
         const sbSquare = document.getElementById('sbSquare');
@@ -571,6 +588,8 @@
         let hasUnsavedChanges = false;
         let soloMode = false;
         let isExporting = false;
+        
+        let isSaving = false;
 
         let curH = 0, curS = 100, curV = 0;
         let cachedColor = "#000000";
@@ -676,21 +695,20 @@
         }
 
         let sampleColorFn = (x, y) => {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
-            const tCtx = tempCanvas.getContext('2d');
-
-            tCtx.fillStyle = 'white'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tCtx.drawImage(bgCanvas, 0, 0);
+            // FIX DE DESEMPENHO: Usando sharedUtilCanvas em vez de criar um canvas novo toda vez
+            sharedUtilCtx.globalCompositeOperation = 'source-over';
+            sharedUtilCtx.fillStyle = 'white';
+            sharedUtilCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
+            sharedUtilCtx.drawImage(bgCanvas, 0, 0);
 
             for (let i = 0; i < 6; i++) {
-                if (i === activeLayerIndex) tCtx.drawImage(mainCanvas, 0, 0);
+                if (i === activeLayerIndex) sharedUtilCtx.drawImage(mainCanvas, 0, 0);
                 else {
                     const lCanvas = document.getElementById(`layer${i}`);
-                    tCtx.drawImage(lCanvas, 0, 0);
+                    sharedUtilCtx.drawImage(lCanvas, 0, 0);
                 }
             }
-            const pixel = tCtx.getImageData(x, y, 1, 1).data;
+            const pixel = sharedUtilCtx.getImageData(x, y, 1, 1).data;
             const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
             nativeColorPicker.value = hex; cachedColor = hex;
             syncCustomPicker(hex);
@@ -733,7 +751,7 @@
             } else {
                 finishSelection();
                 currentTool = tool;
-                if (tool === 'warp') setBrushSize(25);
+                if (tool === 'warp') setBrushSize(40);
             }
             updateToolUI();
         }
@@ -747,12 +765,13 @@
         warpBtn.onclick = () => setTool('warp');
 
         function flipCanvas(canvas, horizontal = true) {
-            const temp = document.createElement('canvas');
-            temp.width = canvas.width; temp.height = canvas.height;
-            const tCtx = temp.getContext('2d');
-            tCtx.drawImage(canvas, 0, 0);
+            // FIX DE DESEMPENHO: Usa canvas global ao invés de criar canvas novo
+            sharedUtilCtx.globalCompositeOperation = 'source-over';
+            sharedUtilCtx.clearRect(0, 0, canvas.width, canvas.height);
+            sharedUtilCtx.drawImage(canvas, 0, 0);
 
             const canvasCtx = canvas.getContext('2d');
+            canvasCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
             canvasCtx.save();
             if (horizontal) {
@@ -762,7 +781,7 @@
                 canvasCtx.translate(0, canvas.height);
                 canvasCtx.scale(1, -1);
             }
-            canvasCtx.drawImage(temp, 0, 0);
+            canvasCtx.drawImage(sharedUtilCanvas, 0, 0);
             canvasCtx.restore();
         }
 
@@ -809,6 +828,7 @@
                 await saveFrameState(currentFrameIndex); 
             }
             activeLayerIndex = index;
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA CONTRA BORRACHA
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             const currentLayer = frames[currentFrameIndex].layers[activeLayerIndex];
             if (currentLayer) ctx.drawImage(currentLayer, 0, 0);
@@ -831,24 +851,28 @@
             isHistoryAction = true; 
 
             if (frames[currentFrameIndex] && hasUnsavedChanges) {
-                frames[currentFrameIndex].layers[activeLayerIndex] = await createImageBitmap(mainCanvas);
+                // FIX PERFORMANCE (save state inline)
+                sharedUtilCtx.globalCompositeOperation = 'source-over';
+                sharedUtilCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                sharedUtilCtx.drawImage(mainCanvas, 0, 0);
+                frames[currentFrameIndex].layers[activeLayerIndex] = await createImageBitmap(sharedUtilCanvas);
             }
 
             const sourceLayer = frames[currentFrameIndex].layers[sourceIdx];
             const targetLayer = frames[currentFrameIndex].layers[targetIdx];
 
             if (sourceLayer) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
-                const tCtx = tempCanvas.getContext('2d');
+                // FIX PERFORMANCE: Usa o canvas global compartilhado pra mesclar as camadas
+                sharedUtilCtx.globalCompositeOperation = 'source-over';
+                sharedUtilCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
 
                 const lowerLayer = (sourceIdx < targetIdx) ? sourceLayer : targetLayer;
                 const higherLayer = (sourceIdx > targetIdx) ? sourceLayer : targetLayer;
 
-                if (lowerLayer) tCtx.drawImage(lowerLayer, 0, 0);
-                if (higherLayer) tCtx.drawImage(higherLayer, 0, 0);
+                if (lowerLayer) sharedUtilCtx.drawImage(lowerLayer, 0, 0);
+                if (higherLayer) sharedUtilCtx.drawImage(higherLayer, 0, 0);
 
-                const mergedBmp = await createImageBitmap(tempCanvas);
+                const mergedBmp = await createImageBitmap(sharedUtilCanvas);
                 
                 frames[currentFrameIndex].layers[targetIdx] = mergedBmp;
                 frames[currentFrameIndex].layers[sourceIdx] = null;
@@ -857,6 +881,7 @@
             activeLayerIndex = targetIdx;
             isHistoryAction = wasHistory;
             
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             if (frames[currentFrameIndex].layers[targetIdx]) {
                 ctx.drawImage(frames[currentFrameIndex].layers[targetIdx], 0, 0);
@@ -881,12 +906,6 @@
             refreshLayerDisplay();
         };
 
-        ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-        renderTimeline(true);
-        refreshLayerDisplay();
-        hasUnsavedChanges = true;
-        saveFrameState(0);
-
         window.addEventListener('contextmenu', (e) => e.preventDefault());
 
         function getMousePos(evt) {
@@ -906,7 +925,7 @@
 
         function startDrawing(e) {
             if (isPlaying) return;
-            if (isDrawing) return; // Otimização Palm Rejection: Ignora toque secundário
+            if (isDrawing) return; 
             
             isDrawing = true;
             try { mainCanvas.setPointerCapture(e.pointerId); } catch(err) {}
@@ -953,30 +972,38 @@
             cachedOpacity = parseFloat(document.getElementById('brushOpacity').value);
             cachedColor = nativeColorPicker.value;
 
-            // Sensibilidade de Pressão da Caneta (Pen Pressure)
             let pressure = (e.pointerType === 'pen' && e.pressure !== undefined) ? e.pressure : 1;
             if (e.pointerType === 'pen' && pressure === 0) pressure = 0.05;
             let currentSize = cachedSize * (0.2 + 0.8 * pressure);
 
-            // DIRECT DRAW OPTIMIZATION: Bypassa buffer secundário se a opacidade é 100% (evita memory leaks / desaparecimentos de strokes)
             const isDirectDraw = cachedOpacity == 100;
             const targetCtx = isDirectDraw ? ctx : dCtx;
 
             if (!isDirectDraw) {
-                // Apenas redimensiona se absolutamente necessário
                 if (snapshotCanvas.width !== mainCanvas.width) snapshotCanvas.width = mainCanvas.width;
                 if (snapshotCanvas.height !== mainCanvas.height) snapshotCanvas.height = mainCanvas.height;
                 
+                snapCtx.globalCompositeOperation = 'source-over';
                 snapCtx.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
                 snapCtx.drawImage(mainCanvas, 0, 0);
+                dCtx.globalCompositeOperation = 'source-over';
                 dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
             }
 
             targetCtx.beginPath();
             targetCtx.arc(lastX, lastY, currentSize / 2, 0, Math.PI * 2);
-            targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+            
+            if (isDirectDraw && currentTool === 'eraser') {
+                targetCtx.globalCompositeOperation = 'destination-out';
+            } else {
+                targetCtx.globalCompositeOperation = 'source-over';
+            }
+            
             targetCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
             targetCtx.fill();
+            
+            // FIX DEFINITIVO (TRAVA DA BORRACHA): Restaura estado na mesma hora.
+            targetCtx.globalCompositeOperation = 'source-over'; 
             
             if (!isDirectDraw) {
                 triggerRenderLiveStroke();
@@ -1038,14 +1065,17 @@
             const targetCtx = isDirectDraw ? ctx : dCtx;
 
             targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
-            targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+            if (isDirectDraw && currentTool === 'eraser') {
+                targetCtx.globalCompositeOperation = 'destination-out';
+            } else {
+                targetCtx.globalCompositeOperation = 'source-over';
+            }
             targetCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
 
             for (const event of events) {
                 const pos = getMousePos(event);
                 if (Math.hypot(pos.x - lastX, pos.y - lastY) < 0.5) continue;
                 
-                // Mapeamento dinâmico de pressão por segmento
                 let pressure = (event.pointerType === 'pen' && event.pressure !== undefined) ? event.pressure : 1;
                 if (event.pointerType === 'pen' && pressure === 0) pressure = 0.05;
                 let currentSize = cachedSize * (0.2 + 0.8 * pressure);
@@ -1061,6 +1091,9 @@
 
                 lastX = targetX; lastY = targetY; lastMidX = midX; lastMidY = midY;
             }
+            
+            // FIX DEFINITIVO (TRAVA DA BORRACHA)
+            targetCtx.globalCompositeOperation = 'source-over';
 
             if (!isDirectDraw) {
                 triggerRenderLiveStroke();
@@ -1078,6 +1111,7 @@
         }
 
         function forceRenderLiveStroke() {
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             ctx.drawImage(snapshotCanvas, 0, 0); 
             ctx.save();
@@ -1107,7 +1141,11 @@
                 let currentSize = cachedSize * (0.2 + 0.8 * pressure);
 
                 targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
-                targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+                if (isDirectDraw && currentTool === 'eraser') {
+                    targetCtx.globalCompositeOperation = 'destination-out';
+                } else {
+                    targetCtx.globalCompositeOperation = 'source-over';
+                }
                 targetCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
                 
                 targetCtx.beginPath();
@@ -1116,8 +1154,12 @@
                 targetCtx.quadraticCurveTo(lastX, lastY, pos.x, pos.y);
                 targetCtx.stroke();
                 
+                // FIX DEFINITIVO (TRAVA DA BORRACHA)
+                targetCtx.globalCompositeOperation = 'source-over';
+                
                 if (!isDirectDraw) {
                     forceRenderLiveStroke(); 
+                    dCtx.globalCompositeOperation = 'source-over';
                     dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
                 }
             }
@@ -1149,11 +1191,13 @@
             selectionCorners = [ { x: minX, y: minY }, { x: maxX, y: minY }, { x: maxX, y: maxY }, { x: minX, y: maxY } ];
             
             selectionCanvas.width = selectionBox.w; selectionCanvas.height = selectionBox.h;
+            sCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             sCtx.save(); sCtx.translate(-minX, -minY);
             sCtx.beginPath(); sCtx.moveTo(selectionPath[0].x, selectionPath[0].y);
             selectionPath.forEach(p => sCtx.lineTo(p.x, p.y));
             sCtx.clip(); sCtx.drawImage(mainCanvas, 0, 0); sCtx.restore();
 
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             ctx.save(); ctx.beginPath(); ctx.moveTo(selectionPath[0].x, selectionPath[0].y);
             selectionPath.forEach(p => ctx.lineTo(p.x, p.y));
             ctx.clip(); ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); ctx.restore();
@@ -1276,6 +1320,7 @@
                     stack.push([currX, currY + 1]); stack.push([currX, currY - 1]);
                 }
             }
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             ctx.putImageData(imgData, 0, 0);
             hasUnsavedChanges = true;
         }
@@ -1368,6 +1413,7 @@
         function handleCopy() {
             if (!isTransforming) return;
             const cbCtx = clipboardCanvas.getContext('2d');
+            cbCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             clipboardCanvas.width = selectionCanvas.width;
             clipboardCanvas.height = selectionCanvas.height;
             cbCtx.clearRect(0, 0, clipboardCanvas.width, clipboardCanvas.height);
@@ -1391,6 +1437,7 @@
             finishSelection(); 
             selectionCanvas.width = clipboardCanvas.width; 
             selectionCanvas.height = clipboardCanvas.height;
+            sCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
             sCtx.drawImage(clipboardCanvas, 0, 0);
             selectionBox = { ...clipboardBox }; selectionCorners = clipboardCorners.map(c => ({...c}));
@@ -1400,13 +1447,18 @@
 
         function finishSelection() {
             if (isTransforming) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'source-over'; // FORÇA A IMPEDIR O BUG DA BORRACHA AQUI
+                
                 if (currentTool === 'perspective') renderDistorted(ctx, selectionCanvas, selectionCorners);
                 else if (currentTool === 'warp') renderMeshWarp(ctx, selectionCanvas, warpMesh, WARP_GRID);
                 else {
-                    const b = selectionBox; ctx.save();
+                    const b = selectionBox;
                     ctx.translate(b.x + b.w/2, b.y + b.h/2); ctx.rotate(b.angle); ctx.scale(b.scale, b.scale);
-                    ctx.drawImage(selectionCanvas, -b.w/2, -b.h/2); ctx.restore();
+                    ctx.drawImage(selectionCanvas, -b.w/2, -b.h/2);
                 }
+                ctx.restore();
+                
                 isTransforming = false; transformMode = null; draggedWarpPoint = null; warpMesh = []; selectionPath = [];
                 uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
                 hasUnsavedChanges = true;
@@ -1414,7 +1466,6 @@
             }
         }
 
-        // --- ATTACH EVENT LISTENERS COM PREVENÇÕES ANTI-BUGS ---
         mainCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); startDrawing(e); });
         window.addEventListener('pointermove', draw); 
         window.addEventListener('pointerup', stopDrawing);
@@ -1422,28 +1473,43 @@
         mainCanvas.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
         workspace.addEventListener('mousedown', (e) => { if(e.target === workspace) finishSelection(); });
 
-        // SALVAMENTO BLINDADO: Só atualiza se houver alteração real
         async function saveFrameState(index) {
-            if (isHistoryAction || !frames[index] || !hasUnsavedChanges) return;
+            if (isSaving || isHistoryAction || !frames[index] || !hasUnsavedChanges) return;
             
-            const oldData = frames[index].layers[activeLayerIndex];
-            const newData = await createImageBitmap(mainCanvas);
+            // FIX DE DESEMPENHO (PERFORMANCE): Reutiliza o canvas offscreen em vez de criar um novo toda vez
+            // Evita GC Freeze, memory leaks e engasgos bruscos na hora do pincel terminar
+            sharedUtilCtx.globalCompositeOperation = 'source-over';
+            sharedUtilCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            sharedUtilCtx.drawImage(mainCanvas, 0, 0);
             
-            undoStack.push({ index: index, layer: activeLayerIndex, data: oldData });
-            
-            redoStack.forEach(action => { if (action.data && action.data.close) action.data.close(); });
-            redoStack = [];
-            
-            if (undoStack.length > 30) {
-                const discarded = undoStack.shift();
-                if (discarded.data && discarded.data.close) discarded.data.close();
+            isSaving = true;
+            try {
+                // Usa o sharedUtilCanvas de memória sem precisar recriar tags canvas
+                const canvasSnapshot = await createImageBitmap(sharedUtilCanvas);
+                const oldData = frames[index].layers[activeLayerIndex];
+                
+                undoStack.push({ frameRef: frames[index], layer: activeLayerIndex, data: oldData });
+                
+                redoStack.forEach(action => { if (action.data && action.data.close) action.data.close(); });
+                redoStack = [];
+                
+                if (undoStack.length > 50) {
+                    const discarded = undoStack.shift();
+                    if (discarded.data && discarded.data.close) discarded.data.close();
+                }
+
+                frames[index].layers[activeLayerIndex] = canvasSnapshot;
+                hasUnsavedChanges = false;
+                
+                requestAnimationFrame(() => {
+                    updateSingleThumbnail(index);
+                    updateLayerIndicators();
+                });
+            } catch (err) {
+                console.error("Erro ao salvar frame:", err);
+            } finally {
+                isSaving = false;
             }
-
-            frames[index].layers[activeLayerIndex] = newData;
-            hasUnsavedChanges = false; // Reseta a trava
-
-            updateSingleThumbnail(index);
-            updateLayerIndicators();
         }
 
         const brushSizeInput = document.getElementById('brushSize');
@@ -1464,22 +1530,32 @@
             }
             if (undoStack.length === 0) return;
             isHistoryAction = true; finishSelection();
+            
             const lastAction = undoStack.pop();
-            redoStack.push({ index: lastAction.index, layer: lastAction.layer, data: frames[lastAction.index].layers[lastAction.layer] });
-            frames[lastAction.index].layers[lastAction.layer] = lastAction.data;
-            activeLayerIndex = lastAction.layer;
-            await loadFrame(lastAction.index);
+            const frameIndex = frames.indexOf(lastAction.frameRef);
+            
+            if (frameIndex !== -1) {
+                redoStack.push({ frameRef: lastAction.frameRef, layer: lastAction.layer, data: lastAction.frameRef.layers[lastAction.layer] });
+                lastAction.frameRef.layers[lastAction.layer] = lastAction.data;
+                activeLayerIndex = lastAction.layer;
+                await loadFrame(frameIndex);
+            }
             isHistoryAction = false;
         }
 
         async function redo() {
             if (redoStack.length === 0) return;
             isHistoryAction = true; finishSelection();
+            
             const nextAction = redoStack.pop();
-            undoStack.push({ index: nextAction.index, layer: nextAction.layer, data: frames[nextAction.index].layers[nextAction.layer] });
-            frames[nextAction.index].layers[nextAction.layer] = nextAction.data;
-            activeLayerIndex = nextAction.layer;
-            await loadFrame(nextAction.index);
+            const frameIndex = frames.indexOf(nextAction.frameRef);
+            
+            if (frameIndex !== -1) {
+                undoStack.push({ frameRef: nextAction.frameRef, layer: nextAction.layer, data: nextAction.frameRef.layers[nextAction.layer] });
+                nextAction.frameRef.layers[nextAction.layer] = nextAction.data;
+                activeLayerIndex = nextAction.layer;
+                await loadFrame(frameIndex);
+            }
             isHistoryAction = false;
         }
 
@@ -1487,6 +1563,7 @@
             if (isPlaying) return;
             finishSelection(); 
             if (frames.length <= 1) {
+                ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
                 ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
                 frames = [{ layers: [null, null, null, null, null, null], duration: 1 }];
                 currentFrameIndex = 0; 
@@ -1499,7 +1576,7 @@
             
             if (wasActive) {
                 currentFrameIndex = Math.min(index, frames.length - 1);
-                isHistoryAction = true; loadFrame(currentFrameIndex); isHistoryAction = false;
+                isHistoryAction = true; await loadFrame(currentFrameIndex); isHistoryAction = false;
             } else {
                 if (index < currentFrameIndex) currentFrameIndex--;
                 updateOnionSkin(); renderTimeline();
@@ -1507,22 +1584,35 @@
         }
 
         async function loadFrame(index) {
+            if (index < 0 || index >= frames.length) return;
+            
             finishSelection(); 
-            if (!isHistoryAction && frames[currentFrameIndex] && currentFrameIndex !== index) {
-                await saveFrameState(currentFrameIndex);
+            
+            const prevIndex = currentFrameIndex;
+            
+            if (!isHistoryAction && hasUnsavedChanges && frames[prevIndex] && prevIndex !== index) {
+                await saveFrameState(prevIndex);
             }
 
             currentFrameIndex = index;
+            hasUnsavedChanges = false; 
+
+            // Atualiza o canvas principal com o conteúdo do novo frame
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA (Evita o Bug da Borracha)
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             const activeData = frames[index].layers[activeLayerIndex];
             if (activeData) ctx.drawImage(activeData, 0, 0);
 
-            hasUnsavedChanges = false; 
+            // Atualiza UI
+            updateOnionSkin(); 
+            refreshLayerDisplay(); 
+            renderTimeline();
 
-            updateOnionSkin(); refreshLayerDisplay(); renderTimeline();
-
-            const activeThumb = document.getElementById(`thumb-${index}`);
-            if (activeThumb) activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            // Scroll para o thumbnail selecionado
+            requestAnimationFrame(() => {
+                const activeThumb = document.getElementById(`thumb-${index}`);
+                if (activeThumb) activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            });
         }
 
         function updateLayerIndicators() {
@@ -1536,7 +1626,7 @@
             mainCanvas.style.zIndex = activeLayerIndex + 1;
             mainCanvas.style.visibility = layerVisibility[activeLayerIndex] ? 'visible' : 'hidden';
             bgCanvas.style.visibility = (soloMode) ? 'hidden' : 'visible';
-            canvasContainer.style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
+            document.getElementById('canvasContainer').style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
 
             document.querySelectorAll('.layer-item').forEach((el, i) => {
                 const layerIdx = 5 - i; 
@@ -1551,6 +1641,7 @@
             for (let i = 0; i < 6; i++) {
                 const lCanvas = document.getElementById(`layer${i}`);
                 const lCtx = lCanvas.getContext('2d');
+                lCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
                 lCanvas.style.visibility = (layerVisibility[i] && !soloMode) ? 'visible' : 'hidden';
                 if (i === activeLayerIndex || (soloMode && i !== activeLayerIndex)) {
                     lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
@@ -1581,6 +1672,7 @@
         onionOpacitySlider.addEventListener('input', (e) => onionCanvas.style.opacity = e.target.value / 100);
 
         function updateOnionSkin() {
+            onionCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
             if (onionToggle.checked && currentFrameIndex > 0 && !isPlaying) {
                 const prevFrame = frames[currentFrameIndex - 1];
@@ -1596,6 +1688,7 @@
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
+                    bgCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
                     bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
                     const scale = Math.max(bgCanvas.width / img.width, bgCanvas.height / img.height);
                     const x = (bgCanvas.width / 2) - (img.width / 2) * scale; const y = (bgCanvas.height / 2) - (img.height / 2) * scale;
@@ -1617,18 +1710,19 @@
         exportVideoTransparentMenu.onclick = (e) => { e.preventDefault(); exportVideo(true); };
 
         async function exportFrames(withBackground) {
-            finishSelection(); saveFrameState(currentFrameIndex);
+            finishSelection(); await saveFrameState(currentFrameIndex);
             const zip = new JSZip(); const imgFolder = zip.folder("frames");
-            const tempCanvas = document.createElement('canvas'); tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
-            const tCtx = tempCanvas.getContext('2d');
+            // Usar o shared global canvas na hora de exportar para poupar RAM
+            const tCtx = sharedUtilCtx;
 
             for (let i = 0; i < frames.length; i++) {
-                tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tCtx.globalCompositeOperation = 'source-over';
+                tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
                 if (withBackground) {
-                    tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height); tCtx.drawImage(bgCanvas, 0, 0);
+                    tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height); tCtx.drawImage(bgCanvas, 0, 0);
                 }
                 for(let l = 0; l < 6; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
-                const base64Data = tempCanvas.toDataURL('image/png').split(',')[1];
+                const base64Data = sharedUtilCanvas.toDataURL('image/png').split(',')[1];
                 imgFolder.file(`frame_${String(i + 1).padStart(3, '0')}.png`, base64Data, {base64: true});
             }
             const content = await zip.generateAsync({type: "blob"});
@@ -1638,7 +1732,7 @@
 
         async function exportPngSequence() {
             if (frames.length === 0) { showNotification("Nenhum frame para exportar"); return; }
-            finishSelection(); saveFrameState(currentFrameIndex);
+            finishSelection(); await saveFrameState(currentFrameIndex);
 
             try {
                 const dirHandle = await window.showDirectoryPicker();
@@ -1647,16 +1741,16 @@
                 const frameStarts = frames.map(f => { const start = totalTicks; totalTicks += (f.duration || 1); return start; });
                 const totalExportFrames = Math.max(1, Math.floor((totalTicks / fps) * exportFps));
 
-                const tempCanvas = document.createElement('canvas'); tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
-                const tCtx = tempCanvas.getContext('2d');
+                const tCtx = sharedUtilCtx;
 
                 for (let i = 0; i < totalExportFrames; i++) {
                     const currentTimeInTicks = (i / exportFps) * fps;
                     let targetFrame = 0;
                     for (let j = 0; j < frameStarts.length; j++) { if (frameStarts[j] <= currentTimeInTicks) targetFrame = j; else break; }
-                    tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    tCtx.globalCompositeOperation = 'source-over';
+                    tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
                     for(let l = 0; l < 6; l++) { const layerData = frames[targetFrame].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
-                    const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
+                    const blob = await new Promise(resolve => sharedUtilCanvas.toBlob(resolve, 'image/png'));
                     const fileName = `frame_${String(i + 1).padStart(5, '0')}.png`;
                     const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
                     const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close();
@@ -1667,27 +1761,27 @@
 
         async function exportVideo(withTransparency = false) {
             if (frames.length === 0) { showNotification("Nenhum frame para exportar"); return; }
-            finishSelection(); saveFrameState(currentFrameIndex);
+            finishSelection(); await saveFrameState(currentFrameIndex);
 
-            const tempCanvas = document.createElement('canvas'); tempCanvas.width = mainCanvas.width; tempCanvas.height = mainCanvas.height;
-            const tCtx = tempCanvas.getContext('2d');
+            const tCtx = sharedUtilCtx;
 
             const muxer = new WebMMuxer.Muxer({
                 target: new WebMMuxer.ArrayBufferTarget(),
-                video: { codec: withTransparency ? 'V_VP8' : 'V_VP9', width: tempCanvas.width, height: tempCanvas.height, frameRate: 24 }
+                video: { codec: withTransparency ? 'V_VP8' : 'V_VP9', width: sharedUtilCanvas.width, height: sharedUtilCanvas.height, frameRate: 24 }
             });
 
             const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => console.error(e) });
-            encoder.configure({ codec: withTransparency ? 'vp8' : 'vp09.00.10.08', width: tempCanvas.width, height: tempCanvas.height, bitrate: 5e6 });
+            encoder.configure({ codec: withTransparency ? 'vp8' : 'vp09.00.10.08', width: sharedUtilCanvas.width, height: sharedUtilCanvas.height, bitrate: 5e6 });
 
             const tickDuration = 1000000 / fps; let currentTick = 0;
             for (let i = 0; i < frames.length; i++) {
-                tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-                if (!withTransparency) { tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height); tCtx.drawImage(bgCanvas, 0, 0); }
+                tCtx.globalCompositeOperation = 'source-over';
+                tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
+                if (!withTransparency) { tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height); tCtx.drawImage(bgCanvas, 0, 0); }
                 for(let l = 0; l < 6; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
 
                 const durationTicks = (frames[i].duration || 1);
-                const frame = new VideoFrame(tempCanvas, { timestamp: currentTick * tickDuration, duration: durationTicks * tickDuration });
+                const frame = new VideoFrame(sharedUtilCanvas, { timestamp: currentTick * tickDuration, duration: durationTicks * tickDuration });
                 encoder.encode(frame); frame.close(); currentTick += durationTicks;
             }
 
@@ -1700,11 +1794,15 @@
 
         saveProjectMenu.onclick = async (e) => {
             e.preventDefault(); finishSelection(); await saveFrameState(currentFrameIndex);
+            
+            const tCtx = sharedUtilCtx;
+            
             const serializedFrames = await Promise.all(frames.map(async f => {
                 const layers = await Promise.all(f.layers.map(async l => {
                     if (!l) return null;
-                    const canvas = document.createElement('canvas'); canvas.width = mainCanvas.width; canvas.height = mainCanvas.height;
-                    canvas.getContext('2d').drawImage(l, 0, 0); return canvas.toDataURL();
+                    tCtx.globalCompositeOperation = 'source-over';
+                    tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
+                    tCtx.drawImage(l, 0, 0); return sharedUtilCanvas.toDataURL();
                 }));
                 return { layers, duration: f.duration || 1 };
             }));
@@ -1729,7 +1827,7 @@
                 }
 
                 const bgImg = new Image();
-                bgImg.onload = () => { bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgCtx.drawImage(bgImg, 0, 0); };
+                bgImg.onload = () => { bgCtx.globalCompositeOperation = 'source-over'; bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgCtx.drawImage(bgImg, 0, 0); };
                 bgImg.src = data.background;
 
                 frames = await Promise.all(data.frames.map(async f => {
@@ -1756,6 +1854,7 @@
                 img.onload = () => {
                     finishSelection(); 
                     selectionCanvas.width = img.width; selectionCanvas.height = img.height;
+                    sCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
                     sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height); sCtx.drawImage(img, 0, 0);
 
                     const x = mainCanvas.width / 2 - img.width / 2; const y = mainCanvas.height / 2 - img.height / 2;
@@ -1768,51 +1867,98 @@
             reader.readAsDataURL(file);
         };
 
-        function renderTimeline(full = false) {
+        function renderTimeline() {
             const counter = document.getElementById('frameCounterDisplay');
             if (counter) counter.textContent = `${currentFrameIndex + 1}/${frames.length}`;
 
-            if (!full && timeline.children.length === frames.length) {
-                Array.from(timeline.children).forEach((thumb, index) => thumb.classList.toggle('active', index === currentFrameIndex));
-                updateSingleThumbnail(currentFrameIndex);
-                return;
-            }
-
+            // Esvazia e reconstrói a timeline
             timeline.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            
             frames.forEach((frameData, index) => {
                 const thumb = document.createElement('div');
                 thumb.className = `frame-thumb ${index === currentFrameIndex ? 'active' : ''}`;
-                thumb.id = `thumb-${index}`; thumb.draggable = true;
+                thumb.id = `thumb-${index}`; 
+                thumb.draggable = true;
                 
-                thumb.onclick = () => { if (!isPlaying) loadFrame(index); };
-                thumb.ondragstart = (e) => { if (isPlaying) return e.preventDefault(); e.dataTransfer.setData('text/plain', index); setTimeout(() => thumb.style.opacity = '0.5', 0); };
+                // Click para selecionar frame
+                thumb.onclick = (e) => {
+                    if (isPlaying) return;
+                    // Se clicou nos controles de duração, não troca de frame
+                    if (e.target.closest('.duration-controls')) return;
+                    loadFrame(index);
+                };
+
+                // Drag & Drop
+                thumb.ondragstart = (e) => { 
+                    if (isPlaying) return e.preventDefault(); 
+                    e.dataTransfer.setData('text/plain', index); 
+                    setTimeout(() => thumb.style.opacity = '0.5', 0); 
+                };
                 thumb.ondragend = () => thumb.style.opacity = '1';
                 thumb.ondragover = (e) => e.preventDefault(); 
-                thumb.ondrop = (e) => { e.preventDefault(); const fromIndex = parseInt(e.dataTransfer.getData('text/plain')); if (fromIndex !== index) moveFrame(fromIndex, index); };
+                thumb.ondrop = (e) => { 
+                    e.preventDefault(); 
+                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain')); 
+                    if (!isNaN(fromIndex) && fromIndex !== index) moveFrame(fromIndex, index); 
+                };
 
-                timeline.appendChild(thumb);
-                updateSingleThumbnail(index);
-
-                const badge = document.createElement('div'); badge.className = 'duration-badge'; badge.textContent = `${frameData.duration || 1}x`;
+                const canvas = document.createElement('canvas');
+                canvas.width = 160; canvas.height = 90;
+                canvas.className = 'thumb-canvas';
+                thumb.appendChild(canvas);
+                
+                const badge = document.createElement('div'); 
+                badge.className = 'duration-badge'; 
+                badge.textContent = `${frameData.duration || 1}x`;
                 thumb.appendChild(badge);
 
-                const controls = document.createElement('div'); controls.className = 'duration-controls';
-                const minus = document.createElement('button'); minus.className = 'dur-btn'; minus.textContent = '-';
-                minus.onclick = (e) => { e.stopPropagation(); frameData.duration = Math.max(1, (frameData.duration || 1) - 1); badge.textContent = `${frameData.duration}x`; };
-                const plus = document.createElement('button'); plus.className = 'dur-btn'; plus.textContent = '+';
-                plus.onclick = (e) => { e.stopPropagation(); frameData.duration = (frameData.duration || 1) + 1; badge.textContent = `${frameData.duration}x`; };
-                controls.append(minus, plus); thumb.appendChild(controls);
+                const controls = document.createElement('div'); 
+                controls.className = 'duration-controls';
+                
+                const minus = document.createElement('button'); 
+                minus.className = 'dur-btn'; minus.textContent = '-';
+                minus.onclick = (e) => { 
+                    e.stopPropagation(); 
+                    frameData.duration = Math.max(1, (frameData.duration || 1) - 1); 
+                    badge.textContent = `${frameData.duration}x`; 
+                };
+                
+                const plus = document.createElement('button'); 
+                plus.className = 'dur-btn'; plus.textContent = '+';
+                plus.onclick = (e) => { 
+                    e.stopPropagation(); 
+                    frameData.duration = (frameData.duration || 1) + 1; 
+                    badge.textContent = `${frameData.duration}x`; 
+                };
+                
+                controls.append(minus, plus); 
+                thumb.appendChild(controls);
+                fragment.appendChild(thumb);
             });
+
+            timeline.appendChild(fragment);
+            
+            // Atualiza thumbnails
+            frames.forEach((_, index) => updateSingleThumbnail(index));
         }
 
         async function moveFrame(from, to) {
-            finishSelection(); await saveFrameState(currentFrameIndex); 
+            if (from === to) return;
+            finishSelection(); 
+            
+            if (hasUnsavedChanges) await saveFrameState(currentFrameIndex); 
+            
             const activeFrameObj = frames[currentFrameIndex];
-            const movedFrame = frames.splice(from, 1)[0];
+            const [movedFrame] = frames.splice(from, 1);
             frames.splice(to, 0, movedFrame);
+            
+            // Recalcula o índice atual baseado no objeto que estava selecionado
             const newIndex = frames.indexOf(activeFrameObj);
-            isHistoryAction = true; await loadFrame(newIndex); isHistoryAction = false;
-            renderTimeline(true); 
+            
+            isHistoryAction = true; 
+            await loadFrame(newIndex); 
+            isHistoryAction = false;
         }
 
         async function updateSingleThumbnail(index) {
@@ -1828,6 +1974,7 @@
             }
             
             const tCtx = canvas.getContext('2d');
+            tCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             tCtx.clearRect(0, 0, 160, 90);
             
             for (let l = 0; l < 6; l++) {
@@ -1839,6 +1986,7 @@
         }
 
         document.getElementById('clearBtn').addEventListener('click', () => { 
+            ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); 
             hasUnsavedChanges = true;
             saveFrameState(currentFrameIndex); 
@@ -1873,60 +2021,102 @@
         let playSessionId = 0;
         let playbackRAF;
 
-        function toggleAnimation() {
-            if (frames.length <= 1) return;
-            finishSelection(); 
+        function renderPlaybackFrame(index) {
+            if (!frames[index]) return;
+            pCtx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
+            pCtx.clearRect(0, 0, playbackCanvas.width, playbackCanvas.height);
+            pCtx.fillStyle = 'white'; 
+            pCtx.fillRect(0, 0, playbackCanvas.width, playbackCanvas.height);
+            pCtx.drawImage(bgCanvas, 0, 0);
+
+            for (let l = 0; l < 6; l++) {
+                const layerData = frames[index].layers[l];
+                if (layerData) pCtx.drawImage(layerData, 0, 0);
+            }
+        }
+
+        async function toggleAnimation() {
+            if (frames.length === 0) return;
             
-            if (!isPlaying) { saveFrameState(currentFrameIndex); playSessionId++; }
-
-            isPlaying = !isPlaying;
-            document.getElementById('playBtn').style.display = isPlaying ? 'none' : 'block';
-            document.getElementById('stopBtn').style.display = isPlaying ? 'block' : 'none';
-            playbackCanvas.style.display = isPlaying ? 'block' : 'none';
-
-            if (isPlaying) {
+            if (!isPlaying) {
+                finishSelection();
+                if (hasUnsavedChanges) await saveFrameState(currentFrameIndex);
+                
+                isPlaying = true;
+                playSessionId++;
                 const currentSession = playSessionId;
+                
+                document.getElementById('playBtn').style.display = 'none';
+                document.getElementById('stopBtn').style.display = 'block';
+                playbackCanvas.style.display = 'block';
+                
                 toggleStaticLayersVisibility(false);
                 mainCanvas.style.visibility = 'hidden'; 
                 onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
                 
-                let playIndex = 0;
-                let lastTime = performance.now();
+                let playIndex = currentFrameIndex;
+                let lastTime = 0;
                 let accumulator = 0;
 
                 const runPlayback = (time) => {
                     if (!isPlaying || currentSession !== playSessionId) return;
-                    playbackRAF = requestAnimationFrame(runPlayback);
 
-                    const hold = frames[playIndex].duration || 1;
-                    const targetInterval = (1000 / fps) * hold;
-                    
-                    const delta = time - lastTime;
-                    lastTime = time;
-                    accumulator += delta;
-
-                    if (accumulator >= targetInterval) {
-                        if (accumulator > targetInterval * 3) accumulator = targetInterval; 
-                        accumulator -= targetInterval;
-
-                        pCtx.clearRect(0, 0, playbackCanvas.width, playbackCanvas.height);
-                        pCtx.fillStyle = 'white'; pCtx.fillRect(0, 0, playbackCanvas.width, playbackCanvas.height);
-                        pCtx.drawImage(bgCanvas, 0, 0);
-
-                        for (let l = 0; l < 6; l++) {
-                            const layerData = frames[playIndex].layers[l];
-                            if (layerData) pCtx.drawImage(layerData, 0, 0);
-                        }
-                        playIndex = (playIndex + 1) % frames.length;
+                    if (lastTime === 0) {
+                        lastTime = time;
+                        renderPlaybackFrame(playIndex);
+                        playbackRAF = requestAnimationFrame(runPlayback);
+                        return;
                     }
+
+                    let delta = time - lastTime;
+                    lastTime = time;
+                    
+                    // Limita o delta para garantir tempo real mesmo com lag (pula frames se necessário)
+                    accumulator += Math.min(delta, 1000);
+
+                    let frameChanged = false;
+                    let safetyCounter = 0;
+                    
+                    while (safetyCounter < frames.length) {
+                        const frame = frames[playIndex];
+                        if (!frame) break;
+                        const hold = frame.duration || 1;
+                        const targetInterval = (1000 / fps) * hold;
+                        
+                        if (accumulator >= targetInterval) {
+                            accumulator -= targetInterval;
+                            playIndex = (playIndex + 1) % frames.length;
+                            frameChanged = true;
+                            safetyCounter++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Se o lag for maior que um ciclo inteiro, reseta o acumulador para evitar "fast-forward" infinito
+                    if (safetyCounter >= frames.length) accumulator = 0;
+
+                    if (frameChanged) {
+                        renderPlaybackFrame(playIndex);
+                    }
+
+                    playbackRAF = requestAnimationFrame(runPlayback);
                 };
                 playbackRAF = requestAnimationFrame(runPlayback);
             } else {
+                isPlaying = false;
                 cancelAnimationFrame(playbackRAF);
                 playSessionId++; 
+                
+                document.getElementById('playBtn').style.display = 'block';
+                document.getElementById('stopBtn').style.display = 'none';
+                playbackCanvas.style.display = 'none';
+                
                 toggleStaticLayersVisibility(true);
+                mainCanvas.style.visibility = 'visible';
+                
                 isHistoryAction = true; 
-                loadFrame(currentFrameIndex);
+                await loadFrame(currentFrameIndex);
                 isHistoryAction = false;
             }
         }
@@ -1945,6 +2135,14 @@
 
         document.getElementById('playBtn').addEventListener('click', toggleAnimation);
         document.getElementById('stopBtn').addEventListener('click', toggleAnimation);
+        
+        // Chamada de inicialização ajustada para garantir integridade inicial
+        ctx.globalCompositeOperation = 'source-over'; // TRAVA DE SEGURANÇA
+        ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+        renderTimeline(true);
+        refreshLayerDisplay();
+        hasUnsavedChanges = true;
+        saveFrameState(0);
 
     </script>
 </body>
