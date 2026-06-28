@@ -219,7 +219,7 @@
     </style>
 
     <script>
-        // --- ESTADO GLOBAL ---
+        // --- ESTADO GLOBAL --- 
         const state = {
             zoom: 20, // pixels por segundo
             currentTime: 0,
@@ -257,7 +257,7 @@
         els.previewCanvas.width = state.canvasSize.width;
         els.previewCanvas.height = state.canvasSize.height;
 
-        // Previne menu de contexto em áreas de interação (evita o menu de "salvar imagem" ao arrastar)
+        // Previne menu de contexto em áreas de interação
         window.addEventListener('contextmenu', (e) => {
             if (e.target.closest('.clip') || e.target.closest('#preview-canvas') || e.target.closest('#ruler')) e.preventDefault();
         });
@@ -338,7 +338,6 @@
             const isAudio = newClip.type === 'audio';
             const others = state.clips.filter(c => isAudio ? c.type === 'audio' : c.type !== 'audio');
             let lane = 0;
-            // Encontra a primeira trilha onde não haja sobreposição com o tempo inicial do clipe
             while (others.some(c => c.lane === lane && (newClip.start < c.start + c.duration && newClip.start + newClip.duration > c.start))) {
                 lane++;
             }
@@ -347,24 +346,21 @@
 
         function addClip(file) {
             let type = 'video';
-            // Detecção robusta de tipo (alguns arquivos de áudio não têm MIME type correto no Windows)
             if (file.type && file.type.startsWith('image')) type = 'image';
             else if (file.type && file.type.startsWith('audio')) type = 'audio';
             else if (file.name.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/i)) type = 'audio';
             else if (file.name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) type = 'image';
             
-            // Cria elemento temporário para ler metadados
             const tempMedia = type === 'image' ? new Image() : document.createElement(type);
             tempMedia.src = URL.createObjectURL(file);
 
             const onLoad = () => {
-                let duration = 5; // Padrão para imagem
-                if (type !== 'image') duration = tempMedia.duration;
-                if (!duration || isNaN(duration)) duration = 10; // Fallback
+                let duration = 5;
+                if (type !== 'image') duration = tempMedia.duration || 10;
+                if (!duration || isNaN(duration)) duration = 10;
 
                 const clip = new Clip(file, type, duration);
                 
-                // Define dimensões iniciais (Fit no canvas)
                 if (type !== 'audio') {
                     const imgW = (type === 'video') ? tempMedia.videoWidth : tempMedia.naturalWidth;
                     const imgH = (type === 'video') ? tempMedia.videoHeight : tempMedia.naturalHeight;
@@ -375,7 +371,6 @@
                     clip.y = (state.canvasSize.height - clip.h) / 2;
                 }
                 
-                // Posiciona na posição atual da agulha (playhead) em uma nova trilha
                 clip.start = state.currentTime;
                 assignInitialLane(clip);
 
@@ -384,7 +379,6 @@
                 updateDuration();
                 
                 requestUpdate();
-                // Esconde placeholder
                 document.getElementById('preview-placeholder').classList.add('hidden');
             };
 
@@ -394,13 +388,11 @@
         
         function addSequence(files) {
             if (!files || files.length === 0) return;
-            // Ordena arquivos por nome (numérico) para garantir a ordem da animação
             files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}));
             
             const fps = 30;
             const duration = files.length / fps;
             
-            // Carrega a primeira imagem para pegar dimensões
             const tempImg = new Image();
             tempImg.src = URL.createObjectURL(files[0]);
             tempImg.onload = () => {
@@ -414,7 +406,6 @@
                 clip.x = (state.canvasSize.width - clip.w) / 2;
                 clip.y = (state.canvasSize.height - clip.h) / 2;
                 
-                // Posiciona na posição atual da agulha (playhead) em uma nova trilha
                 clip.start = state.currentTime;
                 assignInitialLane(clip);
 
@@ -427,23 +418,19 @@
         }
 
         function renderTimeline() {
-            // Limpa tracks
             els.videoTrack.innerHTML = '';
             els.audioTrack.innerHTML = '';
 
             const videoClips = state.clips.filter(c => c.type !== 'audio');
             const audioClips = state.clips.filter(c => c.type === 'audio');
 
-            // Calcula a altura das tracks baseada no maior índice de trilha existente
             const videoLaneCount = videoClips.length > 0 ? Math.max(...videoClips.map(c => c.lane)) + 1 : 1;
             const audioLaneCount = audioClips.length > 0 ? Math.max(...audioClips.map(c => c.lane)) + 1 : 1;
 
-            // Altura base das faixas
-            const videoLaneHeight = 16; // Metade da altura original
-            const audioLaneHeight = 32; // Mantém a altura original
-            const gap = 4; // px
+            const videoLaneHeight = 16;
+            const audioLaneHeight = 32;
+            const gap = 4;
 
-            // Atualiza altura dos containers
             els.videoTrack.style.height = `${Math.max(40, videoLaneCount * (videoLaneHeight + gap) + gap * 2)}px`;
             els.audioTrack.style.height = `${Math.max(48, audioLaneCount * (audioLaneHeight + gap) + gap * 2)}px`;
 
@@ -451,19 +438,16 @@
                 const el = document.createElement('div');
                 el.className = `clip absolute rounded-md overflow-hidden cursor-pointer flex flex-col justify-center px-2 text-[10px] border border-white/10 select-none ${clip.id === state.selectedClipId ? 'selected' : ''}`;
                 
-                // Estilização baseada no tipo
                 if (clip.type === 'audio') {
                     el.classList.add('audio-clip', 'text-white', 'shadow-sm');
                 } else {
                     el.classList.add('bg-blue-900/80', 'text-blue-100');
-                    // Thumbnails simulados (apenas cor por enquanto para performance)
                 }
 
-                // Posicionamento
                 const currentLaneHeight = (clip.type === 'audio') ? audioLaneHeight : videoLaneHeight;
                 
                 el.style.left = `${clip.start * state.zoom}px`;
-                el.style.width = `${clip.duration * state.zoom}px`;
+                el.style.width = `${Math.max(10, clip.duration * state.zoom)}px`; // Garantia de visibilidade mínima
                 el.style.height = `${currentLaneHeight}px`;
                 el.style.top = `${clip.lane * (currentLaneHeight + gap) + gap}px`;
 
@@ -474,7 +458,6 @@
 
                 const iconName = clip.type === 'audio' ? 'fa-music' : (clip.type === 'video' ? 'fa-video' : (clip.type === 'sequence' ? 'fa-layer-group' : 'fa-image'));
 
-                // Conteúdo Interno
                 el.innerHTML = `
                     <div class="resize-handle left" title="Cortar Início"></div>
                     <div class="flex items-center gap-1 truncate pointer-events-none pr-10">
@@ -496,7 +479,6 @@
                     });
                 }
 
-                // Eventos
                 el.addEventListener('pointerdown', (e) => handleClipInteraction(e, clip, el));
                 
                 clip.domElement = el;
@@ -508,11 +490,11 @@
             drawRuler();
         }
 
-        // --- INTERAÇÃO (DRAG & RESIZE) ---
+        // --- INTERAÇÃO (DRAG & RESIZE) Melhorada ---
         function handleClipInteraction(e, clip, el) {
             if (e.cancelable) e.preventDefault();
             e.stopPropagation();
-            el.setPointerCapture(e.pointerId); // Garante que o toque não se perca ao sair do elemento
+            el.setPointerCapture(e.pointerId);
             selectClip(clip.id);
             
             const isResizeLeft = e.target.classList.contains('left');
@@ -524,10 +506,9 @@
             const originalDuration = clip.duration;
             const originalOffset = clip.offset;
 
-            // Função auxiliar para encontrar pontos de atração (Snap)
-            const getSnapCandidate = (time) => {
-                const threshold = 15 / state.zoom; // 15px de atração
-                let targets = [0, state.currentTime]; // Snap no 0 e na agulha
+            const getSnapCandidate = (time, isEnd = false) => {
+                const threshold = 15 / state.zoom;
+                let targets = [0, state.currentTime];
                 
                 state.clips.forEach(c => {
                     if (c.id === clip.id) return;
@@ -546,6 +527,29 @@
                 return best;
             };
 
+            // Snap aprimorado para grudar no final de outra mídia
+            const getBestSnapForDrag = (newStart, newEnd) => {
+                let bestStart = newStart;
+                let minDist = Infinity;
+
+                state.clips.forEach(c => {
+                    if (c.id === clip.id) return;
+                    // Snap ao final de clipes à esquerda
+                    const distToEnd = Math.abs(newStart - (c.start + c.duration));
+                    if (distToEnd < 20 / state.zoom && distToEnd < minDist) {
+                        bestStart = c.start + c.duration;
+                        minDist = distToEnd;
+                    }
+                    // Snap ao início de clipes à direita
+                    const distToStart = Math.abs(newEnd - c.start);
+                    if (distToStart < 20 / state.zoom && distToStart < minDist) {
+                        bestStart = c.start - originalDuration;
+                        minDist = distToStart;
+                    }
+                });
+                return Math.max(0, bestStart);
+            };
+
             const onMove = (ev) => {
                 if (ev.cancelable) ev.preventDefault();
                 const deltaPx = ev.clientX - startX;
@@ -557,22 +561,22 @@
                     
                     const snapStart = getSnapCandidate(rawStart);
                     const snapEnd = getSnapCandidate(rawEnd);
-                    
+                    let finalStart = rawStart;
+
                     if (snapStart.snapped && snapEnd.snapped) {
-                        // Se ambos atraírem, escolhe o mais próximo
-                        if (snapStart.dist <= snapEnd.dist) clip.start = snapStart.time;
-                        else clip.start = snapEnd.time - originalDuration;
+                        finalStart = snapStart.dist <= snapEnd.dist ? snapStart.time : snapEnd.time - originalDuration;
                     } else if (snapStart.snapped) {
-                        clip.start = snapStart.time;
+                        finalStart = snapStart.time;
                     } else if (snapEnd.snapped) {
-                        clip.start = snapEnd.time - originalDuration;
+                        finalStart = snapEnd.time - originalDuration;
                     } else {
-                        clip.start = rawStart;
+                        finalStart = getBestSnapForDrag(rawStart, rawEnd);
                     }
+                    
+                    clip.start = finalStart;
                 } else if (isResizeRight) {
-                    // Limita ao tamanho original do arquivo se for vídeo/áudio
                     let maxDur = Infinity;
-                    if (clip.type !== 'image') maxDur = clip.originalDuration - clip.offset; // Sequence também tem limite
+                    if (clip.type !== 'image') maxDur = clip.originalDuration - clip.offset;
                     
                     let rawDuration = originalDuration + deltaSec;
                     let rawEnd = originalStart + rawDuration;
@@ -590,7 +594,6 @@
                     finalStart = Math.min(finalStart, originalStart + originalDuration - 0.1);
                     const newDuration = originalDuration - (finalStart - originalStart);
                     
-                    // Ajusta offset (trim start)
                     let newOffset = originalOffset + (finalStart - originalStart);
                     
                     if (finalStart >= 0 && newOffset >= 0 && newDuration > 0.1) {
@@ -600,9 +603,8 @@
                     }
                 }
                 
-                // Atualiza visualmente sem re-renderizar tudo
                 el.style.left = `${clip.start * state.zoom}px`;
-                el.style.width = `${clip.duration * state.zoom}px`;
+                el.style.width = `${Math.max(10, clip.duration * state.zoom)}px`;
                 updateDuration();
                 requestUpdate();
             };
@@ -610,8 +612,7 @@
             const onUp = () => {
                 window.removeEventListener('pointermove', onMove);
                 window.removeEventListener('pointerup', onUp);
-                // Snap simples ao soltar? (Opcional)
-                renderTimeline(); // Re-renderiza para limpar estados
+                renderTimeline();
             };
 
             window.addEventListener('pointermove', onMove, { passive: false });
@@ -620,18 +621,15 @@
 
         // --- PLAYBACK ENGINE ---
         function updatePreview() {
-            // 1. Limpa Canvas
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, state.canvasSize.width, state.canvasSize.height);
 
-            // 2. Encontra clipes visuais ativos no tempo atual
             const activeVisuals = state.clips.filter(c => 
                 c.type !== 'audio' && 
                 state.currentTime >= c.start && 
                 state.currentTime < c.start + c.duration
             );
 
-            // 3. Desenha os clipes respeitando as trilhas (Lanes maiores no fundo, Lane 0 no topo)
             activeVisuals.sort((a, b) => b.lane - a.lane);
             
             activeVisuals.forEach(clip => {
@@ -640,22 +638,18 @@
                 if (clip.type === 'sequence') {
                     const localTime = state.currentTime - clip.start + clip.offset;
                     const frameIndex = Math.floor(localTime * clip.fps);
-                    // Garante índice válido dentro do array de imagens
                     el = clip.sequenceImages[Math.min(Math.max(0, frameIndex), clip.sequenceImages.length - 1)];
                 }
                 
                 if (clip.type === 'video') {
-                    // Sincroniza vídeo
                     const clipTime = state.currentTime - clip.start + clip.offset;
-                    // Pequena tolerância para evitar stuttering
                     if (Math.abs(el.currentTime - clipTime) > 0.15) {
                         el.currentTime = clipTime;
                     }
-                    if (state.isPlaying && el.paused) el.play();
+                    if (state.isPlaying && el.paused) el.play().catch(() => {});
                     if (!state.isPlaying && !el.paused) el.pause();
                 }
 
-                // Desenha no Canvas (Contain - mantém proporção)
                 if (el && clip.w && clip.h) {
                     ctx.save();
                     ctx.translate(clip.x + clip.w / 2, clip.y + clip.h / 2);
@@ -665,7 +659,6 @@
                 }
             });
             
-            // 3.1 Desenha Overlay de Seleção (Bounding Box e Handles)
             const selectedClip = state.clips.find(c => c.id === state.selectedClipId);
             if (selectedClip && selectedClip.type !== 'audio' && 
                 state.currentTime >= selectedClip.start && 
@@ -675,19 +668,18 @@
                 ctx.translate(selectedClip.x + selectedClip.w / 2, selectedClip.y + selectedClip.h / 2);
                 ctx.rotate(selectedClip.rotation * Math.PI / 180);
 
-                ctx.strokeStyle = '#3b82f6'; // Blue-500
+                ctx.strokeStyle = '#3b82f6';
                 ctx.lineWidth = 4;
                 ctx.strokeRect(-selectedClip.w / 2, -selectedClip.h / 2, selectedClip.w, selectedClip.h);
                 
-                // Handles (Cantos)
                 ctx.fillStyle = 'white';
-                const hSize = 40; // Aumentado para facilitar o toque no tablet
+                const hSize = 40;
                 const half = hSize / 2;
                 const handles = [
-                    { x: -selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half }, // TL
-                    { x: selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half }, // TR
-                    { x: -selectedClip.w / 2 - half, y: selectedClip.h / 2 - half }, // BL
-                    { x: selectedClip.w / 2 - half, y: selectedClip.h / 2 - half } // BR
+                    { x: -selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half },
+                    { x: selectedClip.w / 2 - half, y: -selectedClip.h / 2 - half },
+                    { x: -selectedClip.w / 2 - half, y: selectedClip.h / 2 - half },
+                    { x: selectedClip.w / 2 - half, y: selectedClip.h / 2 - half }
                 ];
                 
                 handles.forEach(h => {
@@ -695,21 +687,19 @@
                     ctx.strokeRect(h.x, h.y, hSize, hSize);
                 });
 
-                // Alças de Rotação (Aumentadas e movidas para os 4 cantos internos)
-                ctx.fillStyle = '#3b82f6'; // Azul destaque
+                ctx.fillStyle = '#3b82f6';
                 const rotOffset = 10;
                 const rotHandles = [
-                    { x: -selectedClip.w / 2 + rotOffset, y: -selectedClip.h / 2 + rotOffset }, // TL
-                    { x: selectedClip.w / 2 - rotOffset - hSize, y: -selectedClip.h / 2 + rotOffset }, // TR
-                    { x: -selectedClip.w / 2 + rotOffset, y: selectedClip.h / 2 - rotOffset - hSize }, // BL
-                    { x: selectedClip.w / 2 - rotOffset - hSize, y: selectedClip.h / 2 - rotOffset - hSize } // BR
+                    { x: -selectedClip.w / 2 + rotOffset, y: -selectedClip.h / 2 + rotOffset },
+                    { x: selectedClip.w / 2 - rotOffset - hSize, y: -selectedClip.h / 2 + rotOffset },
+                    { x: -selectedClip.w / 2 + rotOffset, y: selectedClip.h / 2 - rotOffset - hSize },
+                    { x: selectedClip.w / 2 - rotOffset - hSize, y: selectedClip.h / 2 - rotOffset - hSize }
                 ];
                 rotHandles.forEach(h => {
                     ctx.beginPath();
                     ctx.arc(h.x + half, h.y + half, half, 0, Math.PI * 2);
                     ctx.fill();
                     ctx.stroke();
-                    // Desenhar um ícone circular branco simples para indicar rotação
                     ctx.strokeStyle = 'white';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
@@ -720,29 +710,23 @@
                 ctx.restore();
             }
 
-            // 4. Gerencia Áudio
             state.clips.filter(c => c.type === 'audio' || c.type === 'video').forEach(clip => {
                 const el = clip.mediaElement;
-                // Se for vídeo e não estiver sendo desenhado (ex: track de áudio separada), precisamos gerenciar o play
-                // Mas aqui vídeo é visual. Apenas áudio puro precisa de gestão extra se não for visual.
-                
                 if (clip.type === 'audio') {
                     if (state.currentTime >= clip.start && state.currentTime < clip.start + clip.duration) {
                         const clipTime = state.currentTime - clip.start + clip.offset;
                         if (Math.abs(el.currentTime - clipTime) > 0.05) el.currentTime = clipTime;
-                        if (state.isPlaying && el.paused) el.play();
+                        if (state.isPlaying && el.paused) el.play().catch(() => {});
                         if (!state.isPlaying && !el.paused) el.pause();
                     } else {
                         if (!el.paused) el.pause();
                     }
                 } else if (clip.type === 'video') {
-                     // Vídeo fora do tempo deve pausar
-                     if (!(state.currentTime >= clip.start && state.currentTime < clip.start + clip.duration)) {
-                         if (!el.paused) el.pause();
-                     } else {
-                         // Se o vídeo entrou no tempo da agulha agora, força o play
-                         if (state.isPlaying && el.paused) el.play().catch(() => {});
-                     }
+                    if (!(state.currentTime >= clip.start && state.currentTime < clip.start + clip.duration)) {
+                        if (!el.paused) el.pause();
+                    } else if (state.isPlaying && el.paused) {
+                        el.play().catch(() => {});
+                    }
                 }
             });
         }
@@ -754,7 +738,7 @@
             if (state.isPlaying) {
                 state.currentTime += dt;
                 if (state.currentTime > state.duration) {
-                    state.currentTime = 0; // Loop ou parar? CapCut para.
+                    state.currentTime = 0;
                     togglePlay();
                 }
                 updateUI();
@@ -771,15 +755,12 @@
 
         // --- UI UPDATES ---
         function updateUI() {
-            // Playhead
             els.playhead.style.transform = `translateX(${state.currentTime * state.zoom}px)`;
             
-            // End Marker (Marcador de Fim)
             const exportDur = parseDurationStr(els.durationInput.value) || 0;
             els.endMarker.style.transform = `translateX(${exportDur * state.zoom}px)`;
             els.endMarker.classList.remove('hidden');
             
-            // Time Display
             const m = Math.floor(state.currentTime / 60);
             const s = Math.floor(state.currentTime % 60);
             els.timeDisplay.textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
@@ -790,7 +771,7 @@
         function drawRuler() {
             els.ruler.innerHTML = '';
             const totalSeconds = Math.max(state.duration, 60);
-            const step = 5; // segundos
+            const step = 5;
             
             for(let i=0; i<=totalSeconds; i+=step) {
                 const mark = document.createElement('div');
@@ -803,7 +784,6 @@
                 
                 els.ruler.appendChild(mark);
             }
-            // Ajusta largura do container
             els.timelineContent.style.width = `${(totalSeconds + 10) * state.zoom}px`;
         }
 
@@ -818,7 +798,7 @@
         function parseDurationStr(str) {
             if (!str) return 0;
             const parts = str.split(':').map(Number);
-            if (parts.some(isNaN)) return parseFloat(str) || 0; // Fallback para número simples
+            if (parts.some(isNaN)) return parseFloat(str) || 0;
             if (parts.length === 4) return parts[0]*3600 + parts[1]*60 + parts[2] + parts[3]/100;
             if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
             if (parts.length === 2) return parts[0]*60 + parts[1];
@@ -845,23 +825,19 @@
             const icon = els.playBtn.querySelector('i');
             if (state.isPlaying) {
                 icon.className = 'fa-solid fa-pause text-xl';
-                
-                // Força o início imediato dos elementos de mídia no clique do usuário.
-                // Isso contorna restrições de autoplay e garante sincronia instantânea entre as trilhas.
                 state.clips.forEach(clip => {
                     const el = clip.mediaElement;
                     if (el && (clip.type === 'video' || clip.type === 'audio')) {
                         if (state.currentTime >= clip.start && state.currentTime < clip.start + clip.duration) {
                             const clipTime = state.currentTime - clip.start + clip.offset;
                             el.currentTime = clipTime;
-                            el.play().catch(() => {}); // Ignora erros de interrupção
+                            el.play().catch(() => {});
                         }
                     }
                 });
-                lastTime = 0; // Reset delta para iniciar suavemente no próximo frame
+                lastTime = 0;
             } else {
                 icon.className = 'fa-solid fa-play text-xl ml-1';
-                // Pausa tudo forçadamente
                 state.clips.forEach(c => c.mediaElement && c.mediaElement.pause && c.mediaElement.pause());
             }
         }
@@ -874,25 +850,21 @@
 
         function selectClip(id) {
             state.selectedClipId = id;
-            renderTimeline(); // Atualiza classes CSS
+            renderTimeline();
             requestUpdate();
         }
 
-        // Split (Cortar)
+        // Split
         document.getElementById('split-btn').addEventListener('click', () => {
             if (!state.selectedClipId) return;
             const clip = state.clips.find(c => c.id === state.selectedClipId);
             if (!clip) return;
 
-            // Verifica se o playhead está sobre o clipe
             if (state.currentTime > clip.start && state.currentTime < clip.start + clip.duration) {
-                const splitPoint = state.currentTime - clip.start; // Tempo relativo no clipe
+                const splitPoint = state.currentTime - clip.start;
                 
-                // Cria a segunda parte (direita)
-                // Usa a duração original para manter metadados corretos
                 let newClip;
                 if (clip.type === 'sequence') {
-                    // Para sequence, passamos o array de arquivos
                     newClip = new Clip(clip.files, 'sequence', clip.originalDuration);
                 } else {
                     newClip = new Clip(clip.file, clip.type, clip.originalDuration);
@@ -902,18 +874,16 @@
                 newClip.offset = clip.offset + splitPoint;
                 newClip.duration = clip.duration - splitPoint;
                 
-                // IMPORTANTE: Copia as dimensões e posição do clipe original para não sumir
                 newClip.x = clip.x; newClip.y = clip.y;
                 newClip.w = clip.w; newClip.h = clip.h;
                 newClip.rotation = clip.rotation;
                 newClip.isMuted = clip.isMuted;
-                newClip.lane = clip.lane; // Mantém a mesma trilha
+                newClip.lane = clip.lane;
                 
-                // Ajusta a primeira parte (esquerda)
                 clip.duration = splitPoint;
 
                 state.clips.push(newClip);
-                state.selectedClipId = newClip.id; // Seleciona o novo
+                state.selectedClipId = newClip.id;
                 renderTimeline();
                 requestUpdate();
             } else {
@@ -921,7 +891,7 @@
             }
         });
 
-        // --- DUPLICAR CLIPE ---
+        // Duplicate
         function duplicateClip() {
             if (!state.selectedClipId) return;
             const clip = state.clips.find(c => c.id === state.selectedClipId);
@@ -934,7 +904,6 @@
                 newClip = new Clip(clip.file, clip.type, clip.originalDuration);
             }
 
-            // Copia propriedades e posiciona imediatamente após o original
             newClip.start = clip.start + clip.duration;
             newClip.offset = clip.offset;
             newClip.duration = clip.duration;
@@ -944,10 +913,10 @@
             newClip.w = clip.w;
             newClip.h = clip.h;
             newClip.rotation = clip.rotation;
-            newClip.lane = clip.lane; // Mantém a mesma trilha
+            newClip.lane = clip.lane;
             
             state.clips.push(newClip);
-            selectClip(newClip.id); // Seleciona automaticamente o novo clipe
+            selectClip(newClip.id);
             updateDuration();
             requestUpdate();
         }
@@ -957,7 +926,7 @@
         document.getElementById('delete-btn').addEventListener('click', () => {
             if (state.selectedClipId) {
                 const clip = state.clips.find(c => c.id === state.selectedClipId);
-                if (clip) clip.destroy(); // Libera RAM
+                if (clip) clip.destroy();
                 
                 state.clips = state.clips.filter(c => c.id !== state.selectedClipId);
                 state.selectedClipId = null;
@@ -975,23 +944,24 @@
             requestUpdate();
         });
         
-        // Manual Duration Input
+        // Manual Duration
         els.durationInput.addEventListener('input', () => {
             state.manualDuration = true;
             updateDuration();
             requestUpdate();
         });
 
-        // Scrubbing na Régua
+        // Scrubbing na Régua - preview em tempo real
         els.ruler.addEventListener('pointerdown', (e) => {
             if (e.cancelable) e.preventDefault();
             const updateScrub = (ev) => {
                 if (ev.cancelable) ev.preventDefault();
                 const rect = els.ruler.getBoundingClientRect();
-                const x = ev.clientX - rect.left + els.timelineContent.parentElement.scrollLeft;
+                const scrollLeft = els.timelineContent.parentElement.scrollLeft;
+                const x = ev.clientX - rect.left + scrollLeft;
                 state.currentTime = Math.max(0, x / state.zoom);
                 updateUI();
-                requestUpdate();
+                requestUpdate(); // Preview em tempo real durante scroll/scrub
             };
             updateScrub(e);
             window.addEventListener('pointermove', updateScrub, { passive: false });
@@ -1004,14 +974,13 @@
             Array.from(e.target.files).forEach(addClip);
             e.target.value = '';
         });
-        // Importação Sequência
         document.getElementById('import-seq-btn').addEventListener('click', () => els.sequenceInput.click());
         els.sequenceInput.addEventListener('change', (e) => {
             if(e.target.files.length > 0) addSequence(Array.from(e.target.files));
             e.target.value = '';
         });
         
-        // Controle de Camadas (Z-Index)
+        // Camadas
         function moveLayer(direction) {
             if (!state.selectedClipId) return;
             const selectedClip = state.clips.find(c => c.id === state.selectedClipId);
@@ -1023,18 +992,15 @@
 
             if (targetLane < 0) return;
 
-            // Identifica todos os clipes da trilha atual e todos os clipes da trilha vizinha (alvo)
             const currentGroup = state.clips.filter(c => (isAudio ? c.type === 'audio' : c.type !== 'audio') && c.lane === currentLane);
             const targetGroup = state.clips.filter(c => (isAudio ? c.type === 'audio' : c.type !== 'audio') && c.lane === targetLane);
 
-            if (targetGroup.length === 0) return; // Não há trilha vizinha para trocar
+            if (targetGroup.length === 0) return;
 
-            // Troca os índices das trilhas de todos os clipes afetados
             currentGroup.forEach(c => c.lane = targetLane);
             targetGroup.forEach(c => c.lane = currentLane);
 
             renderTimeline();
-            updatePreview();
             requestUpdate();
         }
         document.getElementById('layer-down-btn').addEventListener('click', () => moveLayer(1));
@@ -1063,7 +1029,7 @@
             link.click();
         });
 
-        // --- INTERAÇÃO NO CANVAS (Move & Resize) ---
+        // --- INTERAÇÃO NO CANVAS ---
         let canvasDrag = { active: false, type: null, clip: null, startX: 0, startY: 0, initX: 0, initY: 0, initW: 0, initH: 0 };
 
         function getCanvasPos(e) {
@@ -1081,20 +1047,17 @@
             const pos = getCanvasPos(e);
             const selectedClip = state.clips.find(c => c.id === state.selectedClipId);
             
-            // Verifica Handles se houver clip selecionado visível
             if (selectedClip && selectedClip.type !== 'audio' && 
                 state.currentTime >= selectedClip.start && state.currentTime < selectedClip.start + selectedClip.duration) {
                 
-                // Transforma o ponto do clique para o sistema de coordenadas local do clipe (inverte rotação)
                 const centerX = selectedClip.x + selectedClip.w / 2;
                 const centerY = selectedClip.y + selectedClip.h / 2;
                 const rad = -selectedClip.rotation * Math.PI / 180;
                 const lx = (pos.x - centerX) * Math.cos(rad) - (pos.y - centerY) * Math.sin(rad);
                 const ly = (pos.x - centerX) * Math.sin(rad) + (pos.y - centerY) * Math.cos(rad);
 
-                // Check Hit na Alça de Rotação (4 cantos internos) - área de clique generosa (50px)
                 const hitSize = 50;
-                const rotOffset = 30; // Centro aproximado dos círculos azuis
+                const rotOffset = 30;
                 const rotPoints = [
                     { x: -selectedClip.w / 2 + rotOffset, y: -selectedClip.h / 2 + rotOffset },
                     { x: selectedClip.w / 2 - rotOffset, y: -selectedClip.h / 2 + rotOffset },
@@ -1111,7 +1074,6 @@
                     }
                 }
 
-                // Check Hit nos Cantos de Redimensionamento (Área de 50px ao redor do canto exato)
                 const corners = [
                     { type: 'tl', x: -selectedClip.w / 2, y: -selectedClip.h / 2 },
                     { type: 'tr', x: selectedClip.w / 2, y: -selectedClip.h / 2 },
@@ -1126,7 +1088,6 @@
                     }
                 }
 
-                // Hit no corpo do clipe (espaço local)
                 if (lx >= -selectedClip.w/2 && lx <= selectedClip.w/2 && ly >= -selectedClip.h/2 && ly <= selectedClip.h/2) {
                     canvasDrag = { active: true, type: 'move', clip: selectedClip, startX: pos.x, startY: pos.y, 
                                    initX: selectedClip.x, initY: selectedClip.y, initW: selectedClip.w, initH: selectedClip.h };
@@ -1134,7 +1095,6 @@
                 }
             }
 
-            // Verifica Hit no corpo do clip (ordem inversa para pegar o de cima)
             const activeVisuals = state.clips.filter(c => c.type !== 'audio' && state.currentTime >= c.start && state.currentTime < c.start + c.duration).reverse();
             for (const clip of activeVisuals) {
                 const centerX = clip.x + clip.w / 2;
@@ -1151,7 +1111,6 @@
                 }
             }
             
-            // Clicou fora
             if (state.selectedClipId) selectClip(null);
         });
 
@@ -1169,14 +1128,12 @@
             } else if (canvasDrag.type === 'rotate') {
                 const currentAngle = Math.atan2(pos.y - canvasDrag.centerY, pos.x - canvasDrag.centerX);
                 let delta = currentAngle - canvasDrag.startAngle;
-                // Normaliza o delta para evitar saltos ao cruzar o limite de 180 graus
                 if (delta > Math.PI) delta -= Math.PI * 2;
                 if (delta < -Math.PI) delta += Math.PI * 2;
                 
-                const sensitivity = 0.5; // Reduz a velocidade da rotação pela metade para maior precisão
+                const sensitivity = 0.5;
                 c.rotation = canvasDrag.initRotation + (delta * 180 / Math.PI * sensitivity);
             } else {
-                // Resize simples
                 if (canvasDrag.type.includes('r')) c.w = Math.max(50, canvasDrag.initW + dx);
                 if (canvasDrag.type.includes('b')) c.h = Math.max(50, canvasDrag.initH + dy);
                 if (canvasDrag.type.includes('l')) { c.w = Math.max(50, canvasDrag.initW - dx); c.x = canvasDrag.initX + dx; }
@@ -1187,13 +1144,11 @@
 
         window.addEventListener('pointerup', () => { canvasDrag.active = false; });
 
-        // --- EXPORTAÇÃO (WEBCODECS) ---
+        // --- EXPORTAÇÃO OTIMIZADA (frame-by-frame com melhor controle de CPU) ---
         document.getElementById('export-btn').addEventListener('click', async () => {
             if (state.clips.length === 0) return alert("Adicione mídia primeiro!");
             
-            if (state.isPlaying) {
-                togglePlay(); // Pausa o player se estiver tocando
-            }
+            if (state.isPlaying) togglePlay();
             
             els.loadingModal.classList.remove('hidden');
             els.loadingTitle.textContent = "Renderizando Vídeo...";
@@ -1205,14 +1160,12 @@
                 const width = 1920;
                 const height = 1080;
 
-                // 1. Configurar Muxer
                 const muxer = new WebMMuxer.Muxer({
                     target: new WebMMuxer.ArrayBufferTarget(),
                     video: { codec: 'V_VP9', width, height, frameRate: fps },
                     audio: { codec: 'A_OPUS', sampleRate: 48000, numberOfChannels: 2 }
                 });
 
-                // 2. Configurar Encoders
                 const videoEncoder = new VideoEncoder({
                     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
                     error: e => console.error(e)
@@ -1221,43 +1174,39 @@
                     codec: 'vp09.00.10.08', 
                     width, 
                     height, 
-                    bitrate: 12_000_000, 
-                    framerate: fps,
-                    latencyMode: 'quality' // Melhora a qualidade para exportação não-realtime
+                    bitrate: 8000000, 
+                    framerate: fps 
                 });
 
                 const audioEncoder = new AudioEncoder({
                     output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
                     error: e => console.error(e)
                 });
-                audioEncoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
+                audioEncoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 });
 
-                // 3. Renderizar Vídeo Frame a Frame
                 const exportCanvas = document.createElement('canvas');
-                exportCanvas.width = width; exportCanvas.height = height;
-                const eCtx = exportCanvas.getContext('2d');
+                exportCanvas.width = width; 
+                exportCanvas.height = height;
+                const eCtx = exportCanvas.getContext('2d', { willReadFrequently: true });
 
+                // Renderização frame a frame com yield para UI
                 for (let i = 0; i < totalFrames; i++) {
                     const time = i / fps;
-                    state.currentTime = time; // Move o "playhead" virtual
+                    state.currentTime = time;
                     
-                    // Controle de fluxo do Encoder (Evita travamentos e falhas)
-                    while (videoEncoder.encodeQueueSize > 30) {
-                        // Espera o encoder processar antes de enviar mais frames
-                        await new Promise(r => setTimeout(r, 50));
+                    while (videoEncoder.encodeQueueSize > 20) {
+                        await new Promise(r => setTimeout(r, 30));
                     }
                     
-                    // Atualiza UI de progresso
-                    const progress = (i / totalFrames) * 100;
+                    const progress = Math.round((i / totalFrames) * 100);
                     els.loadingProgress.style.width = `${progress}%`;
-                    els.loadingText.textContent = `Frame ${i + 1} / ${totalFrames}`;
-                    await new Promise(r => setTimeout(r, 0)); // Yield para UI atualizar
+                    els.loadingText.textContent = `Frame ${i + 1} / ${totalFrames} (${progress}%)`;
+                    
+                    await new Promise(r => setTimeout(r, 0));
 
-                    // Desenha frame
                     eCtx.fillStyle = 'black';
                     eCtx.fillRect(0, 0, width, height);
                     
-                    // Lógica de desenho similar ao preview, mas no canvas de exportação
                     const activeVisuals = state.clips.filter(c => c.type !== 'audio' && time >= c.start && time < c.start + c.duration);
                     activeVisuals.sort((a, b) => b.lane - a.lane);
 
@@ -1271,28 +1220,14 @@
                         }
 
                         if (clip.type === 'video') {
-                            // A busca por um frame (seeking) é assíncrona. Usamos uma Promise
-                            // com o evento 'seeked' para garantir que o frame correto foi carregado.
                             const seekPromise = new Promise((resolve) => {
-                                // Timeout aumentado para 3s para evitar frames pretos em vídeos pesados
-                                const timeoutId = setTimeout(() => {
-                                    console.warn(`Seek timed out for ${clip.name} at ${time.toFixed(2)}s.`);
-                                    resolve();
-                                }, 3000);
-
-                                const onSeeked = () => {
-                                    clearTimeout(timeoutId);
-                                    resolve();
-                                };
+                                const timeoutId = setTimeout(() => resolve(), 2000);
+                                const onSeeked = () => { clearTimeout(timeoutId); resolve(); };
                                 el.addEventListener('seeked', onSeeked, { once: true });
                             });
-                            
-                            // Adicionamos um micro-offset para evitar problemas de arredondamento de precisão
-                            el.currentTime = time - clip.start + clip.offset + 0.001;
+                            el.currentTime = (time - clip.start + clip.offset + 0.001);
                             await seekPromise;
-                            
-                            // Pequena pausa para garantir que o frame foi renderizado internamente pelo browser
-                            await new Promise(r => setTimeout(r, 15));
+                            await new Promise(r => setTimeout(r, 10));
                         }
                         
                         if (el && clip.w && clip.h) {
@@ -1304,37 +1239,32 @@
                         }
                     }
 
-                    // Cria o frame a partir do canvas usando createImageBitmap para melhor performance e memória
                     const bitmap = await createImageBitmap(exportCanvas);
                     const frame = new VideoFrame(bitmap, { timestamp: i * 1_000_000 / fps });
-                    videoEncoder.encode(frame, { keyFrame: i % 30 === 0 });
+                    videoEncoder.encode(frame, { keyFrame: i % 60 === 0 });
                     frame.close();
                     bitmap.close();
                 }
 
-                // 4. Renderizar Áudio (Mixagem Offline)
+                // Áudio
                 els.loadingTitle.textContent = "Processando Áudio...";
                 const offlineCtx = new OfflineAudioContext(2, Math.ceil(duration * 48000), 48000);
                 
                 for (const clip of state.clips) {
-                    if (clip.type === 'image') continue;
-                    if (clip.isMuted) continue;
+                    if (clip.type === 'image' || clip.isMuted) continue;
                     try {
                         const response = await fetch(clip.src);
                         const arrayBuffer = await response.arrayBuffer();
                         const audioBuffer = await offlineCtx.decodeAudioData(arrayBuffer);
-                        
                         const source = offlineCtx.createBufferSource();
                         source.buffer = audioBuffer;
                         source.connect(offlineCtx.destination);
-                        
                         source.start(clip.start, clip.offset, clip.duration);
-                    } catch (e) { console.warn("Erro ao processar áudio clip", e); }
+                    } catch (e) {}
                 }
                 
                 const renderedAudio = await offlineCtx.startRendering();
                 
-                // Codificar Áudio
                 const dataL = renderedAudio.getChannelData(0);
                 const dataR = renderedAudio.getChannelData(1);
                 const interleaved = new Float32Array(dataL.length * 2);
@@ -1343,19 +1273,22 @@
                     interleaved[i*2+1] = dataR[i];
                 }
                 
-                const chunkSize = 48000; 
+                const chunkSize = 48000;
                 for (let i = 0; i < interleaved.length; i += chunkSize * 2) {
                     const chunk = interleaved.slice(i, i + chunkSize * 2);
                     if (chunk.length === 0) break;
                     const audioData = new AudioData({
-                        format: 'f32', sampleRate: 48000, numberOfFrames: chunk.length / 2, numberOfChannels: 2,
-                        timestamp: (i / 2 / 48000) * 1_000_000, data: chunk
+                        format: 'f32', 
+                        sampleRate: 48000, 
+                        numberOfFrames: chunk.length / 2, 
+                        numberOfChannels: 2,
+                        timestamp: (i / 2 / 48000) * 1_000_000, 
+                        data: chunk
                     });
                     audioEncoder.encode(audioData);
                     audioData.close();
                 }
 
-                // 5. Finalizar
                 await videoEncoder.flush();
                 await audioEncoder.flush();
                 muxer.finalize();
@@ -1364,7 +1297,9 @@
                 const blob = new Blob([buffer], { type: 'video/webm' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; a.download = 'video_editor.webm'; a.click();
+                a.href = url; 
+                a.download = 'video_editor_export.webm'; 
+                a.click();
                 
                 els.loadingModal.classList.add('hidden');
 
