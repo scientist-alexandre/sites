@@ -512,10 +512,18 @@
         const sCtx = selectionCanvas.getContext('2d');
         const clipboardCanvas = document.getElementById('clipboardCanvas');
         
+        // Utilitários Compartilhados de Desempenho
         const sharedUtilCanvas = document.createElement('canvas');
-        sharedUtilCanvas.width = 1920;
-        sharedUtilCanvas.height = 1080;
+        sharedUtilCanvas.width = 1920; sharedUtilCanvas.height = 1080;
         const sharedUtilCtx = sharedUtilCanvas.getContext('2d', { willReadFrequently: true });
+        
+        // CANVASES DO NOVO SISTEMA "DUAL OPAQUE MASKING" (SOLUÇÃO DEFINITIVA DO WARP QUADRICULADO)
+        const warpColorCanvas = document.createElement('canvas'); warpColorCanvas.width = 1920; warpColorCanvas.height = 1080;
+        const warpColorCtx = warpColorCanvas.getContext('2d', { willReadFrequently: true });
+        const warpAlphaCanvas = document.createElement('canvas'); warpAlphaCanvas.width = 1920; warpAlphaCanvas.height = 1080;
+        const warpAlphaCtx = warpAlphaCanvas.getContext('2d', { willReadFrequently: true });
+        const selectionColorCanvas = document.createElement('canvas');
+        const selectionAlphaCanvas = document.createElement('canvas');
 
         const colorIndicator = document.getElementById('colorIndicator');
         const colorPanel = document.getElementById('colorPanel');
@@ -586,7 +594,6 @@
         let hasUnsavedChanges = false;
         let soloMode = false;
         let isExporting = false;
-        
         let isSaving = false;
 
         let curH = 0, curS = 100, curV = 0;
@@ -598,22 +605,16 @@
 
         function hexToRgb(hex) {
             const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? {
-                r: parseInt(result[1], 16),
-                g: parseInt(result[2], 16),
-                b: parseInt(result[3], 16)
-            } : { r: 0, g: 0, b: 0 };
+            return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 0, g: 0, b: 0 };
         }
 
         function updateColorFromHSV() {
             const rgb = hsvToRgb(curH / 360, curS / 100, curV / 100);
             const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-            
             cachedColor = hex;
             colorIndicator.style.backgroundColor = hex;
             nativeColorPicker.value = hex;
             sbSquare.style.backgroundColor = `hsl(${curH}, 100%, 50%)`;
-            
             sbCursor.style.left = curS + '%';
             sbCursor.style.top = (100 - curV) + '%';
         }
@@ -637,11 +638,7 @@
             let max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, h, s = (max === 0 ? 0 : d / max), v = max;
             if (max == min) h = 0;
             else {
-                switch (max) {
-                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-                    case g: h = (b - r) / d + 2; break;
-                    case b: h = (r - g) / d + 4; break;
-                }
+                switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; }
                 h /= 6;
             }
             return { h: h * 360, s: s * 100, v: v * 100 };
@@ -652,7 +649,6 @@
             const rect = sbSquare.getBoundingClientRect();
             let x = ((e.clientX - rect.left) / rect.width) * 100;
             let y = ((e.clientY - rect.top) / rect.height) * 100;
-            
             curS = Math.max(0, Math.min(100, x));
             curV = Math.max(0, Math.min(100, 100 - y));
             updateColorFromHSV();
@@ -660,36 +656,20 @@
 
         let isDrawingColor = false;
 
-        colorIndicator.onclick = (e) => {
-            if (e.target === colorIndicator) colorPanel.classList.toggle('show');
-        };
+        colorIndicator.onclick = (e) => { if (e.target === colorIndicator) colorPanel.classList.toggle('show'); };
         colorPanel.onclick = (e) => e.stopPropagation();
 
-        hueSliderCustom.addEventListener('input', (e) => {
-            curH = parseFloat(e.target.value);
-            updateColorFromHSV();
-        });
+        hueSliderCustom.addEventListener('input', (e) => { curH = parseFloat(e.target.value); updateColorFromHSV(); });
 
-        sbSquare.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); 
-            isDrawingColor = true;
-            sbSquare.setPointerCapture(e.pointerId);
-            handleSBSquare(e);
-        });
-
+        sbSquare.addEventListener('pointerdown', (e) => { e.preventDefault(); isDrawingColor = true; sbSquare.setPointerCapture(e.pointerId); handleSBSquare(e); });
         sbSquare.addEventListener('pointermove', (e) => { if (isDrawingColor) handleSBSquare(e); });
-        sbSquare.addEventListener('pointerup', (e) => {
-            isDrawingColor = false;
-            sbSquare.releasePointerCapture(e.pointerId);
-        });
+        sbSquare.addEventListener('pointerup', (e) => { isDrawingColor = false; sbSquare.releasePointerCapture(e.pointerId); });
         sbSquare.addEventListener('pointercancel', () => isDrawingColor = false);
 
         function syncCustomPicker(hex) {
-            const rgb = hexToRgb(hex);
-            const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+            const rgb = hexToRgb(hex); const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
             curH = hsv.h; curS = hsv.s; curV = hsv.v;
-            hueSliderCustom.value = curH;
-            updateColorFromHSV();
+            hueSliderCustom.value = curH; updateColorFromHSV();
         }
 
         let sampleColorFn = (x, y) => {
@@ -697,13 +677,9 @@
             sharedUtilCtx.fillStyle = 'white';
             sharedUtilCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
             sharedUtilCtx.drawImage(bgCanvas, 0, 0);
-
             for (let i = 0; i < 6; i++) {
                 if (i === activeLayerIndex) sharedUtilCtx.drawImage(mainCanvas, 0, 0);
-                else {
-                    const lCanvas = document.getElementById(`layer${i}`);
-                    sharedUtilCtx.drawImage(lCanvas, 0, 0);
-                }
+                else { const lCanvas = document.getElementById(`layer${i}`); sharedUtilCtx.drawImage(lCanvas, 0, 0); }
             }
             const pixel = sharedUtilCtx.getImageData(x, y, 1, 1).data;
             const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
@@ -721,9 +697,7 @@
         
         let cachedSize = 3;
         let cachedOpacity = 100;
-        
-        // FIX BUG 1: Variável que controla a linha contínua anti-circles (Opacidade)
-        let currentStrokePoints = []; 
+        let currentStrokePoints = [];
 
         let clipboardBox = null;
         let clipboardCorners = null;
@@ -746,11 +720,9 @@
 
         function setTool(tool) {
             if (currentTool === tool && (tool === 'lasso' || tool === 'perspective' || tool === 'warp')) {
-                finishSelection();
-                currentTool = 'brush';
+                finishSelection(); currentTool = 'brush';
             } else {
-                finishSelection();
-                currentTool = tool;
+                finishSelection(); currentTool = tool;
                 if (tool === 'warp') setBrushSize(40);
             }
             updateToolUI();
@@ -768,18 +740,12 @@
             sharedUtilCtx.globalCompositeOperation = 'source-over';
             sharedUtilCtx.clearRect(0, 0, canvas.width, canvas.height);
             sharedUtilCtx.drawImage(canvas, 0, 0);
-
             const canvasCtx = canvas.getContext('2d');
-            canvasCtx.globalCompositeOperation = 'source-over';
+            canvasCtx.globalCompositeOperation = 'source-over'; 
             canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
             canvasCtx.save();
-            if (horizontal) {
-                canvasCtx.translate(canvas.width, 0);
-                canvasCtx.scale(-1, 1);
-            } else {
-                canvasCtx.translate(0, canvas.height);
-                canvasCtx.scale(1, -1);
-            }
+            if (horizontal) { canvasCtx.translate(canvas.width, 0); canvasCtx.scale(-1, 1); } 
+            else { canvasCtx.translate(0, canvas.height); canvasCtx.scale(1, -1); }
             canvasCtx.drawImage(sharedUtilCanvas, 0, 0);
             canvasCtx.restore();
         }
@@ -788,6 +754,7 @@
             if (isPlaying) return;
             if (isTransforming) {
                 flipCanvas(selectionCanvas, horizontal);
+                updateSelectionColorAlpha(); // Atualiza a máscara após flip
                 drawTransformUI();
             } else {
                 flipCanvas(mainCanvas, horizontal);
@@ -801,12 +768,8 @@
 
         selectAllBtn.onclick = () => {
             if (isPlaying) return;
-            finishSelection();
-            currentTool = 'lasso';
-            updateToolUI();
-            
-            const w = mainCanvas.width;
-            const h = mainCanvas.height;
+            finishSelection(); currentTool = 'lasso'; updateToolUI();
+            const w = mainCanvas.width; const h = mainCanvas.height;
             selectionPath = [ { x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h } ];
             createSelection();
         };
@@ -823,31 +786,22 @@
 
         async function switchLayer(index) {
             if (activeLayerIndex === index) return;
-            if (!isHistoryAction) {
-                await saveFrameState(currentFrameIndex); 
-            }
+            if (!isHistoryAction) await saveFrameState(currentFrameIndex); 
             activeLayerIndex = index;
-            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalCompositeOperation = 'source-over'; 
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             const currentLayer = frames[currentFrameIndex].layers[activeLayerIndex];
             if (currentLayer) ctx.drawImage(currentLayer, 0, 0);
-            
             hasUnsavedChanges = false;
             refreshLayerDisplay();
         }
 
-        function toggleLayerVisibility(event, index) {
-            event.stopPropagation(); 
-            layerVisibility[index] = !layerVisibility[index];
-            refreshLayerDisplay();
-        }
+        function toggleLayerVisibility(event, index) { event.stopPropagation(); layerVisibility[index] = !layerVisibility[index]; refreshLayerDisplay(); }
 
         async function mergeLayers(event, sourceIdx, targetIdx) {
             if (event) event.stopPropagation(); 
             if (isPlaying) return;
-
-            const wasHistory = isHistoryAction;
-            isHistoryAction = true; 
+            const wasHistory = isHistoryAction; isHistoryAction = true; 
 
             if (frames[currentFrameIndex] && hasUnsavedChanges) {
                 sharedUtilCtx.globalCompositeOperation = 'source-over';
@@ -855,50 +809,32 @@
                 sharedUtilCtx.drawImage(mainCanvas, 0, 0);
                 frames[currentFrameIndex].layers[activeLayerIndex] = await createImageBitmap(sharedUtilCanvas);
             }
-
             const sourceLayer = frames[currentFrameIndex].layers[sourceIdx];
             const targetLayer = frames[currentFrameIndex].layers[targetIdx];
-
             if (sourceLayer) {
                 sharedUtilCtx.globalCompositeOperation = 'source-over';
                 sharedUtilCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-
                 const lowerLayer = (sourceIdx < targetIdx) ? sourceLayer : targetLayer;
                 const higherLayer = (sourceIdx > targetIdx) ? sourceLayer : targetLayer;
-
                 if (lowerLayer) sharedUtilCtx.drawImage(lowerLayer, 0, 0);
                 if (higherLayer) sharedUtilCtx.drawImage(higherLayer, 0, 0);
-
                 const mergedBmp = await createImageBitmap(sharedUtilCanvas);
-                
                 frames[currentFrameIndex].layers[targetIdx] = mergedBmp;
                 frames[currentFrameIndex].layers[sourceIdx] = null;
             }
-
-            activeLayerIndex = targetIdx;
-            isHistoryAction = wasHistory;
-            
+            activeLayerIndex = targetIdx; isHistoryAction = wasHistory;
             ctx.globalCompositeOperation = 'source-over'; 
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-            if (frames[currentFrameIndex].layers[targetIdx]) {
-                ctx.drawImage(frames[currentFrameIndex].layers[targetIdx], 0, 0);
-            }
-            
+            if (frames[currentFrameIndex].layers[targetIdx]) ctx.drawImage(frames[currentFrameIndex].layers[targetIdx], 0, 0);
             hasUnsavedChanges = true;
             await saveFrameState(currentFrameIndex);
-            
-            refreshLayerDisplay();
-            updateSingleThumbnail(currentFrameIndex);
+            refreshLayerDisplay(); updateSingleThumbnail(currentFrameIndex);
         }
 
-        layersBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            layersDropdown.classList.toggle('show');
-        });
+        layersBtn.addEventListener('click', (e) => { e.stopPropagation(); layersDropdown.classList.toggle('show'); });
 
         document.getElementById('soloModeBtn').onclick = (e) => {
-            soloMode = !soloMode;
-            e.target.classList.toggle('active', soloMode);
+            soloMode = !soloMode; e.target.classList.toggle('active', soloMode);
             e.target.textContent = soloMode ? "MODO SOLO: ON" : "MODO SOLO: OFF";
             refreshLayerDisplay();
         };
@@ -907,12 +843,8 @@
 
         function getMousePos(evt) {
             const rect = mainCanvas.getBoundingClientRect();
-            const scaleX = mainCanvas.width / rect.width;
-            const scaleY = mainCanvas.height / rect.height;
-            return {
-                x: (evt.clientX - rect.left) * scaleX,
-                y: (evt.clientY - rect.top) * scaleY
-            };
+            const scaleX = mainCanvas.width / rect.width; const scaleY = mainCanvas.height / rect.height;
+            return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
         }
 
         function hexToRgba(hex, opacity) {
@@ -928,40 +860,27 @@
             try { mainCanvas.setPointerCapture(e.pointerId); } catch(err) {}
 
             const pos = getMousePos(e); 
-            
-            if (currentTool === 'eyedropper') {
-                sampleColorFn(pos.x, pos.y);
-                isDrawing = false; return;
-            }
+            if (currentTool === 'eyedropper') { sampleColorFn(pos.x, pos.y); isDrawing = false; return; }
             
             if (currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp') {
                 if (isTransforming && currentTool === 'warp') {
                     const margin = 20;
                     const isInside = pos.x >= selectionBox.x - margin && pos.x <= selectionBox.x + selectionBox.w + margin &&
                                      pos.y >= selectionBox.y - margin && pos.y <= selectionBox.y + selectionBox.h + margin;
-                    if (isInside) {
-                        draggedWarpPoint = true; 
-                        dragStart = { x: pos.x, y: pos.y }; return;
-                    }
+                    if (isInside) { draggedWarpPoint = true; dragStart = { x: pos.x, y: pos.y }; return; }
                 }
                 if (isTransforming) {
                     const hit = getTransformHit(pos);
-                    if (hit) {
-                        transformMode = hit;
-                        dragStart = { x: pos.x, y: pos.y, startAngle: selectionBox.angle, startScale: selectionBox.scale, startBoxX: selectionBox.x, startBoxY: selectionBox.y, startCorners: selectionCorners.map(c => ({...c})) };
-                        return;
-                    }
+                    if (hit) { transformMode = hit; dragStart = { x: pos.x, y: pos.y, startAngle: selectionBox.angle, startScale: selectionBox.scale, startBoxX: selectionBox.x, startBoxY: selectionBox.y, startCorners: selectionCorners.map(c => ({...c})) }; return; }
                 }
                 finishSelection(); return;
             }
             
             if (currentTool === 'bucket') {
-                const color = nativeColorPicker.value;
-                const opacity = document.getElementById('brushOpacity').value;
+                const color = nativeColorPicker.value; const opacity = document.getElementById('brushOpacity').value;
                 const rgb = hexToRgb(color);
                 floodFill(pos.x, pos.y, { r: rgb.r, g: rgb.g, b: rgb.b, a: Math.floor(opacity * 2.55) }, bucketToleranceSlider.value);
-                saveFrameState(currentFrameIndex);
-                isDrawing = false; return;
+                saveFrameState(currentFrameIndex); isDrawing = false; return;
             }
 
             lastX = pos.x; lastY = pos.y; lastMidX = pos.x; lastMidY = pos.y;
@@ -969,47 +888,37 @@
             cachedOpacity = parseFloat(document.getElementById('brushOpacity').value);
             cachedColor = nativeColorPicker.value;
 
+            let pressure = (e.pointerType === 'pen' && e.pressure !== undefined) ? e.pressure : 1;
+            if (e.pointerType === 'pen' && pressure === 0) pressure = 0.05;
+            let currentSize = cachedSize * (0.2 + 0.8 * pressure);
+
             const isDirectDraw = cachedOpacity == 100;
+            const targetCtx = isDirectDraw ? ctx : dCtx;
 
             if (!isDirectDraw) {
-                // Prepara sistema anti-circles para Pincel com Opacidade < 100
                 if (snapshotCanvas.width !== mainCanvas.width) snapshotCanvas.width = mainCanvas.width;
                 if (snapshotCanvas.height !== mainCanvas.height) snapshotCanvas.height = mainCanvas.height;
-                
                 snapCtx.globalCompositeOperation = 'source-over';
                 snapCtx.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
                 snapCtx.drawImage(mainCanvas, 0, 0);
                 
                 currentStrokePoints = [pos];
-                
                 dCtx.globalCompositeOperation = 'source-over';
                 dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-                
-                // Pontinho de início
-                dCtx.beginPath();
-                dCtx.arc(pos.x, pos.y, cachedSize / 2, 0, Math.PI * 2);
-                dCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
-                dCtx.fill();
-                
-                triggerRenderLiveStroke();
-            } else {
-                let pressure = (e.pointerType === 'pen' && e.pressure !== undefined) ? e.pressure : 1;
-                if (e.pointerType === 'pen' && pressure === 0) pressure = 0.05;
-                let currentSize = cachedSize * (0.2 + 0.8 * pressure);
-
-                ctx.beginPath();
-                ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-                ctx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
-                ctx.arc(lastX, lastY, currentSize / 2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalCompositeOperation = 'source-over';
-                hasUnsavedChanges = true;
             }
+
+            targetCtx.beginPath(); targetCtx.arc(lastX, lastY, currentSize / 2, 0, Math.PI * 2);
+            targetCtx.globalCompositeOperation = (isDirectDraw && currentTool === 'eraser') ? 'destination-out' : 'source-over';
+            targetCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
+            targetCtx.fill();
+            targetCtx.globalCompositeOperation = 'source-over'; 
+            
+            if (!isDirectDraw) triggerRenderLiveStroke();
+            else hasUnsavedChanges = true;
         }
 
         function draw(e) {
             if (!isDrawing || isPlaying) return;
-
             const events = (e.getCoalescedEvents && e.getCoalescedEvents().length > 0) ? e.getCoalescedEvents() : [e];
             
             if (currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp' || currentTool === 'bucket') {
@@ -1019,10 +928,7 @@
                     const dx = pos.x - dragStart.x; const dy = pos.y - dragStart.y;
                     warpMesh.forEach(p => {
                         const d = Math.hypot(p.x - dragStart.x, p.y - dragStart.y);
-                        if (d < influenceRadius) {
-                            const weight = 1 - (d / influenceRadius);
-                            p.x += dx * weight; p.y += dy * weight;
-                        }
+                        if (d < influenceRadius) { const weight = 1 - (d / influenceRadius); p.x += dx * weight; p.y += dy * weight; }
                     });
                     dragStart = { x: pos.x, y: pos.y }; drawTransformUI(); return;
                 }
@@ -1030,9 +936,7 @@
                 if (isTransforming && transformMode) {
                     if (transformMode === 'move') {
                         const dx = pos.x - dragStart.x; const dy = pos.y - dragStart.y;
-                        selectionCorners.forEach((c, i) => {
-                            c.x = dragStart.startCorners[i].x + dx; c.y = dragStart.startCorners[i].y + dy;
-                        });
+                        selectionCorners.forEach((c, i) => { c.x = dragStart.startCorners[i].x + dx; c.y = dragStart.startCorners[i].y + dy; });
                         selectionBox.x = dragStart.startBoxX + dx; selectionBox.y = dragStart.startBoxY + dy;
                     } else if (transformMode === 'rotate') {
                         const centerX = selectionBox.x + selectionBox.w / 2; const centerY = selectionBox.y + selectionBox.h / 2;
@@ -1050,78 +954,57 @@
                         selectionCorners[idx].y = dragStart.startCorners[idx].y + (pos.y - dragStart.y);
                     }
                     drawTransformUI();
-                } else {
-                    selectionPath.push(pos); drawLassoPath();
-                }
+                } else { selectionPath.push(pos); drawLassoPath(); }
                 return;
             }
 
             const isDirectDraw = cachedOpacity == 100;
-
+            
             if (isDirectDraw) {
-                // Traço direto c/ opacidade 100% preserva sensibilidade fina (Segmentos)
-                ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-                ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-                ctx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
+                const targetCtx = ctx; targetCtx.lineCap = 'round'; targetCtx.lineJoin = 'round';
+                targetCtx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+                targetCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
 
                 for (const event of events) {
                     const pos = getMousePos(event);
-                    if (Math.hypot(pos.x - lastX, pos.y - lastY) < 1) continue;
-                    
+                    if (Math.hypot(pos.x - lastX, pos.y - lastY) < 0.5) continue;
                     let pressure = (event.pointerType === 'pen' && event.pressure !== undefined) ? event.pressure : 1;
                     if (event.pointerType === 'pen' && pressure === 0) pressure = 0.05;
                     let currentSize = cachedSize * (0.2 + 0.8 * pressure);
 
-                    const targetX = pos.x; const targetY = pos.y;
+                    const targetX = lastX + (pos.x - lastX); const targetY = lastY + (pos.y - lastY);
                     const midX = (lastX + targetX) / 2; const midY = (lastY + targetY) / 2;
 
-                    ctx.beginPath();
-                    ctx.lineWidth = currentSize;
-                    ctx.moveTo(lastMidX, lastMidY);
-                    ctx.quadraticCurveTo(lastX, lastY, midX, midY);
-                    ctx.stroke();
-
+                    targetCtx.beginPath(); targetCtx.lineWidth = currentSize;
+                    targetCtx.moveTo(lastMidX, lastMidY); targetCtx.quadraticCurveTo(lastX, lastY, midX, midY); targetCtx.stroke();
                     lastX = targetX; lastY = targetY; lastMidX = midX; lastMidY = midY;
                 }
-                ctx.globalCompositeOperation = 'source-over';
-                hasUnsavedChanges = true;
+                targetCtx.globalCompositeOperation = 'source-over'; hasUnsavedChanges = true;
+                
             } else {
-                // FIX BUG 1 - SOLUÇÃO "ANTI-CIRCLES" PARA OPACIDADE < 100%
-                // Desenha todo o histórico do traço como UM ÚNICO Path2D contínuo a cada frame. 
-                // Impede que os anti-aliasing arredondados das extremidades se sobreponham escurecendo a linha.
                 let moved = false;
                 for (const event of events) {
                     const pos = getMousePos(event);
                     if (Math.hypot(pos.x - lastX, pos.y - lastY) < 1.5) continue;
-                    currentStrokePoints.push(pos);
-                    lastX = pos.x; lastY = pos.y;
-                    moved = true;
+                    currentStrokePoints.push(pos); lastX = pos.x; lastY = pos.y; moved = true;
                 }
-
                 if (moved) {
                     dCtx.globalCompositeOperation = 'source-over';
                     dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-                    dCtx.beginPath();
-                    dCtx.lineWidth = cachedSize;
-                    dCtx.lineCap = 'round'; dCtx.lineJoin = 'round';
+                    dCtx.beginPath(); dCtx.lineWidth = cachedSize; dCtx.lineCap = 'round'; dCtx.lineJoin = 'round';
                     dCtx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
 
                     if (currentStrokePoints.length === 1) {
                         dCtx.arc(currentStrokePoints[0].x, currentStrokePoints[0].y, cachedSize / 2, 0, Math.PI * 2);
-                        dCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor;
-                        dCtx.fill();
+                        dCtx.fillStyle = currentTool === 'eraser' ? '#000' : cachedColor; dCtx.fill();
                     } else {
                         dCtx.moveTo(currentStrokePoints[0].x, currentStrokePoints[0].y);
                         for (let i = 1; i < currentStrokePoints.length - 1; i++) {
-                            const p1 = currentStrokePoints[i];
-                            const p2 = currentStrokePoints[i + 1];
-                            const midX = (p1.x + p2.x) / 2;
-                            const midY = (p1.y + p2.y) / 2;
+                            const p1 = currentStrokePoints[i]; const p2 = currentStrokePoints[i + 1];
+                            const midX = (p1.x + p2.x) / 2; const midY = (p1.y + p2.y) / 2;
                             dCtx.quadraticCurveTo(p1.x, p1.y, midX, midY);
                         }
-                        const lastPoint = currentStrokePoints[currentStrokePoints.length - 1];
-                        dCtx.lineTo(lastPoint.x, lastPoint.y);
-                        dCtx.stroke();
+                        const lastPoint = currentStrokePoints[currentStrokePoints.length - 1]; dCtx.lineTo(lastPoint.x, lastPoint.y); dCtx.stroke();
                     }
                     triggerRenderLiveStroke();
                 }
@@ -1129,32 +1012,26 @@
         }
 
         let renderPending = false;
+        let strokeRafId = null;
+        
         function triggerRenderLiveStroke() {
-            if (!renderPending) {
-                renderPending = true;
-                requestAnimationFrame(forceRenderLiveStroke);
-            }
+            if (!renderPending) { renderPending = true; strokeRafId = requestAnimationFrame(forceRenderLiveStroke); }
         }
 
         function forceRenderLiveStroke() {
+            renderPending = false;
             ctx.globalCompositeOperation = 'source-over'; 
             ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             ctx.drawImage(snapshotCanvas, 0, 0); 
-            ctx.save();
-            ctx.globalAlpha = cachedOpacity / 100;
+            ctx.save(); ctx.globalAlpha = cachedOpacity / 100;
             ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-            ctx.drawImage(drawingCanvas, 0, 0); 
-            ctx.restore();
-            renderPending = false;
+            ctx.drawImage(drawingCanvas, 0, 0); ctx.restore();
             hasUnsavedChanges = true;
         }
 
         function stopDrawing(e) {
             if (!isDrawing) return;
-            
-            if (e && e.pointerId) {
-                try { mainCanvas.releasePointerCapture(e.pointerId); } catch(err) {}
-            }
+            if (e && e.pointerId) { try { mainCanvas.releasePointerCapture(e.pointerId); } catch(err) {} }
 
             if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket' && e && e.type !== 'pointercancel') {
                 const isDirectDraw = cachedOpacity == 100;
@@ -1169,30 +1046,31 @@
                     ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
                     ctx.strokeStyle = currentTool === 'eraser' ? '#000' : cachedColor;
                     
-                    ctx.beginPath();
-                    ctx.lineWidth = currentSize;
-                    ctx.moveTo(lastMidX, lastMidY);
-                    ctx.quadraticCurveTo(lastX, lastY, pos.x, pos.y);
-                    ctx.stroke();
-                    
-                    ctx.globalCompositeOperation = 'source-over';
-                    hasUnsavedChanges = true;
+                    ctx.beginPath(); ctx.lineWidth = currentSize;
+                    ctx.moveTo(lastMidX, lastMidY); ctx.quadraticCurveTo(lastX, lastY, pos.x, pos.y); ctx.stroke();
+                    ctx.globalCompositeOperation = 'source-over'; hasUnsavedChanges = true;
                 } else {
+                    if (renderPending) { cancelAnimationFrame(strokeRafId); renderPending = false; }
                     forceRenderLiveStroke(); 
                     dCtx.globalCompositeOperation = 'source-over';
                     dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
                 }
+            } else if (e && e.type === 'pointercancel') {
+                if (cachedOpacity != 100) {
+                    if (renderPending) { cancelAnimationFrame(strokeRafId); renderPending = false; }
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                    ctx.drawImage(snapshotCanvas, 0, 0); 
+                    dCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                }
             }
             
-            isDrawing = false;
-            draggedWarpPoint = null;
-            currentStrokePoints = []; 
+            isDrawing = false; draggedWarpPoint = null; currentStrokePoints = []; 
             
             if ((currentTool === 'lasso' || currentTool === 'perspective' || currentTool === 'warp') && !isTransforming && selectionPath.length > 3) {
                 createSelection();
             } else if (currentTool !== 'lasso' && currentTool !== 'perspective' && currentTool !== 'warp' && currentTool !== 'bucket') {
-                transformMode = null;
-                saveFrameState(currentFrameIndex);
+                transformMode = null; saveFrameState(currentFrameIndex);
             }
         }
 
@@ -1202,6 +1080,36 @@
             uiCtx.beginPath(); uiCtx.moveTo(selectionPath[0].x, selectionPath[0].y);
             selectionPath.forEach(p => uiCtx.lineTo(p.x, p.y));
             uiCtx.stroke(); uiCtx.setLineDash([]);
+        }
+
+        // SISTEMA DE DUPLA MÁSCARA OPACA (DUAL OPAQUE MASKING) 
+        // Separa a cor e o alpha no momento em que finaliza o laço de seleção para resolver o limite gráfico de opacidade.
+        function updateSelectionColorAlpha() {
+            const w = selectionCanvas.width; const h = selectionCanvas.height;
+            selectionColorCanvas.width = w; selectionColorCanvas.height = h;
+            selectionAlphaCanvas.width = w; selectionAlphaCanvas.height = h;
+            
+            const cCtx = selectionColorCanvas.getContext('2d', { willReadFrequently: true });
+            const aCtx = selectionAlphaCanvas.getContext('2d', { willReadFrequently: true });
+            const sData = sCtx.getImageData(0, 0, w, h);
+            const cData = cCtx.createImageData(w, h);
+            const aData = aCtx.createImageData(w, h);
+            
+            for (let i = 0; i < sData.data.length; i += 4) {
+                const a = sData.data[i+3];
+                // Imagem opaca colorida (sem alpha original)
+                cData.data[i] = sData.data[i];
+                cData.data[i+1] = sData.data[i+1];
+                cData.data[i+2] = sData.data[i+2];
+                cData.data[i+3] = 255; 
+                // Imagem opaca cinza (carregando o alpha)
+                aData.data[i] = a;
+                aData.data[i+1] = a;
+                aData.data[i+2] = a;
+                aData.data[i+3] = 255;
+            }
+            cCtx.putImageData(cData, 0, 0);
+            aCtx.putImageData(aData, 0, 0);
         }
 
         function createSelection() {
@@ -1217,6 +1125,8 @@
             sCtx.beginPath(); sCtx.moveTo(selectionPath[0].x, selectionPath[0].y);
             selectionPath.forEach(p => sCtx.lineTo(p.x, p.y));
             sCtx.clip(); sCtx.drawImage(mainCanvas, 0, 0); sCtx.restore();
+
+            updateSelectionColorAlpha(); // Separa Core & Alpha Channels
 
             ctx.globalCompositeOperation = 'source-over'; 
             ctx.save(); ctx.beginPath(); ctx.moveTo(selectionPath[0].x, selectionPath[0].y);
@@ -1239,12 +1149,49 @@
             drawTransformUI();
         }
 
+        // Faz o warp simultâneo nos buffers separados (Cor Pura + Alpha Puro) fundindo-os com ImageData sem overlay de transparente duplo
+        function renderComplexTransform(targetCtx, tool) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            const points = tool === 'warp' ? warpMesh : selectionCorners;
+            points.forEach(p => {
+                if(p.x < minX) minX = p.x; if(p.x > maxX) maxX = p.x;
+                if(p.y < minY) minY = p.y; if(p.y > maxY) maxY = p.y;
+            });
+            
+            minX = Math.max(0, Math.floor(minX - 10)); minY = Math.max(0, Math.floor(minY - 10));
+            maxX = Math.min(1920, Math.ceil(maxX + 10)); maxY = Math.min(1080, Math.ceil(maxY + 10));
+            const bw = maxX - minX; const bh = maxY - minY;
+            if (bw <= 0 || bh <= 0) return;
+
+            warpColorCtx.clearRect(minX, minY, bw, bh);
+            warpAlphaCtx.clearRect(minX, minY, bw, bh);
+
+            if (tool === 'warp') {
+                renderMeshWarp(warpColorCtx, selectionColorCanvas, warpMesh, WARP_GRID);
+                renderMeshWarp(warpAlphaCtx, selectionAlphaCanvas, warpMesh, WARP_GRID);
+            } else {
+                renderDistorted(warpColorCtx, selectionColorCanvas, selectionCorners);
+                renderDistorted(warpAlphaCtx, selectionAlphaCanvas, selectionCorners);
+            }
+
+            const cData = warpColorCtx.getImageData(minX, minY, bw, bh);
+            const aData = warpAlphaCtx.getImageData(minX, minY, bw, bh);
+            
+            // Recombina RGB puro e Alpha puro
+            for (let i = 0; i < cData.data.length; i += 4) { cData.data[i+3] = aData.data[i]; }
+            
+            sharedUtilCtx.clearRect(0, 0, bw, bh);
+            sharedUtilCtx.putImageData(cData, 0, 0);
+            
+            targetCtx.drawImage(sharedUtilCanvas, 0, 0, bw, bh, minX, minY, bw, bh);
+        }
+
         function drawTransformUI() {
             uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
             const b = selectionBox;
 
             if (currentTool === 'perspective') {
-                renderDistorted(uiCtx, selectionCanvas, selectionCorners);
+                renderComplexTransform(uiCtx, 'perspective');
                 uiCtx.strokeStyle = "#ff3b30"; uiCtx.setLineDash([5, 5]); uiCtx.beginPath();
                 uiCtx.moveTo(selectionCorners[0].x, selectionCorners[0].y);
                 selectionCorners.forEach(c => uiCtx.lineTo(c.x, c.y));
@@ -1254,7 +1201,7 @@
             }
             
             if (currentTool === 'warp') {
-                renderMeshWarp(uiCtx, selectionCanvas, warpMesh, WARP_GRID);
+                renderComplexTransform(uiCtx, 'warp');
                 uiCtx.strokeStyle = "rgba(90, 200, 250, 0.15)"; uiCtx.lineWidth = 1; uiCtx.beginPath();
                 for (let y = 0; y <= WARP_GRID; y++) {
                     uiCtx.moveTo(warpMesh[y * (WARP_GRID + 1)].x, warpMesh[y * (WARP_GRID + 1)].y);
@@ -1298,96 +1245,58 @@
         
         function floodFill(startX, startY, fillRGBA, tolerance) {
             if (isTransforming) finishSelection();
-            const width = mainCanvas.width;
-            const height = mainCanvas.height;
+            const width = mainCanvas.width; const height = mainCanvas.height;
             const imgData = ctx.getImageData(0, 0, width, height, { colorSpace: 'srgb' });
-            const data = imgData.data;
-            const uint32Data = new Uint32Array(data.buffer);
+            const data = imgData.data; const uint32Data = new Uint32Array(data.buffer);
 
-            const x = Math.floor(startX);
-            const y = Math.floor(startY);
+            const x = Math.floor(startX); const y = Math.floor(startY);
             if (x < 0 || x >= width || y < 0 || y >= height) return;
 
-            const baseIdx = (y * width + x);
-            const startColor32 = uint32Data[baseIdx];
-            
+            const baseIdx = (y * width + x); const startColor32 = uint32Data[baseIdx];
             const startR = data[baseIdx]; const startG = data[baseIdx + 1]; const startB = data[baseIdx + 2]; const startA = data[baseIdx + 3];
+            if (Math.abs(startR - fillRGBA.r) < 2 && Math.abs(startG - fillRGBA.g) < 2 && Math.abs(startB - fillRGBA.b) < 2 && Math.abs(startA - fillRGBA.a) < 2) return;
 
-            if (Math.abs(startR - fillRGBA.r) < 2 && Math.abs(startG - fillRGBA.g) < 2 && 
-                Math.abs(startB - fillRGBA.b) < 2 && Math.abs(startA - fillRGBA.a) < 2) return;
-
-            const stack = [[x, y]];
-            floodFillVisited.fill(0); 
+            const stack = [[x, y]]; floodFillVisited.fill(0); 
             const fill32 = (fillRGBA.a << 24) | (fillRGBA.b << 16) | (fillRGBA.g << 8) | fillRGBA.r;
 
             while (stack.length > 0) {
                 const [currX, currY] = stack.pop();
                 const posIdx = currY * width + currX;
-                
                 if (currX < 0 || currX >= width || currY < 0 || currY >= height || floodFillVisited[posIdx]) continue;
                 floodFillVisited[posIdx] = 1;
 
-                const color32 = uint32Data[posIdx];
-                const idx = posIdx * 4;
-                
-                const isMatch = tolerance == 0 ? 
-                                color32 === startColor32 :
-                                Math.abs(data[idx] - startR) <= tolerance && Math.abs(data[idx+1] - startG) <= tolerance &&
-                                Math.abs(data[idx+2] - startB) <= tolerance && Math.abs(data[idx+3] - startA) <= tolerance;
-
+                const color32 = uint32Data[posIdx]; const idx = posIdx * 4;
+                const isMatch = tolerance == 0 ? color32 === startColor32 : Math.abs(data[idx] - startR) <= tolerance && Math.abs(data[idx+1] - startG) <= tolerance && Math.abs(data[idx+2] - startB) <= tolerance && Math.abs(data[idx+3] - startA) <= tolerance;
                 if (isMatch) {
                     uint32Data[posIdx] = fill32;
                     stack.push([currX + 1, currY]); stack.push([currX - 1, currY]);
                     stack.push([currX, currY + 1]); stack.push([currX, currY - 1]);
                 }
             }
-            ctx.globalCompositeOperation = 'source-over'; 
-            ctx.putImageData(imgData, 0, 0);
-            hasUnsavedChanges = true;
+            ctx.globalCompositeOperation = 'source-over'; ctx.putImageData(imgData, 0, 0); hasUnsavedChanges = true;
         }
 
         function renderDistorted(targetCtx, img, p) {
             const w = img.width; const h = img.height;
             const drawTriangle = (p0, p1, p2, u0, v0, u1, v1, u2, v2) => {
                 const x0 = p0.x, y0 = p0.y, x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y;
+                const cx = (x0 + x1 + x2) / 3; const cy = (y0 + y1 + y2) / 3;
                 
-                // FIX BUG 2 (Quadriculado): Mapeamento Afim em coordenadas expandidas
-                const cx = (x0 + x1 + x2) / 3;
-                const cy = (y0 + y1 + y2) / 3;
-                const expand = 0.7; // Expande os limites para forçar os pixels semi-transparentes a se conectarem 
-                
-                const d0 = Math.hypot(x0 - cx, y0 - cy) || 1;
-                const ex0 = x0 + (x0 - cx) / d0 * expand;
-                const ey0 = y0 + (y0 - cy) / d0 * expand;
-                
-                const d1 = Math.hypot(x1 - cx, y1 - cy) || 1;
-                const ex1 = x1 + (x1 - cx) / d1 * expand;
-                const ey1 = y1 + (y1 - cy) / d1 * expand;
-                
-                const d2 = Math.hypot(x2 - cx, y2 - cy) || 1;
-                const ex2 = x2 + (x2 - cx) / d2 * expand;
-                const ey2 = y2 + (y2 - cy) / d2 * expand;
+                const expand = 1.2; // Seguro fechar as pontas pois a base é opaca - mata a linha fina visual
+                const d0 = Math.hypot(x0 - cx, y0 - cy) || 1; const ex0 = x0 + (x0 - cx) / d0 * expand; const ey0 = y0 + (y0 - cy) / d0 * expand;
+                const d1 = Math.hypot(x1 - cx, y1 - cy) || 1; const ex1 = x1 + (x1 - cx) / d1 * expand; const ey1 = y1 + (y1 - cy) / d1 * expand;
+                const d2 = Math.hypot(x2 - cx, y2 - cy) || 1; const ex2 = x2 + (x2 - cx) / d2 * expand; const ey2 = y2 + (y2 - cy) / d2 * expand;
 
-                targetCtx.save(); 
-                targetCtx.beginPath();
+                targetCtx.save(); targetCtx.beginPath();
                 targetCtx.moveTo(ex0, ey0); targetCtx.lineTo(ex1, ey1); targetCtx.lineTo(ex2, ey2);
-                targetCtx.closePath(); 
-                targetCtx.clip();
+                targetCtx.closePath(); targetCtx.clip();
 
                 const delta = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
-                if (Math.abs(delta) < 0.1) { targetCtx.restore(); return; }
+                const a = (x0 * (v1 - v2) + x1 * (v2 - v0) + x2 * (v0 - v1)) / delta; const b = (y0 * (v1 - v2) + y1 * (v2 - v0) + y2 * (v0 - v1)) / delta;
+                const c = (x0 * (u2 - u1) + x1 * (u0 - u2) + x2 * (u1 - u0)) / delta; const d = (y0 * (u2 - u1) + y1 * (u0 - u2) + y2 * (u1 - u0)) / delta;
+                const e = (x0 * (u1 * v2 - u2 * v1) + x1 * (u2 * v0 - u0 * v2) + x2 * (u0 * v1 - u1 * v0)) / delta; const f = (y0 * (u1 * v2 - u2 * v1) + y1 * (u2 * v0 - u0 * v2) + y2 * (u0 * v1 - u1 * v0)) / delta;
 
-                // A Matriz usa os vértices fisicamente expandidos ex/ey, amarrando a textura inteira sem distorção visível.
-                const a = (ex0 * (v1 - v2) + ex1 * (v2 - v0) + ex2 * (v0 - v1)) / delta;
-                const b = (ey0 * (v1 - v2) + ey1 * (v2 - v0) + ey2 * (v0 - v1)) / delta;
-                const c = (ex0 * (u2 - u1) + ex1 * (u0 - u2) + ex2 * (u1 - u0)) / delta;
-                const d = (ey0 * (u2 - u1) + ey1 * (u0 - u2) + ey2 * (u1 - u0)) / delta;
-                const e = (ex0 * (u1 * v2 - u2 * v1) + ex1 * (u2 * v0 - u0 * v2) + ex2 * (u0 * v1 - u1 * v0)) / delta;
-                const f = (ey0 * (u1 * v2 - u2 * v1) + ey1 * (u2 * v0 - u0 * v2) + ey2 * (u0 * v1 - u1 * v0)) / delta;
-
-                targetCtx.transform(a, b, c, d, e, f);
-                targetCtx.drawImage(img, 0, 0); 
-                targetCtx.restore();
+                targetCtx.transform(a, b, c, d, e, f); targetCtx.drawImage(img, 0, 0); targetCtx.restore();
             };
             drawTriangle(p[0], p[1], p[3], 0, 0, w, 0, 0, h);
             drawTriangle(p[1], p[2], p[3], w, 0, w, h, 0, h);
@@ -1412,39 +1321,22 @@
             const det = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
             if (Math.abs(det) < 0.1) return;
 
-            // FIX BUG 2 (Quadriculado): Mapeamento Afim em coordenadas expandidas
-            const cx = (x0 + x1 + x2) / 3;
-            const cy = (y0 + y1 + y2) / 3;
-            const expand = 2.0; // Sobreposição de 1.4px entre as malhas, mata as linhas translúcidas de anti-aliasing 
+            const cx = (x0 + x1 + x2) / 3; const cy = (y0 + y1 + y2) / 3;
             
-            const d0 = Math.hypot(x0 - cx, y0 - cy) || 1;
-            const ex0 = x0 + (x0 - cx) / d0 * expand;
-            const ey0 = y0 + (y0 - cy) / d0 * expand;
-            
-            const d1 = Math.hypot(x1 - cx, y1 - cy) || 1;
-            const ex1 = x1 + (x1 - cx) / d1 * expand;
-            const ey1 = y1 + (y1 - cy) / d1 * expand;
-            
-            const d2 = Math.hypot(x2 - cx, y2 - cy) || 1;
-            const ex2 = x2 + (x2 - cx) / d2 * expand;
-            const ey2 = y2 + (y2 - cy) / d2 * expand;
+            const expand = 1.2; 
+            const d0 = Math.hypot(x0 - cx, y0 - cy) || 1; const ex0 = x0 + (x0 - cx) / d0 * expand; const ey0 = y0 + (y0 - cy) / d0 * expand;
+            const d1 = Math.hypot(x1 - cx, y1 - cy) || 1; const ex1 = x1 + (x1 - cx) / d1 * expand; const ey1 = y1 + (y1 - cy) / d1 * expand;
+            const d2 = Math.hypot(x2 - cx, y2 - cy) || 1; const ex2 = x2 + (x2 - cx) / d2 * expand; const ey2 = y2 + (y2 - cy) / d2 * expand;
 
-            targetCtx.save(); 
-            targetCtx.beginPath();
+            targetCtx.save(); targetCtx.beginPath();
             targetCtx.moveTo(ex0, ey0); targetCtx.lineTo(ex1, ey1); targetCtx.lineTo(ex2, ey2);
-            targetCtx.closePath(); 
-            targetCtx.clip();
+            targetCtx.closePath(); targetCtx.clip();
 
-            const a = ((ex1 - ex0) * (v2 - v0) - (ex2 - ex0) * (v1 - v0)) / det; 
-            const b = ((ey1 - ey0) * (v2 - v0) - (ey2 - ey0) * (v1 - v0)) / det;
-            const c = ((ex2 - ex0) * (u1 - u0) - (ex1 - ex0) * (u2 - u0)) / det; 
-            const d = ((ey2 - ey0) * (u1 - u0) - (ey1 - ey0) * (u2 - u0)) / det;
-            const e = ex0 - a * u0 - c * v0; 
-            const f = ey0 - b * u0 - d * v0;
+            const a = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) / det; const b = ((y1 - y0) * (v2 - v0) - (y2 - y0) * (v1 - v0)) / det;
+            const c = ((x2 - x0) * (u1 - u0) - (x1 - x0) * (u2 - u0)) / det; const d = ((y2 - y0) * (u1 - u0) - (y1 - y0) * (u2 - u0)) / det;
+            const e = x0 - a * u0 - c * v0; const f = y0 - b * u0 - d * v0;
 
-            targetCtx.transform(a, b, c, d, e, f); 
-            targetCtx.drawImage(img, 0, 0); 
-            targetCtx.restore();
+            targetCtx.transform(a, b, c, d, e, f); targetCtx.drawImage(img, 0, 0); targetCtx.restore();
         }
 
         function getTransformHit(pos) {
@@ -1457,7 +1349,6 @@
             const dx = pos.x - centerX; const dy = pos.y - centerY;
             const cos = Math.cos(-b.angle); const sin = Math.sin(-b.angle);
             const localX = dx * cos - dy * sin; const localY = dx * sin + dy * cos;
-
             const s = b.scale; const hDist = 30 * s;
 
             if (Math.hypot(localX, localY + (b.h/2 * s + hDist)) < 15) return 'rotate'; 
@@ -1485,36 +1376,26 @@
 
         function handleCopy() {
             if (!isTransforming) return;
-            const cbCtx = clipboardCanvas.getContext('2d');
-            cbCtx.globalCompositeOperation = 'source-over'; 
-            clipboardCanvas.width = selectionCanvas.width;
-            clipboardCanvas.height = selectionCanvas.height;
-            cbCtx.clearRect(0, 0, clipboardCanvas.width, clipboardCanvas.height);
-            cbCtx.drawImage(selectionCanvas, 0, 0);
-            clipboardBox = { ...selectionBox }; 
-            clipboardCorners = selectionCorners.map(c => ({...c}));
-            hasClipboard = true;
+            const cbCtx = clipboardCanvas.getContext('2d'); cbCtx.globalCompositeOperation = 'source-over';
+            clipboardCanvas.width = selectionCanvas.width; clipboardCanvas.height = selectionCanvas.height;
+            cbCtx.clearRect(0, 0, clipboardCanvas.width, clipboardCanvas.height); cbCtx.drawImage(selectionCanvas, 0, 0);
+            clipboardBox = { ...selectionBox }; clipboardCorners = selectionCorners.map(c => ({...c})); hasClipboard = true;
         }
 
         function handleCut() {
             if (!isTransforming) return;
-            handleCopy();
-            isTransforming = false; transformMode = null; selectionPath = [];
-            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
-            hasUnsavedChanges = true;
-            saveFrameState(currentFrameIndex);
+            handleCopy(); isTransforming = false; transformMode = null; selectionPath = [];
+            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height); hasUnsavedChanges = true; saveFrameState(currentFrameIndex);
         }
 
         function handlePaste() {
             if (!hasClipboard) return;
             finishSelection(); 
-            selectionCanvas.width = clipboardCanvas.width; 
-            selectionCanvas.height = clipboardCanvas.height;
-            sCtx.globalCompositeOperation = 'source-over'; 
-            sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
-            sCtx.drawImage(clipboardCanvas, 0, 0);
+            selectionCanvas.width = clipboardCanvas.width; selectionCanvas.height = clipboardCanvas.height;
+            sCtx.globalCompositeOperation = 'source-over'; sCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height); sCtx.drawImage(clipboardCanvas, 0, 0);
             selectionBox = { ...clipboardBox }; selectionCorners = clipboardCorners.map(c => ({...c}));
             isTransforming = true; currentTool = 'lasso';
+            updateSelectionColorAlpha(); // Atualiza a máscara no momento em que cola
             updateToolUI(); drawTransformUI();
         }
 
@@ -1523,35 +1404,28 @@
                 ctx.save();
                 ctx.globalCompositeOperation = 'source-over'; 
                 
-                if (currentTool === 'perspective') renderDistorted(ctx, selectionCanvas, selectionCorners);
-                else if (currentTool === 'warp') renderMeshWarp(ctx, selectionCanvas, warpMesh, WARP_GRID);
+                if (currentTool === 'perspective') renderComplexTransform(ctx, 'perspective');
+                else if (currentTool === 'warp') renderComplexTransform(ctx, 'warp');
                 else {
-                    const b = selectionBox;
-                    ctx.translate(b.x + b.w/2, b.y + b.h/2); ctx.rotate(b.angle); ctx.scale(b.scale, b.scale);
-                    ctx.drawImage(selectionCanvas, -b.w/2, -b.h/2);
+                    const b = selectionBox; ctx.translate(b.x + b.w/2, b.y + b.h/2); ctx.rotate(b.angle); ctx.scale(b.scale, b.scale); ctx.drawImage(selectionCanvas, -b.w/2, -b.h/2);
                 }
                 ctx.restore();
                 
                 isTransforming = false; transformMode = null; draggedWarpPoint = null; warpMesh = []; selectionPath = [];
-                uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
-                hasUnsavedChanges = true;
-                saveFrameState(currentFrameIndex);
+                uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height); hasUnsavedChanges = true; saveFrameState(currentFrameIndex);
             }
         }
 
         mainCanvas.addEventListener('pointerdown', (e) => { e.preventDefault(); startDrawing(e); });
         window.addEventListener('pointermove', draw); 
-        window.addEventListener('pointerup', stopDrawing);
-        window.addEventListener('pointercancel', stopDrawing);
+        window.addEventListener('pointerup', stopDrawing); window.addEventListener('pointercancel', stopDrawing);
         mainCanvas.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
         workspace.addEventListener('mousedown', (e) => { if(e.target === workspace) finishSelection(); });
 
         async function saveFrameState(index) {
             if (isSaving || isHistoryAction || !frames[index] || !hasUnsavedChanges) return;
-            
             sharedUtilCtx.globalCompositeOperation = 'source-over';
-            sharedUtilCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-            sharedUtilCtx.drawImage(mainCanvas, 0, 0);
+            sharedUtilCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); sharedUtilCtx.drawImage(mainCanvas, 0, 0);
             
             isSaving = true;
             try {
@@ -1559,33 +1433,18 @@
                 const oldData = frames[index].layers[activeLayerIndex];
                 
                 undoStack.push({ frameRef: frames[index], layer: activeLayerIndex, data: oldData });
+                redoStack.forEach(action => { if (action.data && action.data.close) action.data.close(); }); redoStack = [];
                 
-                redoStack.forEach(action => { if (action.data && action.data.close) action.data.close(); });
-                redoStack = [];
-                
-                if (undoStack.length > 50) {
-                    const discarded = undoStack.shift();
-                    if (discarded.data && discarded.data.close) discarded.data.close();
-                }
+                if (undoStack.length > 50) { const discarded = undoStack.shift(); if (discarded.data && discarded.data.close) discarded.data.close(); }
 
-                frames[index].layers[activeLayerIndex] = canvasSnapshot;
-                hasUnsavedChanges = false;
+                frames[index].layers[activeLayerIndex] = canvasSnapshot; hasUnsavedChanges = false;
                 
-                requestAnimationFrame(() => {
-                    updateSingleThumbnail(index);
-                    updateLayerIndicators();
-                });
-            } catch (err) {
-                console.error("Erro ao salvar frame:", err);
-            } finally {
-                isSaving = false;
-            }
+                requestAnimationFrame(() => { updateSingleThumbnail(index); updateLayerIndicators(); });
+            } catch (err) { console.error("Erro ao salvar frame:", err); } finally { isSaving = false; }
         }
 
-        const brushSizeInput = document.getElementById('brushSize');
-        const brushOpacityInput = document.getElementById('brushOpacity');
-        const sizeValDisplay = document.getElementById('sizeValDisplay');
-        const opacityValDisplay = document.getElementById('opacityValDisplay');
+        const brushSizeInput = document.getElementById('brushSize'); const brushOpacityInput = document.getElementById('brushOpacity');
+        const sizeValDisplay = document.getElementById('sizeValDisplay'); const opacityValDisplay = document.getElementById('opacityValDisplay');
 
         brushSizeInput.oninput = () => sizeValDisplay.textContent = brushSizeInput.value;
         brushOpacityInput.oninput = () => opacityValDisplay.textContent = brushOpacityInput.value + '%';
@@ -1601,13 +1460,10 @@
             if (undoStack.length === 0) return;
             isHistoryAction = true; finishSelection();
             
-            const lastAction = undoStack.pop();
-            const frameIndex = frames.indexOf(lastAction.frameRef);
-            
+            const lastAction = undoStack.pop(); const frameIndex = frames.indexOf(lastAction.frameRef);
             if (frameIndex !== -1) {
                 redoStack.push({ frameRef: lastAction.frameRef, layer: lastAction.layer, data: lastAction.frameRef.layers[lastAction.layer] });
-                lastAction.frameRef.layers[lastAction.layer] = lastAction.data;
-                activeLayerIndex = lastAction.layer;
+                lastAction.frameRef.layers[lastAction.layer] = lastAction.data; activeLayerIndex = lastAction.layer;
                 await loadFrame(frameIndex);
             }
             isHistoryAction = false;
@@ -1617,33 +1473,24 @@
             if (redoStack.length === 0) return;
             isHistoryAction = true; finishSelection();
             
-            const nextAction = redoStack.pop();
-            const frameIndex = frames.indexOf(nextAction.frameRef);
-            
+            const nextAction = redoStack.pop(); const frameIndex = frames.indexOf(nextAction.frameRef);
             if (frameIndex !== -1) {
                 undoStack.push({ frameRef: nextAction.frameRef, layer: nextAction.layer, data: nextAction.frameRef.layers[nextAction.layer] });
-                nextAction.frameRef.layers[nextAction.layer] = nextAction.data;
-                activeLayerIndex = nextAction.layer;
+                nextAction.frameRef.layers[nextAction.layer] = nextAction.data; activeLayerIndex = nextAction.layer;
                 await loadFrame(frameIndex);
             }
             isHistoryAction = false;
         }
 
         async function deleteFrame(index) {
-            if (isPlaying) return;
-            finishSelection(); 
+            if (isPlaying) return; finishSelection(); 
             if (frames.length <= 1) {
-                ctx.globalCompositeOperation = 'source-over'; 
-                ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-                frames = [{ layers: [null, null, null, null, null, null], duration: 1 }];
-                currentFrameIndex = 0; 
-                hasUnsavedChanges = false;
+                ctx.globalCompositeOperation = 'source-over'; ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                frames = [{ layers: [null, null, null, null, null, null], duration: 1 }]; currentFrameIndex = 0; hasUnsavedChanges = false;
                 renderTimeline(true); updateLayerIndicators(); return;
             }
 
-            const wasActive = (index === currentFrameIndex);
-            frames.splice(index, 1);
-            
+            const wasActive = (index === currentFrameIndex); frames.splice(index, 1);
             if (wasActive) {
                 currentFrameIndex = Math.min(index, frames.length - 1);
                 isHistoryAction = true; await loadFrame(currentFrameIndex); isHistoryAction = false;
@@ -1655,293 +1502,163 @@
 
         async function loadFrame(index) {
             if (index < 0 || index >= frames.length) return;
-            
             finishSelection(); 
-            
             const prevIndex = currentFrameIndex;
-            
-            if (!isHistoryAction && hasUnsavedChanges && frames[prevIndex] && prevIndex !== index) {
-                await saveFrameState(prevIndex);
-            }
+            if (!isHistoryAction && hasUnsavedChanges && frames[prevIndex] && prevIndex !== index) await saveFrameState(prevIndex);
 
-            currentFrameIndex = index;
-            hasUnsavedChanges = false; 
+            currentFrameIndex = index; hasUnsavedChanges = false; 
 
-            ctx.globalCompositeOperation = 'source-over'; 
-            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            ctx.globalCompositeOperation = 'source-over'; ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
             const activeData = frames[index].layers[activeLayerIndex];
             if (activeData) ctx.drawImage(activeData, 0, 0);
 
-            updateOnionSkin(); 
-            refreshLayerDisplay(); 
-            renderTimeline();
-
-            requestAnimationFrame(() => {
-                const activeThumb = document.getElementById(`thumb-${index}`);
-                if (activeThumb) activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-            });
+            updateOnionSkin(); refreshLayerDisplay(); renderTimeline();
+            requestAnimationFrame(() => { const activeThumb = document.getElementById(`thumb-${index}`); if (activeThumb) activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); });
         }
 
-        function updateLayerIndicators() {
-            for (let i = 0; i < 6; i++) {
-                const stat = document.getElementById(`l${i}-stat`);
-                stat.textContent = frames[currentFrameIndex].layers[i] ? "●" : "○";
-            }
-        }
+        function updateLayerIndicators() { for (let i = 0; i < 6; i++) { const stat = document.getElementById(`l${i}-stat`); stat.textContent = frames[currentFrameIndex].layers[i] ? "●" : "○"; } }
 
         function refreshLayerDisplay() {
-            mainCanvas.style.zIndex = activeLayerIndex + 1;
-            mainCanvas.style.visibility = layerVisibility[activeLayerIndex] ? 'visible' : 'hidden';
-            bgCanvas.style.visibility = (soloMode) ? 'hidden' : 'visible';
-            document.getElementById('canvasContainer').style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
-
+            mainCanvas.style.zIndex = activeLayerIndex + 1; mainCanvas.style.visibility = layerVisibility[activeLayerIndex] ? 'visible' : 'hidden';
+            bgCanvas.style.visibility = (soloMode) ? 'hidden' : 'visible'; document.getElementById('canvasContainer').style.backgroundColor = (soloMode) ? '#222' : '#ffffff';
             document.querySelectorAll('.layer-item').forEach((el, i) => {
-                const layerIdx = 5 - i; 
-                el.classList.toggle('active', layerIdx === activeLayerIndex);
+                const layerIdx = 5 - i; el.classList.toggle('active', layerIdx === activeLayerIndex);
                 const visBtn = el.querySelector('.visibility-btn');
-                if (visBtn) {
-                    visBtn.textContent = layerVisibility[layerIdx] ? '👁️' : '⚪';
-                    visBtn.style.filter = layerVisibility[layerIdx] ? 'grayscale(0)' : 'grayscale(1) opacity(0.3)';
-                }
+                if (visBtn) { visBtn.textContent = layerVisibility[layerIdx] ? '👁️' : '⚪'; visBtn.style.filter = layerVisibility[layerIdx] ? 'grayscale(0)' : 'grayscale(1) opacity(0.3)'; }
             });
-
             for (let i = 0; i < 6; i++) {
-                const lCanvas = document.getElementById(`layer${i}`);
-                const lCtx = lCanvas.getContext('2d');
-                lCtx.globalCompositeOperation = 'source-over'; 
+                const lCanvas = document.getElementById(`layer${i}`); const lCtx = lCanvas.getContext('2d'); lCtx.globalCompositeOperation = 'source-over'; 
                 lCanvas.style.visibility = (layerVisibility[i] && !soloMode) ? 'visible' : 'hidden';
-                if (i === activeLayerIndex || (soloMode && i !== activeLayerIndex)) {
-                    lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
-                } else if (!soloMode && frames[currentFrameIndex].layers[i]) {
-                    lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height);
-                    lCtx.drawImage(frames[currentFrameIndex].layers[i], 0, 0);
-                } else { lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height); }
+                if (i === activeLayerIndex || (soloMode && i !== activeLayerIndex)) { lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height); } 
+                else if (!soloMode && frames[currentFrameIndex].layers[i]) { lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height); lCtx.drawImage(frames[currentFrameIndex].layers[i], 0, 0); } 
+                else { lCtx.clearRect(0, 0, lCanvas.width, lCanvas.height); }
             }
             updateLayerIndicators();
         }
 
-        async function addBlankFrame() {
-            if (isPlaying) return; finishSelection(); await saveFrameState(currentFrameIndex);
-            frames.splice(currentFrameIndex + 1, 0, { layers: [null, null, null, null, null, null], duration: 1 });
-            await loadFrame(currentFrameIndex + 1);
-        }
+        async function addBlankFrame() { if (isPlaying) return; finishSelection(); await saveFrameState(currentFrameIndex); frames.splice(currentFrameIndex + 1, 0, { layers: [null, null, null, null, null, null], duration: 1 }); await loadFrame(currentFrameIndex + 1); }
 
         async function duplicateFrame() {
             if (isPlaying) return; finishSelection(); await saveFrameState(currentFrameIndex);
-            const newLayers = await Promise.all(frames[currentFrameIndex].layers.map(async (l) => {
-                return l ? await createImageBitmap(l) : null;
-            }));
-            frames.splice(currentFrameIndex + 1, 0, { layers: newLayers, duration: frames[currentFrameIndex].duration || 1 });
-            await loadFrame(currentFrameIndex + 1);
+            const newLayers = await Promise.all(frames[currentFrameIndex].layers.map(async (l) => { return l ? await createImageBitmap(l) : null; }));
+            frames.splice(currentFrameIndex + 1, 0, { layers: newLayers, duration: frames[currentFrameIndex].duration || 1 }); await loadFrame(currentFrameIndex + 1);
         }
 
-        onionToggle.addEventListener('change', updateOnionSkin);
-        onionOpacitySlider.addEventListener('input', (e) => onionCanvas.style.opacity = e.target.value / 100);
+        onionToggle.addEventListener('change', updateOnionSkin); onionOpacitySlider.addEventListener('input', (e) => onionCanvas.style.opacity = e.target.value / 100);
 
         function updateOnionSkin() {
-            onionCtx.globalCompositeOperation = 'source-over'; 
-            onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
-            if (onionToggle.checked && currentFrameIndex > 0 && !isPlaying) {
-                const prevFrame = frames[currentFrameIndex - 1];
-                prevFrame.layers.forEach(layerData => { if (layerData) onionCtx.drawImage(layerData, 0, 0); });
-            }
+            onionCtx.globalCompositeOperation = 'source-over'; onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
+            if (onionToggle.checked && currentFrameIndex > 0 && !isPlaying) { const prevFrame = frames[currentFrameIndex - 1]; prevFrame.layers.forEach(layerData => { if (layerData) onionCtx.drawImage(layerData, 0, 0); }); }
         }
 
-        bgImgBtn.onclick = () => bgInput.click();
-        clearBgBtn.onclick = () => { bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgInput.value = ""; showNotification("Imagem de fundo removida"); };
+        bgImgBtn.onclick = () => bgInput.click(); clearBgBtn.onclick = () => { bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgInput.value = ""; showNotification("Imagem de fundo removida"); };
         bgInput.onchange = (e) => {
-            const file = e.target.files[0]; if (!file) return;
-            const reader = new FileReader();
+            const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    bgCtx.globalCompositeOperation = 'source-over'; 
-                    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+                    bgCtx.globalCompositeOperation = 'source-over'; bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
                     const scale = Math.max(bgCanvas.width / img.width, bgCanvas.height / img.height);
-                    const x = (bgCanvas.width / 2) - (img.width / 2) * scale; const y = (bgCanvas.height / 2) - (img.height / 2) * scale;
-                    bgCtx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                    const x = (bgCanvas.width / 2) - (img.width / 2) * scale; const y = (bgCanvas.height / 2) - (img.height / 2) * scale; bgCtx.drawImage(img, x, y, img.width * scale, img.height * scale);
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         };
 
-        menuBtn.addEventListener('click', (e) => { e.stopPropagation(); menuDropdown.classList.toggle('show'); });
-        window.addEventListener('click', (e) => { if (!menuBtn.contains(e.target) && !menuDropdown.contains(e.target)) menuDropdown.classList.remove('show'); });
-
-        importImgMenu.onclick = (e) => { e.preventDefault(); importInput.click(); };
-        exportPngSequenceMenu.onclick = (e) => { e.preventDefault(); exportPngSequence(); };
-        exportImgTransparentMenu.onclick = (e) => { e.preventDefault(); exportFrames(false); };
-        exportImgBackgroundMenu.onclick = (e) => { e.preventDefault(); exportFrames(true); };
-        exportVideoMenu.onclick = (e) => { e.preventDefault(); exportVideo(false); };
-        exportVideoTransparentMenu.onclick = (e) => { e.preventDefault(); exportVideo(true); };
+        menuBtn.addEventListener('click', (e) => { e.stopPropagation(); menuDropdown.classList.toggle('show'); }); window.addEventListener('click', (e) => { if (!menuBtn.contains(e.target) && !menuDropdown.contains(e.target)) menuDropdown.classList.remove('show'); });
+        importImgMenu.onclick = (e) => { e.preventDefault(); importInput.click(); }; exportPngSequenceMenu.onclick = (e) => { e.preventDefault(); exportPngSequence(); }; exportImgTransparentMenu.onclick = (e) => { e.preventDefault(); exportFrames(false); }; exportImgBackgroundMenu.onclick = (e) => { e.preventDefault(); exportFrames(true); }; exportVideoMenu.onclick = (e) => { e.preventDefault(); exportVideo(false); }; exportVideoTransparentMenu.onclick = (e) => { e.preventDefault(); exportVideo(true); };
 
         async function exportFrames(withBackground) {
-            finishSelection(); await saveFrameState(currentFrameIndex);
-            const zip = new JSZip(); const imgFolder = zip.folder("frames");
-            const tCtx = sharedUtilCtx;
-
+            finishSelection(); await saveFrameState(currentFrameIndex); const zip = new JSZip(); const imgFolder = zip.folder("frames"); const tCtx = sharedUtilCtx;
             for (let i = 0; i < frames.length; i++) {
-                tCtx.globalCompositeOperation = 'source-over';
-                tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
-                if (withBackground) {
-                    tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height); tCtx.drawImage(bgCanvas, 0, 0);
-                }
+                tCtx.globalCompositeOperation = 'source-over'; tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
+                if (withBackground) { tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height); tCtx.drawImage(bgCanvas, 0, 0); }
                 for(let l = 0; l < 6; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
-                const base64Data = sharedUtilCanvas.toDataURL('image/png').split(',')[1];
-                imgFolder.file(`frame_${String(i + 1).padStart(3, '0')}.png`, base64Data, {base64: true});
+                const base64Data = sharedUtilCanvas.toDataURL('image/png').split(',')[1]; imgFolder.file(`frame_${String(i + 1).padStart(3, '0')}.png`, base64Data, {base64: true});
             }
-            const content = await zip.generateAsync({type: "blob"});
-            const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = withBackground ? "animacao_com_fundo.zip" : "animacao_transparente.zip"; link.click();
-            showNotification("ZIP gerado com sucesso!");
+            const content = await zip.generateAsync({type: "blob"}); const link = document.createElement('a'); link.href = URL.createObjectURL(content); link.download = withBackground ? "animacao_com_fundo.zip" : "animacao_transparente.zip"; link.click(); showNotification("ZIP gerado com sucesso!");
         }
 
         async function exportPngSequence() {
-            if (frames.length === 0) { showNotification("Nenhum frame para exportar"); return; }
-            finishSelection(); await saveFrameState(currentFrameIndex);
-
+            if (frames.length === 0) { showNotification("Nenhum frame para exportar"); return; } finishSelection(); await saveFrameState(currentFrameIndex);
             try {
-                const dirHandle = await window.showDirectoryPicker();
-                const exportFps = 24;
-                let totalTicks = 0;
-                const frameStarts = frames.map(f => { const start = totalTicks; totalTicks += (f.duration || 1); return start; });
-                const totalExportFrames = Math.max(1, Math.floor((totalTicks / fps) * exportFps));
-
-                const tCtx = sharedUtilCtx;
-
+                const dirHandle = await window.showDirectoryPicker(); const exportFps = 24; let totalTicks = 0; const frameStarts = frames.map(f => { const start = totalTicks; totalTicks += (f.duration || 1); return start; }); const totalExportFrames = Math.max(1, Math.floor((totalTicks / fps) * exportFps)); const tCtx = sharedUtilCtx;
                 for (let i = 0; i < totalExportFrames; i++) {
-                    const currentTimeInTicks = (i / exportFps) * fps;
-                    let targetFrame = 0;
-                    for (let j = 0; j < frameStarts.length; j++) { if (frameStarts[j] <= currentTimeInTicks) targetFrame = j; else break; }
-                    tCtx.globalCompositeOperation = 'source-over';
-                    tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
+                    const currentTimeInTicks = (i / exportFps) * fps; let targetFrame = 0; for (let j = 0; j < frameStarts.length; j++) { if (frameStarts[j] <= currentTimeInTicks) targetFrame = j; else break; }
+                    tCtx.globalCompositeOperation = 'source-over'; tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
                     for(let l = 0; l < 6; l++) { const layerData = frames[targetFrame].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
-                    const blob = await new Promise(resolve => sharedUtilCanvas.toBlob(resolve, 'image/png'));
-                    const fileName = `frame_${String(i + 1).padStart(5, '0')}.png`;
-                    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-                    const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close();
+                    const blob = await new Promise(resolve => sharedUtilCanvas.toBlob(resolve, 'image/png')); const fileName = `frame_${String(i + 1).padStart(5, '0')}.png`; const fileHandle = await dirHandle.getFileHandle(fileName, { create: true }); const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close();
                 }
                 showNotification(`Exportação concluída: ${totalExportFrames} frames`);
             } catch (e) { if (e.name !== 'AbortError') showNotification("Erro: " + e.message); }
         }
 
         async function exportVideo(withTransparency = false) {
-            if (frames.length === 0) { showNotification("Nenhum frame para exportar"); return; }
-            finishSelection(); await saveFrameState(currentFrameIndex);
-
-            const tCtx = sharedUtilCtx;
-
-            const muxer = new WebMMuxer.Muxer({
-                target: new WebMMuxer.ArrayBufferTarget(),
-                video: { codec: withTransparency ? 'V_VP8' : 'V_VP9', width: sharedUtilCanvas.width, height: sharedUtilCanvas.height, frameRate: 24 }
-            });
-
+            if (frames.length === 0) { showNotification("Nenhum frame para exportar"); return; } finishSelection(); await saveFrameState(currentFrameIndex);
+            const tCtx = sharedUtilCtx; const muxer = new WebMMuxer.Muxer({ target: new WebMMuxer.ArrayBufferTarget(), video: { codec: withTransparency ? 'V_VP8' : 'V_VP9', width: sharedUtilCanvas.width, height: sharedUtilCanvas.height, frameRate: 24 } });
             const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => console.error(e) });
             encoder.configure({ codec: withTransparency ? 'vp8' : 'vp09.00.10.08', width: sharedUtilCanvas.width, height: sharedUtilCanvas.height, bitrate: 5e6 });
-
             const tickDuration = 1000000 / fps; let currentTick = 0;
             for (let i = 0; i < frames.length; i++) {
-                tCtx.globalCompositeOperation = 'source-over';
-                tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
+                tCtx.globalCompositeOperation = 'source-over'; tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
                 if (!withTransparency) { tCtx.fillStyle = '#ffffff'; tCtx.fillRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height); tCtx.drawImage(bgCanvas, 0, 0); }
                 for(let l = 0; l < 6; l++) { const layerData = frames[i].layers[l]; if(layerData) tCtx.drawImage(layerData, 0, 0); }
-
-                const durationTicks = (frames[i].duration || 1);
-                const frame = new VideoFrame(sharedUtilCanvas, { timestamp: currentTick * tickDuration, duration: durationTicks * tickDuration });
+                const durationTicks = (frames[i].duration || 1); const frame = new VideoFrame(sharedUtilCanvas, { timestamp: currentTick * tickDuration, duration: durationTicks * tickDuration });
                 encoder.encode(frame); frame.close(); currentTick += durationTicks;
             }
-
-            await encoder.flush(); muxer.finalize();
-            const { buffer } = muxer.target;
-            const blob = new Blob([buffer], { type: 'video/webm' });
-            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = withTransparency ? "animacao_transparente.webm" : "animacao_vp9.webm";
-            a.click(); URL.revokeObjectURL(url); showNotification("Vídeo exportado!");
+            await encoder.flush(); muxer.finalize(); const { buffer } = muxer.target; const blob = new Blob([buffer], { type: 'video/webm' });
+            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = withTransparency ? "animacao_transparente.webm" : "animacao_vp9.webm"; a.click(); URL.revokeObjectURL(url); showNotification("Vídeo exportado!");
         }
 
         saveProjectMenu.onclick = async (e) => {
-            e.preventDefault(); finishSelection(); await saveFrameState(currentFrameIndex);
-            
-            const tCtx = sharedUtilCtx;
-            
+            e.preventDefault(); finishSelection(); await saveFrameState(currentFrameIndex); const tCtx = sharedUtilCtx;
             const serializedFrames = await Promise.all(frames.map(async f => {
                 const layers = await Promise.all(f.layers.map(async l => {
-                    if (!l) return null;
-                    tCtx.globalCompositeOperation = 'source-over';
-                    tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height);
-                    tCtx.drawImage(l, 0, 0); return sharedUtilCanvas.toDataURL();
+                    if (!l) return null; tCtx.globalCompositeOperation = 'source-over'; tCtx.clearRect(0, 0, sharedUtilCanvas.width, sharedUtilCanvas.height); tCtx.drawImage(l, 0, 0); return sharedUtilCanvas.toDataURL();
                 }));
                 return { layers, duration: f.duration || 1 };
             }));
-
             const projectData = { fps: fps, frames: serializedFrames, background: bgCanvas.toDataURL(), layerVisibility: layerVisibility };
-            const blob = new Blob([JSON.stringify(projectData)], { type: "application/json" });
-            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = "meu_projeto_animacao.json";
-            a.click(); URL.revokeObjectURL(url); showNotification("Projeto salvo com sucesso!");
+            const blob = new Blob([JSON.stringify(projectData)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = "meu_projeto_animacao.json"; a.click(); URL.revokeObjectURL(url); showNotification("Projeto salvo com sucesso!");
         };
 
         loadProjectMenu.onclick = (e) => { e.preventDefault(); projectInput.click(); };
         projectInput.onchange = async (e) => {
-            const file = e.target.files[0]; if (!file) return;
-            const reader = new FileReader();
+            const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
             reader.onload = async (event) => {
-                const data = JSON.parse(event.target.result);
-                fps = data.fps || 24; document.getElementById('fpsSlider').value = fps; document.getElementById('fpsValue').textContent = fps;
-                
-                if (data.layerVisibility) {
-                    layerVisibility = data.layerVisibility;
-                    while (layerVisibility.length < 6) layerVisibility.push(true);
-                }
-
-                const bgImg = new Image();
-                bgImg.onload = () => { bgCtx.globalCompositeOperation = 'source-over'; bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgCtx.drawImage(bgImg, 0, 0); };
-                bgImg.src = data.background;
-
+                const data = JSON.parse(event.target.result); fps = data.fps || 24; document.getElementById('fpsSlider').value = fps; document.getElementById('fpsValue').textContent = fps;
+                if (data.layerVisibility) { layerVisibility = data.layerVisibility; while (layerVisibility.length < 6) layerVisibility.push(true); }
+                const bgImg = new Image(); bgImg.onload = () => { bgCtx.globalCompositeOperation = 'source-over'; bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height); bgCtx.drawImage(bgImg, 0, 0); }; bgImg.src = data.background;
                 frames = await Promise.all(data.frames.map(async f => {
                     const layers = await Promise.all(f.layers.map(async l => {
-                        if (!l) return null;
-                        const img = new Image(); img.src = l; await new Promise(res => img.onload = res);
-                        return await createImageBitmap(img);
+                        if (!l) return null; const img = new Image(); img.src = l; await new Promise(res => img.onload = res); return await createImageBitmap(img);
                     }));
-                    while (layers.length < 6) layers.push(null);
-                    return { layers, duration: f.duration || 1 };
+                    while (layers.length < 6) layers.push(null); return { layers, duration: f.duration || 1 };
                 }));
-
-                undoStack = []; redoStack = []; isHistoryAction = true; 
-                await loadFrame(0); isHistoryAction = false; renderTimeline(true); 
+                undoStack = []; redoStack = []; isHistoryAction = true; await loadFrame(0); isHistoryAction = false; renderTimeline(true); 
             };
             reader.readAsText(file);
         };
 
         importInput.onchange = (e) => {
-            const file = e.target.files[0]; if (!file) return;
-            const reader = new FileReader();
+            const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
                     finishSelection(); 
-                    // FIX BUG (Importação gigante vazando do Canvas) 
-                    const maxWidth = mainCanvas.width * 0.8; 
-                    const maxHeight = mainCanvas.height * 0.8;
-                    let scale = 1;
+                    const maxWidth = mainCanvas.width * 0.8; const maxHeight = mainCanvas.height * 0.8;
+                    let scale = 1; if (img.width > maxWidth || img.height > maxHeight) scale = Math.min(maxWidth / img.width, maxHeight / img.height);
+                    const finalW = img.width * scale; const finalH = img.height * scale;
+                    selectionCanvas.width = finalW; selectionCanvas.height = finalH;
+                    sCtx.globalCompositeOperation = 'source-over'; sCtx.clearRect(0, 0, finalW, finalH); sCtx.drawImage(img, 0, 0, finalW, finalH); 
                     
-                    if (img.width > maxWidth || img.height > maxHeight) {
-                        scale = Math.min(maxWidth / img.width, maxHeight / img.height);
-                    }
-                    
-                    const finalW = img.width * scale;
-                    const finalH = img.height * scale;
-                    
-                    selectionCanvas.width = finalW; 
-                    selectionCanvas.height = finalH;
-                    sCtx.globalCompositeOperation = 'source-over'; 
-                    sCtx.clearRect(0, 0, finalW, finalH); 
-                    sCtx.drawImage(img, 0, 0, finalW, finalH); 
-
-                    const x = mainCanvas.width / 2 - finalW / 2; 
-                    const y = mainCanvas.height / 2 - finalH / 2;
+                    const x = mainCanvas.width / 2 - finalW / 2; const y = mainCanvas.height / 2 - finalH / 2;
                     selectionBox = { x, y, w: finalW, h: finalH, angle: 0, scale: 1 };
                     selectionCorners = [{x,y}, {x:x+finalW,y}, {x:x+finalW,y:y+finalH}, {x,y:y+finalH}];
-                    isTransforming = true; currentTool = 'lasso'; updateToolUI(); drawTransformUI();
+                    isTransforming = true; currentTool = 'lasso'; 
+                    updateSelectionColorAlpha(); // Separa Alpha
+                    updateToolUI(); drawTransformUI();
                 };
                 img.src = event.target.result;
             };
@@ -1949,271 +1666,104 @@
         };
 
         function renderTimeline() {
-            const counter = document.getElementById('frameCounterDisplay');
-            if (counter) counter.textContent = `${currentFrameIndex + 1}/${frames.length}`;
-
-            timeline.innerHTML = '';
-            const fragment = document.createDocumentFragment();
-            
+            const counter = document.getElementById('frameCounterDisplay'); if (counter) counter.textContent = `${currentFrameIndex + 1}/${frames.length}`;
+            timeline.innerHTML = ''; const fragment = document.createDocumentFragment();
             frames.forEach((frameData, index) => {
-                const thumb = document.createElement('div');
-                thumb.className = `frame-thumb ${index === currentFrameIndex ? 'active' : ''}`;
-                thumb.id = `thumb-${index}`; 
-                thumb.draggable = true;
-                
-                thumb.onclick = (e) => {
-                    if (isPlaying) return;
-                    if (e.target.closest('.duration-controls')) return;
-                    loadFrame(index);
-                };
+                const thumb = document.createElement('div'); thumb.className = `frame-thumb ${index === currentFrameIndex ? 'active' : ''}`; thumb.id = `thumb-${index}`; thumb.draggable = true;
+                thumb.onclick = (e) => { if (isPlaying) return; if (e.target.closest('.duration-controls')) return; loadFrame(index); };
+                thumb.ondragstart = (e) => { if (isPlaying) return e.preventDefault(); e.dataTransfer.setData('text/plain', index); setTimeout(() => thumb.style.opacity = '0.5', 0); };
+                thumb.ondragend = () => thumb.style.opacity = '1'; thumb.ondragover = (e) => e.preventDefault(); 
+                thumb.ondrop = (e) => { e.preventDefault(); const fromIndex = parseInt(e.dataTransfer.getData('text/plain')); if (!isNaN(fromIndex) && fromIndex !== index) moveFrame(fromIndex, index); };
 
-                thumb.ondragstart = (e) => { 
-                    if (isPlaying) return e.preventDefault(); 
-                    e.dataTransfer.setData('text/plain', index); 
-                    setTimeout(() => thumb.style.opacity = '0.5', 0); 
-                };
-                thumb.ondragend = () => thumb.style.opacity = '1';
-                thumb.ondragover = (e) => e.preventDefault(); 
-                thumb.ondrop = (e) => { 
-                    e.preventDefault(); 
-                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain')); 
-                    if (!isNaN(fromIndex) && fromIndex !== index) moveFrame(fromIndex, index); 
-                };
-
-                const canvas = document.createElement('canvas');
-                canvas.width = 160; canvas.height = 90;
-                canvas.className = 'thumb-canvas';
-                thumb.appendChild(canvas);
-                
-                const badge = document.createElement('div'); 
-                badge.className = 'duration-badge'; 
-                badge.textContent = `${frameData.duration || 1}x`;
-                thumb.appendChild(badge);
-
-                const controls = document.createElement('div'); 
-                controls.className = 'duration-controls';
-                
-                const minus = document.createElement('button'); 
-                minus.className = 'dur-btn'; minus.textContent = '-';
-                minus.onclick = (e) => { 
-                    e.stopPropagation(); 
-                    frameData.duration = Math.max(1, (frameData.duration || 1) - 1); 
-                    badge.textContent = `${frameData.duration}x`; 
-                };
-                
-                const plus = document.createElement('button'); 
-                plus.className = 'dur-btn'; plus.textContent = '+';
-                plus.onclick = (e) => { 
-                    e.stopPropagation(); 
-                    frameData.duration = (frameData.duration || 1) + 1; 
-                    badge.textContent = `${frameData.duration}x`; 
-                };
-                
-                controls.append(minus, plus); 
-                thumb.appendChild(controls);
-                fragment.appendChild(thumb);
+                const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90; canvas.className = 'thumb-canvas'; thumb.appendChild(canvas);
+                const badge = document.createElement('div'); badge.className = 'duration-badge'; badge.textContent = `${frameData.duration || 1}x`; thumb.appendChild(badge);
+                const controls = document.createElement('div'); controls.className = 'duration-controls';
+                const minus = document.createElement('button'); minus.className = 'dur-btn'; minus.textContent = '-';
+                minus.onclick = (e) => { e.stopPropagation(); frameData.duration = Math.max(1, (frameData.duration || 1) - 1); badge.textContent = `${frameData.duration}x`; };
+                const plus = document.createElement('button'); plus.className = 'dur-btn'; plus.textContent = '+';
+                plus.onclick = (e) => { e.stopPropagation(); frameData.duration = (frameData.duration || 1) + 1; badge.textContent = `${frameData.duration}x`; };
+                controls.append(minus, plus); thumb.appendChild(controls); fragment.appendChild(thumb);
             });
-
-            timeline.appendChild(fragment);
-            frames.forEach((_, index) => updateSingleThumbnail(index));
+            timeline.appendChild(fragment); frames.forEach((_, index) => updateSingleThumbnail(index));
         }
 
         async function moveFrame(from, to) {
-            if (from === to) return;
-            finishSelection(); 
-            
-            if (hasUnsavedChanges) await saveFrameState(currentFrameIndex); 
-            
-            const activeFrameObj = frames[currentFrameIndex];
-            const [movedFrame] = frames.splice(from, 1);
-            frames.splice(to, 0, movedFrame);
-            
-            const newIndex = frames.indexOf(activeFrameObj);
-            
-            isHistoryAction = true; 
-            await loadFrame(newIndex); 
-            isHistoryAction = false;
+            if (from === to) return; finishSelection(); if (hasUnsavedChanges) await saveFrameState(currentFrameIndex); 
+            const activeFrameObj = frames[currentFrameIndex]; const [movedFrame] = frames.splice(from, 1); frames.splice(to, 0, movedFrame);
+            const newIndex = frames.indexOf(activeFrameObj); isHistoryAction = true; await loadFrame(newIndex); isHistoryAction = false;
         }
 
         async function updateSingleThumbnail(index) {
-            const thumb = document.getElementById(`thumb-${index}`);
-            if (!thumb) return;
-            
+            const thumb = document.getElementById(`thumb-${index}`); if (!thumb) return;
             let canvas = thumb.querySelector('.thumb-canvas');
-            if (!canvas) {
-                canvas = document.createElement('canvas');
-                canvas.width = 160; canvas.height = 90;
-                canvas.className = 'thumb-canvas';
-                thumb.insertBefore(canvas, thumb.firstChild);
-            }
-            
-            const tCtx = canvas.getContext('2d');
-            tCtx.globalCompositeOperation = 'source-over'; 
-            tCtx.clearRect(0, 0, 160, 90);
-            
-            for (let l = 0; l < 6; l++) {
-                const layerData = frames[index].layers[l];
-                if (layerData) {
-                    tCtx.drawImage(layerData, 0, 0, 160, 90);
-                }
-            }
+            if (!canvas) { canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90; canvas.className = 'thumb-canvas'; thumb.insertBefore(canvas, thumb.firstChild); }
+            const tCtx = canvas.getContext('2d'); tCtx.globalCompositeOperation = 'source-over'; tCtx.clearRect(0, 0, 160, 90);
+            for (let l = 0; l < 6; l++) { const layerData = frames[index].layers[l]; if (layerData) { tCtx.drawImage(layerData, 0, 0, 160, 90); } }
         }
 
-        document.getElementById('clearBtn').addEventListener('click', () => { 
-            ctx.globalCompositeOperation = 'source-over'; 
-            ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); 
-            hasUnsavedChanges = true;
-            saveFrameState(currentFrameIndex); 
-        });
-        
-        document.getElementById('deleteCurrentFrameBtn').addEventListener('click', () => deleteFrame(currentFrameIndex));
-        document.getElementById('addFrameBtn').addEventListener('click', addBlankFrame);
-        document.getElementById('duplicateFrameBtn').addEventListener('click', duplicateFrame);
-        document.getElementById('copyBtn').onclick = handleCopy;
-        document.getElementById('cutBtn').onclick = handleCut;
-        document.getElementById('pasteBtn').onclick = handlePaste;
-        document.getElementById('undoBtn').onclick = undo;
-        document.getElementById('redoBtn').onclick = redo;
+        document.getElementById('clearBtn').addEventListener('click', () => { ctx.globalCompositeOperation = 'source-over'; ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); hasUnsavedChanges = true; saveFrameState(currentFrameIndex); });
+        document.getElementById('deleteCurrentFrameBtn').addEventListener('click', () => deleteFrame(currentFrameIndex)); document.getElementById('addFrameBtn').addEventListener('click', addBlankFrame); document.getElementById('duplicateFrameBtn').addEventListener('click', duplicateFrame); document.getElementById('copyBtn').onclick = handleCopy; document.getElementById('cutBtn').onclick = handleCut; document.getElementById('pasteBtn').onclick = handlePaste; document.getElementById('undoBtn').onclick = undo; document.getElementById('redoBtn').onclick = redo;
 
         window.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'c' || e.key === 'C') handleCopy();
-                if (e.key === 'v' || e.key === 'V') handlePaste();
-                if (e.key === 'x' || e.key === 'X') handleCut();
-                if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
-                if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); redo(); }
+                if (e.key === 'c' || e.key === 'C') handleCopy(); if (e.key === 'v' || e.key === 'V') handlePaste(); if (e.key === 'x' || e.key === 'X') handleCut();
+                if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); if(e.shiftKey) redo(); else undo(); } if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); redo(); }
             }
-            if (e.key === 'Enter') finishSelection();
-            if (e.key === 'Delete' || e.key === 'Backspace') if(isTransforming) handleCut(); 
+            if (e.key === 'Enter') finishSelection(); if (e.key === 'Delete' || e.key === 'Backspace') if(isTransforming) handleCut(); 
         });
 
-        document.getElementById('fpsSlider').addEventListener('input', (e) => {
-            fps = e.target.value; document.getElementById('fpsValue').textContent = fps;
-            if (isPlaying) { toggleAnimation(); toggleAnimation(); }
-        });
+        document.getElementById('fpsSlider').addEventListener('input', (e) => { fps = e.target.value; document.getElementById('fpsValue').textContent = fps; if (isPlaying) { toggleAnimation(); toggleAnimation(); } });
 
-        let playSessionId = 0;
-        let playbackRAF;
+        let playSessionId = 0; let playbackRAF;
 
         function renderPlaybackFrame(index) {
-            if (!frames[index]) return;
-            pCtx.globalCompositeOperation = 'source-over'; 
-            pCtx.clearRect(0, 0, playbackCanvas.width, playbackCanvas.height);
-            pCtx.fillStyle = 'white'; 
-            pCtx.fillRect(0, 0, playbackCanvas.width, playbackCanvas.height);
-            pCtx.drawImage(bgCanvas, 0, 0);
-
-            for (let l = 0; l < 6; l++) {
-                const layerData = frames[index].layers[l];
-                if (layerData) pCtx.drawImage(layerData, 0, 0);
-            }
+            if (!frames[index]) return; pCtx.globalCompositeOperation = 'source-over'; pCtx.clearRect(0, 0, playbackCanvas.width, playbackCanvas.height); pCtx.fillStyle = 'white'; pCtx.fillRect(0, 0, playbackCanvas.width, playbackCanvas.height); pCtx.drawImage(bgCanvas, 0, 0);
+            for (let l = 0; l < 6; l++) { const layerData = frames[index].layers[l]; if (layerData) pCtx.drawImage(layerData, 0, 0); }
         }
 
         async function toggleAnimation() {
             if (frames.length === 0) return;
-            
             if (!isPlaying) {
-                finishSelection();
-                if (hasUnsavedChanges) await saveFrameState(currentFrameIndex);
-                
-                isPlaying = true;
-                playSessionId++;
-                const currentSession = playSessionId;
-                
-                document.getElementById('playBtn').style.display = 'none';
-                document.getElementById('stopBtn').style.display = 'block';
-                playbackCanvas.style.display = 'block';
-                
-                toggleStaticLayersVisibility(false);
-                mainCanvas.style.visibility = 'hidden'; 
-                onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
-                
-                let playIndex = currentFrameIndex;
-                let lastTime = 0;
-                let accumulator = 0;
+                finishSelection(); if (hasUnsavedChanges) await saveFrameState(currentFrameIndex);
+                isPlaying = true; playSessionId++; const currentSession = playSessionId;
+                document.getElementById('playBtn').style.display = 'none'; document.getElementById('stopBtn').style.display = 'block'; playbackCanvas.style.display = 'block';
+                toggleStaticLayersVisibility(false); mainCanvas.style.visibility = 'hidden'; onionCtx.clearRect(0, 0, onionCanvas.width, onionCanvas.height);
+                let playIndex = currentFrameIndex; let lastTime = 0; let accumulator = 0;
 
                 const runPlayback = (time) => {
                     if (!isPlaying || currentSession !== playSessionId) return;
-
-                    if (lastTime === 0) {
-                        lastTime = time;
-                        renderPlaybackFrame(playIndex);
-                        playbackRAF = requestAnimationFrame(runPlayback);
-                        return;
-                    }
-
-                    let delta = time - lastTime;
-                    lastTime = time;
-                    
-                    accumulator += Math.min(delta, 1000);
-
-                    let frameChanged = false;
-                    let safetyCounter = 0;
-                    
+                    if (lastTime === 0) { lastTime = time; renderPlaybackFrame(playIndex); playbackRAF = requestAnimationFrame(runPlayback); return; }
+                    let delta = time - lastTime; lastTime = time; accumulator += Math.min(delta, 1000);
+                    let frameChanged = false; let safetyCounter = 0;
                     while (safetyCounter < frames.length) {
-                        const frame = frames[playIndex];
-                        if (!frame) break;
-                        const hold = frame.duration || 1;
-                        const targetInterval = (1000 / fps) * hold;
-                        
-                        if (accumulator >= targetInterval) {
-                            accumulator -= targetInterval;
-                            playIndex = (playIndex + 1) % frames.length;
-                            frameChanged = true;
-                            safetyCounter++;
-                        } else {
-                            break;
-                        }
+                        const frame = frames[playIndex]; if (!frame) break;
+                        const hold = frame.duration || 1; const targetInterval = (1000 / fps) * hold;
+                        if (accumulator >= targetInterval) { accumulator -= targetInterval; playIndex = (playIndex + 1) % frames.length; frameChanged = true; safetyCounter++; } 
+                        else { break; }
                     }
-
                     if (safetyCounter >= frames.length) accumulator = 0;
-
-                    if (frameChanged) {
-                        renderPlaybackFrame(playIndex);
-                    }
-
+                    if (frameChanged) { renderPlaybackFrame(playIndex); }
                     playbackRAF = requestAnimationFrame(runPlayback);
                 };
                 playbackRAF = requestAnimationFrame(runPlayback);
             } else {
-                isPlaying = false;
-                cancelAnimationFrame(playbackRAF);
-                playSessionId++; 
-                
-                document.getElementById('playBtn').style.display = 'block';
-                document.getElementById('stopBtn').style.display = 'none';
-                playbackCanvas.style.display = 'none';
-                
-                toggleStaticLayersVisibility(true);
-                mainCanvas.style.visibility = 'visible';
-                
-                isHistoryAction = true; 
-                await loadFrame(currentFrameIndex);
-                isHistoryAction = false;
+                isPlaying = false; cancelAnimationFrame(playbackRAF); playSessionId++; 
+                document.getElementById('playBtn').style.display = 'block'; document.getElementById('stopBtn').style.display = 'none'; playbackCanvas.style.display = 'none';
+                toggleStaticLayersVisibility(true); mainCanvas.style.visibility = 'visible';
+                isHistoryAction = true; await loadFrame(currentFrameIndex); isHistoryAction = false;
             }
         }
 
         function toggleStaticLayersVisibility(visible) {
             const display = visible ? 'block' : 'none';
-            document.getElementById('layer0').style.display = display;
-            document.getElementById('layer1').style.display = display;
-            document.getElementById('layer2').style.display = display;
-            document.getElementById('layer3').style.display = display;
-            document.getElementById('layer4').style.display = display;
-            document.getElementById('layer5').style.display = display;
-            const onion = document.getElementById('onionCanvas');
-            if (onion) onion.style.display = display;
+            document.getElementById('layer0').style.display = display; document.getElementById('layer1').style.display = display; document.getElementById('layer2').style.display = display; document.getElementById('layer3').style.display = display; document.getElementById('layer4').style.display = display; document.getElementById('layer5').style.display = display;
+            const onion = document.getElementById('onionCanvas'); if (onion) onion.style.display = display;
         }
 
-        document.getElementById('playBtn').addEventListener('click', toggleAnimation);
-        document.getElementById('stopBtn').addEventListener('click', toggleAnimation);
+        document.getElementById('playBtn').addEventListener('click', toggleAnimation); document.getElementById('stopBtn').addEventListener('click', toggleAnimation);
         
-        ctx.globalCompositeOperation = 'source-over'; 
-        ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-        renderTimeline(true);
-        refreshLayerDisplay();
-        hasUnsavedChanges = true;
-        saveFrameState(0);
+        ctx.globalCompositeOperation = 'source-over'; ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+        renderTimeline(true); refreshLayerDisplay(); hasUnsavedChanges = true; saveFrameState(0);
 
     </script>
 </body>
