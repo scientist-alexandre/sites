@@ -75,7 +75,7 @@
 
     <!-- INPUT DE ARQUIVO -->
     <input type="file" id="file-input" multiple accept="video/*,image/*,audio/*" class="hidden">
-    <input type="file" id="sequence-input" multiple accept="image/png,image/jpeg,image/webp" class="hidden">
+    <input type="file" id="sequence-input" webkitdirectory directory multiple class="hidden">
 
     <!-- 1. ÁREA DE PREVIEW E FERRAMENTAS -->
     <div class="flex-1 flex flex-col relative bg-[#0f0f0f]">
@@ -127,9 +127,9 @@
             <button id="import-btn" class="flex items-center gap-1.5 bg-[#2a2a2a] hover:bg-[#333] px-3 py-1 rounded text-xs font-medium transition">
                 <i class="fa-solid fa-plus text-[10px]"></i> Adicionar Mídia
             </button>
-            <button id="import-seq-btn" class="flex items-center gap-1.5 bg-[#2a2a2a] hover:bg-[#333] px-3 py-1 rounded text-xs font-medium transition ml-2" title="Importar Sequência de Imagens (PNG/JPG)">
-                <i class="fa-solid fa-layer-group text-[10px]"></i> Seq. Imagens
-            </button>
+            <button id="import-seq-btn" ... title="Selecionar pasta com sequência de imagens">
+    <i class="fa-solid fa-folder-open text-[10px]"></i> Pasta de Imagens
+</button>
             <div class="w-px h-4 bg-[#333] mx-1"></div>
             
             <button id="split-btn" class="icon-btn" title="Cortar (S)"><i class="fa-solid fa-scissors"></i></button>
@@ -386,18 +386,50 @@
             else tempMedia.onloadedmetadata = onLoad;
         }
         
+      
+
+
+
+
+
         function addSequence(files) {
             if (!files || files.length === 0) return;
-            files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}));
-            
+
+            // Só imagens (a pasta pode ter outros arquivos)
+            const imageFiles = Array.from(files).filter(f =>
+                (f.type && f.type.startsWith('image/')) ||
+                /\.(png|jpe?g|webp|gif)$/i.test(f.name)
+            );
+
+            if (imageFiles.length === 0) {
+                els.loadingModal.classList.remove('hidden');
+                els.loadingTitle.textContent = 'Pasta vazia';
+                els.loadingText.textContent = 'Nenhuma imagem PNG/JPG/WebP encontrada na pasta.';
+                setTimeout(() => els.loadingModal.classList.add('hidden'), 3000);
+                return;
+            }
+
+            // Ordena pelo caminho relativo (frame_001, frame_002...) ou pelo nome
+            imageFiles.sort((a, b) => {
+                const pathA = a.webkitRelativePath || a.name;
+                const pathB = b.webkitRelativePath || b.name;
+                return pathA.localeCompare(pathB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
             const fps = 30;
-            const duration = files.length / fps;
-            
+            const duration = imageFiles.length / fps;
+
             const tempImg = new Image();
-            tempImg.src = URL.createObjectURL(files[0]);
+            tempImg.src = URL.createObjectURL(imageFiles[0]);
             tempImg.onload = () => {
-                const clip = new Clip(files, 'sequence', duration);
-                
+                const clip = new Clip(imageFiles, 'sequence', duration);
+
+                // Nome da pasta em vez do 1º arquivo
+                const folderName = imageFiles[0].webkitRelativePath
+                    ? imageFiles[0].webkitRelativePath.split('/')[0]
+                    : 'Imagens';
+                clip.name = `Seq: ${folderName} (${imageFiles.length} imgs)`;
+
                 const imgW = tempImg.naturalWidth;
                 const imgH = tempImg.naturalHeight;
                 const scale = Math.min(state.canvasSize.width / imgW, state.canvasSize.height / imgH) || 1;
@@ -405,7 +437,7 @@
                 clip.h = (imgH * scale) || 1080;
                 clip.x = (state.canvasSize.width - clip.w) / 2;
                 clip.y = (state.canvasSize.height - clip.h) / 2;
-                
+
                 clip.start = state.currentTime;
                 assignInitialLane(clip);
 
@@ -414,6 +446,8 @@
                 updateDuration();
                 document.getElementById('preview-placeholder').classList.add('hidden');
                 requestUpdate();
+
+                URL.revokeObjectURL(tempImg.src);
             };
         }
 
@@ -1144,171 +1178,298 @@
 
         window.addEventListener('pointerup', () => { canvasDrag.active = false; });
 
-        // --- EXPORTAÇÃO OTIMIZADA (frame-by-frame com melhor controle de CPU) ---
-        document.getElementById('export-btn').addEventListener('click', async () => {
-            if (state.clips.length === 0) return alert("Adicione mídia primeiro!");
-            
-            if (state.isPlaying) togglePlay();
-            
-            els.loadingModal.classList.remove('hidden');
-            els.loadingTitle.textContent = "Renderizando Vídeo...";
-            
+       
+
+
+
+
+        // --- EXPORTAÇÃO REMOTA (sem CPU/GPU local) ---
+
+        const RENDER_CONFIG_KEY = 'video_editor_render_config';
+        const RENDER_JOB_KEY = 'video_editor_render_job';
+        const RENDER_POLL_MS = 3000;
+
+        function sleep(ms) {
+            return new Promise(r => setTimeout(r, ms));
+        }
+
+        function getExportDuration() {
+            return parseDurationStr(els.durationInput.value)
+                || state.clips.reduce((max, c) => Math.max(max, c.start + c.duration), 0);
+        }
+
+        /** Carrega URL salva ou tenta adivinhar automaticamente */
+        function loadRenderConfig() {
             try {
-                const fps = 30;
-                const duration = parseDurationStr(els.durationInput.value) || state.clips.reduce((max, c) => Math.max(max, c.start + c.duration), 0);
-                const totalFrames = Math.ceil(duration * fps);
-                const width = 1920;
-                const height = 1080;
+                const saved = localStorage.getItem(RENDER_CONFIG_KEY);
+                if (saved) return JSON.parse(saved);
+            } catch {}
 
-                const muxer = new WebMMuxer.Muxer({
-                    target: new WebMMuxer.ArrayBufferTarget(),
-                    video: { codec: 'V_VP9', width, height, frameRate: fps },
-                    audio: { codec: 'A_OPUS', sampleRate: 48000, numberOfChannels: 2 }
+            // Mesmo domínio do editor (ex: https://meusite.com/editor → https://meusite.com/api)
+            if (location.protocol.startsWith('http')) {
+                return { apiBase: `${location.origin}/api` };
+            }
+
+            // Arquivo local aberto direto no browser
+            return { apiBase: 'http://localhost:3000/api' };
+        }
+
+        function saveRenderConfig(config) {
+            localStorage.setItem(RENDER_CONFIG_KEY, JSON.stringify(config));
+        }
+
+       
+
+
+
+        // --- EXPORTAÇÃO NATIVA WEBM (Web Codecs + WebMMuxer) ---
+
+        function showExportError(message) {
+            els.loadingTitle.textContent = 'Erro na exportação';
+            els.loadingText.textContent = message;
+            els.loadingProgress.style.width = '0%';
+            setTimeout(() => els.loadingModal.classList.add('hidden'), 4000);
+        }
+
+        function seekVideoElement(el, time) {
+            return new Promise(resolve => {
+                if (Math.abs(el.currentTime - time) < 0.05) {
+                    resolve();
+                    return;
+                }
+                const timeoutId = setTimeout(resolve, 2000);
+                el.addEventListener('seeked', () => {
+                    clearTimeout(timeoutId);
+                    resolve();
+                }, { once: true });
+                el.currentTime = time;
+            });
+        }
+
+        function drawExportFrame(eCtx, time, width, height) {
+            eCtx.fillStyle = 'black';
+            eCtx.fillRect(0, 0, width, height);
+
+            const activeVisuals = state.clips.filter(c =>
+                c.type !== 'audio' &&
+                time >= c.start &&
+                time < c.start + c.duration
+            );
+            activeVisuals.sort((a, b) => b.lane - a.lane);
+
+            for (const clip of activeVisuals) {
+                let el = clip.mediaElement;
+
+                if (clip.type === 'sequence') {
+                    const localTime = time - clip.start + clip.offset;
+                    const frameIndex = Math.floor(localTime * clip.fps);
+                    el = clip.sequenceImages[
+                        Math.min(Math.max(0, frameIndex), clip.sequenceImages.length - 1)
+                    ];
+                }
+
+                if (el && clip.w && clip.h) {
+                    eCtx.save();
+                    eCtx.translate(clip.x + clip.w / 2, clip.y + clip.h / 2);
+                    eCtx.rotate(clip.rotation * Math.PI / 180);
+                    eCtx.drawImage(el, -clip.w / 2, -clip.h / 2, clip.w, clip.h);
+                    eCtx.restore();
+                }
+            }
+        }
+
+        async function renderExportAudio(duration, audioEncoder) {
+            const offlineCtx = new OfflineAudioContext(
+                2,
+                Math.ceil(duration * 48000),
+                48000
+            );
+
+            for (const clip of state.clips) {
+                if (clip.type === 'image' || clip.type === 'sequence' || clip.isMuted) continue;
+                try {
+                    const response = await fetch(clip.src);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const audioBuffer = await offlineCtx.decodeAudioData(arrayBuffer);
+                    const source = offlineCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(offlineCtx.destination);
+                    source.start(clip.start, clip.offset, clip.duration);
+                } catch (e) {
+                    console.warn('Áudio ignorado:', clip.name, e);
+                }
+            }
+
+            const rendered = await offlineCtx.startRendering();
+            const dataL = rendered.getChannelData(0);
+            const dataR = rendered.getChannelData(1);
+            const chunkSize = 48000;
+
+            for (let i = 0; i < dataL.length; i += chunkSize) {
+                const frames = Math.min(chunkSize, dataL.length - i);
+                const interleaved = new Float32Array(frames * 2);
+                for (let j = 0; j < frames; j++) {
+                    interleaved[j * 2] = dataL[i + j];
+                    interleaved[j * 2 + 1] = dataR[i + j];
+                }
+                const audioData = new AudioData({
+                    format: 'f32',
+                    sampleRate: 48000,
+                    numberOfFrames: frames,
+                    numberOfChannels: 2,
+                    timestamp: (i / 48000) * 1_000_000,
+                    data: interleaved
+                });
+                audioEncoder.encode(audioData);
+                audioData.close();
+            }
+        }
+
+        document.getElementById('export-btn').addEventListener('click', async () => {
+            if (state.clips.length === 0) {
+                els.loadingModal.classList.remove('hidden');
+                showExportError('Adicione mídia antes de exportar.');
+                return;
+            }
+
+            if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined') {
+                els.loadingModal.classList.remove('hidden');
+                showExportError('Seu navegador não suporta Web Codecs. Use Chrome ou Edge.');
+                return;
+            }
+
+            if (typeof WebMMuxer === 'undefined') {
+                els.loadingModal.classList.remove('hidden');
+                showExportError('Biblioteca WebM Muxer não carregou. Recarregue a página.');
+                return;
+            }
+
+            if (state.isPlaying) togglePlay();
+
+            els.loadingModal.classList.remove('hidden');
+            els.loadingTitle.textContent = 'Renderizando vídeo...';
+            els.loadingText.textContent = 'Preparando';
+            els.loadingProgress.style.width = '0%';
+
+            const fps = 30;
+            const width = state.canvasSize.width;
+            const height = state.canvasSize.height;
+            const duration = parseDurationStr(els.durationInput.value)
+                || state.clips.reduce((max, c) => Math.max(max, c.start + c.duration), 0);
+            const totalFrames = Math.ceil(duration * fps);
+
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = width;
+            exportCanvas.height = height;
+            const eCtx = exportCanvas.getContext('2d', { alpha: false });
+
+            const muxer = new WebMMuxer.Muxer({
+                target: new WebMMuxer.ArrayBufferTarget(),
+                video: { codec: 'V_VP9', width, height, frameRate: fps },
+                audio: { codec: 'A_OPUS', sampleRate: 48000, numberOfChannels: 2 }
+            });
+
+            const videoEncoder = new VideoEncoder({
+                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                error: e => console.error('VideoEncoder:', e)
+            });
+
+            const audioEncoder = new AudioEncoder({
+                output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+                error: e => console.error('AudioEncoder:', e)
+            });
+
+            try {
+                videoEncoder.configure({
+                    codec: 'vp09.00.10.08',
+                    width,
+                    height,
+                    bitrate: 6_000_000,
+                    framerate: fps
                 });
 
-                const videoEncoder = new VideoEncoder({
-                    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-                    error: e => console.error(e)
-                });
-                videoEncoder.configure({ 
-                    codec: 'vp09.00.10.08', 
-                    width, 
-                    height, 
-                    bitrate: 8000000, 
-                    framerate: fps 
+                audioEncoder.configure({
+                    codec: 'opus',
+                    sampleRate: 48000,
+                    numberOfChannels: 2,
+                    bitrate: 128_000
                 });
 
-                const audioEncoder = new AudioEncoder({
-                    output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-                    error: e => console.error(e)
-                });
-                audioEncoder.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 });
+                // Pré-seek dos vídeos no tempo 0
+                for (const clip of state.clips) {
+                    if (clip.type === 'video' && clip.mediaElement) {
+                        await seekVideoElement(clip.mediaElement, clip.offset);
+                    }
+                }
 
-                const exportCanvas = document.createElement('canvas');
-                exportCanvas.width = width; 
-                exportCanvas.height = height;
-                const eCtx = exportCanvas.getContext('2d', { willReadFrequently: true });
-
-                // Renderização frame a frame com yield para UI
                 for (let i = 0; i < totalFrames; i++) {
                     const time = i / fps;
-                    state.currentTime = time;
-                    
-                    while (videoEncoder.encodeQueueSize > 20) {
-                        await new Promise(r => setTimeout(r, 30));
-                    }
-                    
-                    const progress = Math.round((i / totalFrames) * 100);
-                    els.loadingProgress.style.width = `${progress}%`;
-                    els.loadingText.textContent = `Frame ${i + 1} / ${totalFrames} (${progress}%)`;
-                    
-                    await new Promise(r => setTimeout(r, 0));
 
-                    eCtx.fillStyle = 'black';
-                    eCtx.fillRect(0, 0, width, height);
-                    
-                    const activeVisuals = state.clips.filter(c => c.type !== 'audio' && time >= c.start && time < c.start + c.duration);
-                    activeVisuals.sort((a, b) => b.lane - a.lane);
-
-                    for (const clip of activeVisuals) {
-                        let el = clip.mediaElement;
-                        
-                        if (clip.type === 'sequence') {
-                            const localTime = time - clip.start + clip.offset;
-                            const frameIndex = Math.floor(localTime * clip.fps);
-                            el = clip.sequenceImages[Math.min(Math.max(0, frameIndex), clip.sequenceImages.length - 1)];
-                        }
-
-                        if (clip.type === 'video') {
-                            const seekPromise = new Promise((resolve) => {
-                                const timeoutId = setTimeout(() => resolve(), 2000);
-                                const onSeeked = () => { clearTimeout(timeoutId); resolve(); };
-                                el.addEventListener('seeked', onSeeked, { once: true });
-                            });
-                            el.currentTime = (time - clip.start + clip.offset + 0.001);
-                            await seekPromise;
-                            await new Promise(r => setTimeout(r, 10));
-                        }
-                        
-                        if (el && clip.w && clip.h) {
-                            eCtx.save();
-                            eCtx.translate(clip.x + clip.w / 2, clip.y + clip.h / 2);
-                            eCtx.rotate(clip.rotation * Math.PI / 180);
-                            eCtx.drawImage(el, -clip.w / 2, -clip.h / 2, clip.w, clip.h);
-                            eCtx.restore();
-                        }
+                    while (videoEncoder.encodeQueueSize > 15) {
+                        await new Promise(r => setTimeout(r, 20));
                     }
 
-                    const bitmap = await createImageBitmap(exportCanvas);
-                    const frame = new VideoFrame(bitmap, { timestamp: i * 1_000_000 / fps });
-                    videoEncoder.encode(frame, { keyFrame: i % 60 === 0 });
-                    frame.close();
-                    bitmap.close();
-                }
+                    const pct = Math.round((i / totalFrames) * 90);
+                    els.loadingProgress.style.width = `${pct}%`;
+                    els.loadingText.textContent = `Frame ${i + 1} / ${totalFrames}`;
 
-                // Áudio
-                els.loadingTitle.textContent = "Processando Áudio...";
-                const offlineCtx = new OfflineAudioContext(2, Math.ceil(duration * 48000), 48000);
-                
-                for (const clip of state.clips) {
-                    if (clip.type === 'image' || clip.isMuted) continue;
-                    try {
-                        const response = await fetch(clip.src);
-                        const arrayBuffer = await response.arrayBuffer();
-                        const audioBuffer = await offlineCtx.decodeAudioData(arrayBuffer);
-                        const source = offlineCtx.createBufferSource();
-                        source.buffer = audioBuffer;
-                        source.connect(offlineCtx.destination);
-                        source.start(clip.start, clip.offset, clip.duration);
-                    } catch (e) {}
-                }
-                
-                const renderedAudio = await offlineCtx.startRendering();
-                
-                const dataL = renderedAudio.getChannelData(0);
-                const dataR = renderedAudio.getChannelData(1);
-                const interleaved = new Float32Array(dataL.length * 2);
-                for (let i = 0; i < dataL.length; i++) {
-                    interleaved[i*2] = dataL[i];
-                    interleaved[i*2+1] = dataR[i];
-                }
-                
-                const chunkSize = 48000;
-                for (let i = 0; i < interleaved.length; i += chunkSize * 2) {
-                    const chunk = interleaved.slice(i, i + chunkSize * 2);
-                    if (chunk.length === 0) break;
-                    const audioData = new AudioData({
-                        format: 'f32', 
-                        sampleRate: 48000, 
-                        numberOfFrames: chunk.length / 2, 
-                        numberOfChannels: 2,
-                        timestamp: (i / 2 / 48000) * 1_000_000, 
-                        data: chunk
+                    for (const clip of state.clips) {
+                        if (clip.type !== 'video' || !clip.mediaElement) continue;
+                        if (time < clip.start || time >= clip.start + clip.duration) continue;
+                        const clipTime = time - clip.start + clip.offset;
+                        await seekVideoElement(clip.mediaElement, clipTime);
+                    }
+
+                    drawExportFrame(eCtx, time, width, height);
+
+                    const frame = new VideoFrame(exportCanvas, {
+                        timestamp: Math.round(i * 1_000_000 / fps)
                     });
-                    audioEncoder.encode(audioData);
-                    audioData.close();
+                    videoEncoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+                    frame.close();
+
+                    if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
                 }
+
+                els.loadingTitle.textContent = 'Processando áudio...';
+                els.loadingText.textContent = 'Mixagem';
+                els.loadingProgress.style.width = '92%';
+
+                await renderExportAudio(duration, audioEncoder);
+
+                els.loadingText.textContent = 'Finalizando';
+                els.loadingProgress.style.width = '98%';
 
                 await videoEncoder.flush();
                 await audioEncoder.flush();
                 muxer.finalize();
 
-                const { buffer } = muxer.target;
-                const blob = new Blob([buffer], { type: 'video/webm' });
+                const blob = new Blob([muxer.target.buffer], { type: 'video/webm' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; 
-                a.download = 'video_editor_export.webm'; 
+                a.href = url;
+                a.download = 'video_editor_export.webm';
                 a.click();
-                
-                els.loadingModal.classList.add('hidden');
+                URL.revokeObjectURL(url);
+
+                els.loadingProgress.style.width = '100%';
+                els.loadingTitle.textContent = 'Exportação concluída!';
+                els.loadingText.textContent = 'Download iniciado';
+                setTimeout(() => els.loadingModal.classList.add('hidden'), 1500);
 
             } catch (err) {
                 console.error(err);
-                alert("Erro na exportação: " + err.message);
-                els.loadingModal.classList.add('hidden');
+                showExportError(err.message || 'Falha desconhecida');
+            } finally {
+                try { videoEncoder.close(); } catch {}
+                try { audioEncoder.close(); } catch {}
             }
         });
+
+
+
+
+
 
     </script>
 </body>

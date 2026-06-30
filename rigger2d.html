@@ -811,7 +811,7 @@
     // Mantemos a resolução interna definida (1920x1080) para não pixelar
     const FW = 1920;
     const FH = 1080;
-    const GRID = 32; 
+    const GRID = 64; 
     
     let layers = [];
     let activeLayerIndex = -1;
@@ -1385,19 +1385,20 @@
                 slider.value = currentVisible === -1 ? 0 : currentVisible;
                 nameLabel.innerText = currentVisible !== -1 ? folderChildren[currentVisible].c.name : "-";
                 
+                
+
                 let lastVal = parseInt(slider.value);
 
                 slider.oninput = (e) => {
                     const val = parseInt(e.target.value);
-                    if (val === lastVal) return; // Evita processamento redundante
+                    if (val === lastVal) return;
                     lastVal = val;
 
                     folderChildren.forEach((item, vIdx) => {
                         item.c.visible = (vIdx === val);
                         if (vIdx === val) {
                             nameLabel.innerText = item.c.name;
-                            
-                            // Seleção Silenciosa: atualiza dados internos sem reconstruir a UI (evita perda de foco no slider)
+
                             syncActiveLayer();
                             selectedPins = [];
                             activeLayerIndex = item.i;
@@ -1412,10 +1413,19 @@
                         }
                     });
                     draw();
-                    updateLayersUI();
+                    // NÃO chama updateLayersUI() aqui — senão o slider é destruído a cada pixel
                 };
+
+                // Atualiza ícones da lista só quando soltar o mouse
+                slider.onchange = () => updateLayersUI();
+
                 slider.onmousedown = (e) => e.stopPropagation();
                 slider.onclick = (e) => e.stopPropagation();
+                slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+
+
+
 
                 header.appendChild(nameLabel);
                 switchWrap.appendChild(header);
@@ -2465,17 +2475,15 @@ function pasteRange() {
     }
 
    // Função auxiliar para interpolar entre dois estados completos
+    
     function interpolateBetween(k1, k2, t) {
-        // Aplica o easing no fator de tempo
         const easedT = easeInOutSine(t);
 
         const layerStates = k1.layerStates.map((l1, i) => {
             const l2 = k2.layerStates[i] || l1;
-            
-            // Se a visibilidade mudou ou o asset (imagem) mudou, tratamos como um "Switch"
-            // Nesses casos, não interpolamos a posição/deformação para evitar "fantasmas"
+
             const isSwitching = (l1.visible !== l2.visible || l1.assetIndex !== l2.assetIndex);
-            const it = easedT; // Interpola sempre para garantir que o movimento do rosto não trave
+            const it = isSwitching ? (t > 0 ? 1 : 0) : easedT;
 
             return {
                 pins: l1.pins.map((p1_pin, j) => {
@@ -2494,40 +2502,43 @@ function pasteRange() {
                 gScale: l1.gScale + (l2.gScale - l1.gScale) * it,
                 gRotation: l1.gRotation + (l2.gRotation - l1.gRotation) * it,
                 z: (l1.z || 0) + ((l2.z || 0) - (l1.z || 0)) * it,
-                visible: l1.visible !== false,
+                visible: isSwitching
+                    ? (t > 0 ? (l2.visible !== false) : (l1.visible !== false))
+                    : (l1.visible !== false),
                 exprPins: (l1.exprPins || []).map((p1, j) => {
                     const p2 = (l2.exprPins && l2.exprPins[j]) ? l2.exprPins[j] : p1;
                     return { x: p1.x + (p2.x - p1.x) * it, y: p1.y + (p2.y - p1.y) * it };
                 }),
-                headRot: { 
-                    x: l1.headRot.x + (l2.headRot.x - l1.headRot.x) * it, 
-                    y: l1.headRot.y + (l2.headRot.y - l1.headRot.y) * it 
+                headRot: {
+                    x: l1.headRot.x + (l2.headRot.x - l1.headRot.x) * it,
+                    y: l1.headRot.y + (l2.headRot.y - l1.headRot.y) * it
                 },
-                eyeRot: { 
-                    x: (l1.eyeRot?.x || 0) + ((l2.eyeRot?.x || 0) - (l1.eyeRot?.x || 0)) * it, 
-                    y: (l1.eyeRot?.y || 0) + ((l2.eyeRot?.y || 0) - (l1.eyeRot?.y || 0)) * it 
+                eyeRot: {
+                    x: (l1.eyeRot?.x || 0) + ((l2.eyeRot?.x || 0) - (l1.eyeRot?.x || 0)) * it,
+                    y: (l1.eyeRot?.y || 0) + ((l2.eyeRot?.y || 0) - (l1.eyeRot?.y || 0)) * it
                 },
                 exprValues: Object.keys(l1.exprValues || {
                     blinkTop: 0, blinkBottom: 0, smile: 0, stretch: 0, open: 0, browH: 0, browT: 0, tilt: 0, mouthRot: 0, pinRad: 45, mouthRad: 30, browRad: 15
-                }).reduce((acc, k) => ({ 
-                    ...acc, 
-                    [k]: l1.exprValues[k] + ((l2.exprValues[k] ?? l1.exprValues[k]) - l1.exprValues[k]) * it 
+                }).reduce((acc, k) => ({
+                    ...acc,
+                    [k]: l1.exprValues[k] + ((l2.exprValues[k] ?? l1.exprValues[k]) - l1.exprValues[k]) * it
                 }), {}),
                 headRadius: (l1.headRadius || 0) + ((l2.headRadius || 0) - (l1.headRadius || 0)) * it,
-                headFocus: { 
+                headFocus: {
                     x: (l1.headFocus?.x ?? (layers[i]?.assets[0]?.img?.width / 2 || 0)) + ((l2.headFocus?.x ?? l1.headFocus?.x ?? (layers[i]?.assets[0]?.img?.width / 2 || 0)) - (l1.headFocus?.x ?? (layers[i]?.assets[0]?.img?.width / 2 || 0))) * it,
                     y: (l1.headFocus?.y ?? (layers[i]?.assets[0]?.img?.height / 3 || 0)) + ((l2.headFocus?.y ?? l1.headFocus?.y ?? (layers[i]?.assets[0]?.img?.height / 3 || 0)) - (l1.headFocus?.y ?? (layers[i]?.assets[0]?.img?.height / 3 || 0))) * it
                 },
-                assetIndex: l1.assetIndex || 0,
+                assetIndex: isSwitching
+                    ? (t > 0 ? (l2.assetIndex || 0) : (l1.assetIndex || 0))
+                    : (l1.assetIndex || 0),
                 parentId: l1.parentId
             };
         });
 
         const bt1 = k1.bgTransform || { gPos: {x:0, y:0}, gScale: 1, gRotation: 0 };
         const bt2 = k2.bgTransform || bt1;
-
-        // Mesma lógica para o Background: se trocar o asset, não interpola movimento
-        const bgIt = (k1.bgAssetIndex !== k2.bgAssetIndex) ? 0 : easedT;
+        const bgSwitching = k1.bgAssetIndex !== k2.bgAssetIndex;
+        const bgIt = bgSwitching ? (t > 0 ? 1 : 0) : easedT;
 
         return {
             layerStates,
@@ -2543,6 +2554,9 @@ function pasteRange() {
             }
         };
     }
+
+
+
 
     function getInterpolatedState(frame) {
         if (keyframes.length === 0) return null;
