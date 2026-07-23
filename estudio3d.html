@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/webm-muxer@3.0.1/build/webm-muxer.js"></script>
+    <title>Estúdio 3D</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #0f0f0f; font-family: 'Inter', 'Segoe UI', sans-serif; height: 100%; color: #d4d4d4; overscroll-behavior: none; }
+
+        #app-container { display: flex; width: 100%; height: 100vh; height: 100dvh; flex-direction: column; }
+        #main-view { display: flex; flex: 1; flex-direction: row; overflow: hidden; min-height: 0; }
+
+        /* Área de Trabalho de Vídeo (Esquerda) */
+        #workspace { 
+            flex: 1; 
+            position: relative; 
+            background: #050505; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            overflow: hidden; 
+        }
+        /* Força a proporção 16:9 no canvas com sombra suave */
+        canvas { display: block; box-shadow: 0 0 30px rgba(0,0,0,0.8); background: #000; touch-action: none; }
+
+        /* Barra Lateral de Controles e Importação (Direita) */
+        #ui { 
+            width: 300px; 
+            background: #1e1e1e; 
+            border-left: 1px solid #333;
+            z-index: 100; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100%;
+            transition: transform 0.3s ease;
+            user-select: none;
+        }
+        .ui-section { padding: 15px; border-bottom: 1px solid #333; }
+        #section-import { flex: 0 0 auto; }
+        #section-layers { flex: 1; overflow-y: auto; display: flex; flex-direction: column; background: #181818; }
+        #section-controls { flex: 0 0 auto; background: #1e1e1e; border-bottom: none; max-height: 180px; overflow-y: auto; }
+
+        /* Linha do Tempo (Timeline) */
+        #timeline { 
+            height: 120px; 
+            background: #252526; 
+            color: #ccc; 
+            display: flex; 
+            flex-direction: column; 
+            border-top: 1px solid #333;
+            z-index: 20;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .timeline-header { padding: 8px 20px; display: flex; gap: 15px; align-items: center; background: #2d2d2d; font-size: 11px; border-bottom: 1px solid #3e3e3e; }
+        .timeline-body { flex: 1; position: relative; background: #121212; overflow-x: auto; overflow-y: hidden; cursor: crosshair; }
+        #timelineTrack { height: 100%; position: relative; background: repeating-linear-gradient(90deg, #181818, #181818 49px, #252525 50px); min-width: 100%; }
+        #timelineTrack { touch-action: none; }
+        #playhead { position: absolute; top: 0; left: 0; width: 1px; height: 100%; background: #ffffff; z-index: 5; }
+        #playhead::after { content: ''; position: absolute; top: 0; left: -4px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid #ffffff; }
+        .keyframe-marker { position: absolute; width: 6px; height: 6px; background: #ffffff; transform: rotate(45deg); top: 50%; margin-top: -3px; opacity: 0.8; }
+        .keyframe-marker.selected { background: #ffffff; opacity: 1; box-shadow: 0 0 10px #ffffff; outline: 1px solid #000; }
+        
+        button { 
+            background: #3a3a3a; border: 1px solid #555; color: #eee; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 11px;
+            transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        button:hover { background: #4a4a4a; border-color: #777; }
+        button.secondary { background: #252526; color: #888; }
+
+        #ui label { margin-bottom: 2px; font-weight: normal; font-size: 10px; color: #888; text-transform: uppercase; }
+        .slider-group { display: flex; flex-direction: column; gap: 4px; }
+        h2 { margin: 0 0 10px 0; font-size: 11px; color: #ffffff; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9; }
+
+        /* Lista de Camadas */
+        .layers-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .layer-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #252525;
+            color: #aaa;
+            transition: all 0.1s;
+        }
+        .layer-item:hover { background: #2a2a2a; color: #eee; }
+        .layer-item.active { background: #37373d; color: #fff; border-left: 3px solid #fff; }
+        .remove-layer-btn { background: transparent !important; border: none !important; color: #666 !important; font-size: 16px !important; padding: 0 5px !important; cursor: pointer; text-transform: none !important; line-height: 1; }
+        .remove-layer-btn:hover { color: #ff4d4d !important; }
+        .vis-layer-btn { background: transparent !important; border: none !important; color: #888 !important; font-size: 14px !important; cursor: pointer; padding: 0 5px !important; line-height: 1; }
+        .vis-layer-btn:hover { color: #fff !important; }
+
+        /* Sliders Custom */
+        input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; width: 100%; margin: 5px 0; accent-color: #fff; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; cursor: pointer; background: #444; }
+        input[type=range]::-webkit-slider-thumb { height: 12px; width: 12px; border-radius: 50%; background: #fff; cursor: pointer; -webkit-appearance: none; appearance: none; margin-top: -5px; }
+
+        /* Inputs de Arquivo */
+        input[type=file] { font-size: 10px; color: #666; }
+        input[type=file]::file-selector-button { background: #333; border: 1px solid #444; color: #ccc; padding: 4px; border-radius: 3px; cursor: pointer; margin-right: 10px; }
+
+        /* Toggle UI Mobile */
+        #ui-toggle { display: none; position: fixed; top: 10px; right: 10px; z-index: 1001; background: #fff; color: #000; border-radius: 50%; width: 40px; height: 40px; border: none; font-size: 20px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+
+        /* Responsividade Profissional */
+        @media (max-width: 1024px) {
+            #main-view { flex-direction: column; height: calc(100dvh - 160px); }
+            #ui { 
+                position: fixed; 
+                right: 0; 
+                top: 0; 
+                height: 100%; 
+                transform: translateX(100%);
+                width: 280px;
+            }
+            #ui.open { transform: translateX(0); }
+            #ui-toggle { display: block; }
+            #timeline { height: 160px; }
+            .timeline-header { flex-wrap: wrap; gap: 8px; padding: 10px; }
+            #durationInput { width: 80px; }
+            button { padding: 8px 10px; } /* Botões maiores para touch */
+        }
+
+        /* Render Curtain */
+        #render-curtain { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: radial-gradient(circle at center, #0a0e14, #000); 
+            z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        .loader { width: 400px; height: 2px; background: rgba(255,255,255,0.05); margin-top: 30px; border-radius: 2px; }
+        .loader-bar { width: 0%; height: 100%; background: #ffffff; box-shadow: 0 0 15px #ffffff; }
+        #render-status { color: #666; font-size: 12px; margin-top: 15px; font-family: monospace; letter-spacing: 1px; }
+
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <button id="ui-toggle">☰</button>
+        <div id="main-view">
+        <div id="workspace">
+            <div id="render-curtain">
+                <h2 style="letter-spacing: 15px; font-weight: 300; margin: 0; color: #fff;">EXPORTANDO VÍDEO</h2>
+                <div id="render-status">Iniciando motor de renderização...</div>
+                <div class="loader"><div class="loader-bar" id="bar"></div></div>
+            </div>
+            <!-- O canvas será inserido aqui -->
+        </div>
+
+    <div id="ui">
+        <div class="ui-section" id="section-import">
+            <h2>Importar</h2>
+            <label>Fundo 360°</label>
+            <div style="display: flex; gap: 5px; margin-top: 5px; margin-bottom: 15px;">
+                <button onclick="document.getElementById('bgInput').click()" style="flex: 1;">Mídia</button>
+                <button onclick="document.getElementById('bgFolderInput').click()" style="flex: 1;">Pasta</button>
+            </div>
+            <input type="file" id="bgInput" accept="image/*" multiple style="display:none">
+            <input type="file" id="bgFolderInput" accept="image/*" webkitdirectory directory multiple style="display:none">
+            
+            <label>Novo Objeto</label>
+            <div style="display: flex; gap: 5px; margin-top: 5px;">
+                <button onclick="document.getElementById('charInput').click()" style="flex: 1;">Mídia</button>
+                <button onclick="document.getElementById('charFolderInput').click()" style="flex: 1;">Pasta</button>
+            </div>
+            <input type="file" id="charInput" accept="image/*" multiple style="display:none">
+            <input type="file" id="charFolderInput" accept="image/*" webkitdirectory directory multiple style="display:none">
+        </div>
+
+        <div class="ui-section" id="section-layers">
+            <h2>Camadas</h2>
+            <div id="layersList" class="layers-container"></div>
+        </div>
+        
+        <div class="ui-section" id="section-controls">
+            <h2>Propriedades</h2>
+            <div class="slider-group">
+                <label>Horizontal</label>
+            <input type="range" id="angleH" min="-180" max="180" value="0">
+            
+            <label>Vertical</label>
+            <input type="range" id="angleV" min="-90" max="90" value="0">
+            
+            <label>Escala</label>
+            <input type="range" id="objScale" min="1" max="100" value="25">
+
+            <label>Profundidade</label>
+            <input type="range" id="objDepth" min="1" max="50" value="10">
+
+            <label>Rotação X</label>
+            <input type="range" id="rotX" min="-360" max="360" value="0">
+
+            <label>Rotação Y</label>
+            <input type="range" id="rotY" min="-360" max="360" value="0">
+
+            <label>Rotação Z</label>
+            <input type="range" id="rotZ" min="-360" max="360" value="0">
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <div id="timeline">
+        <div class="timeline-header">
+            <button id="playBtn">Play</button>
+            <button id="keyBtn" class="secondary">Add Keyframe</button>
+            <button id="delKeyBtn" class="secondary">Delete Keyframe</button>
+            <button id="promptBtn" class="secondary">Prompt 3D</button>
+            <button id="photoBtn" class="secondary">Foto</button>
+            <label style="color: #888; margin-left: 10px;">Duração:</label>
+            <input type="text" id="durationInput" value="00:02:00.00" style="width: 100px; background: #181818; color: #eee; border: 1px solid #444; border-radius: 2px; padding: 2px 5px; font-family: monospace; text-align: center; font-size: 11px; cursor: text;">
+            <span id="timeDisplay">00:00.00</span>
+            <div style="flex-grow: 1;"></div>
+            <button id="exportVideoBtn" style="background: #1a1a1a; color: #fff; border: 1px solid #444; font-weight: bold;">Exportar Vídeo</button>
+        </div>
+        <div class="timeline-body" id="timelineBar">
+            <div id="timelineTrack">
+                <div id="playhead"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+        const workspace = document.getElementById('workspace');
+        const scene = new THREE.Scene();
+        let currentFov = 45; 
+        const camera = new THREE.PerspectiveCamera(currentFov, workspace.clientWidth / workspace.clientHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(workspace.clientWidth, workspace.clientHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace; 
+        workspace.appendChild(renderer.domElement);
+
+        // Toggle UI para Mobile
+        const uiToggle = document.getElementById('ui-toggle');
+        const uiSide = document.getElementById('ui');
+        uiToggle.onclick = () => {
+            uiSide.classList.toggle('open');
+            uiToggle.textContent = uiSide.classList.contains('open') ? '✕' : '☰';
+        };
+
+        let yaw = 0;
+        let pitch = 0;
+        let objetosList = [];
+        let bgSequence = { textures: [], currentFrame: 0, timer: 0 };
+        let indexSelecionado = null;
+
+        const bgInput = document.getElementById('bgInput');
+        const bgFolderInput = document.getElementById('bgFolderInput');
+        const charInput = document.getElementById('charInput');
+        const charFolderInput = document.getElementById('charFolderInput');
+        const angleH = document.getElementById('angleH');
+        const angleV = document.getElementById('angleV');
+        const objScale = document.getElementById('objScale');
+        const objDepth = document.getElementById('objDepth');
+        const rotX = document.getElementById('rotX');
+        const rotY = document.getElementById('rotY');
+        const rotZ = document.getElementById('rotZ');
+        const layersList = document.getElementById('layersList');
+        const promptBtn = document.getElementById('promptBtn');
+        const photoBtn = document.getElementById('photoBtn');
+        const exportVideoBtn = document.getElementById('exportVideoBtn');
+
+        // Sistema de Animação
+        let isPlaying = false;
+        let isExporting = false;
+        let currentTime = 0;
+        let duration = 120; 
+        const pps = 50; // Pixels Per Second (Escala da timeline)
+        let keyframes = []; // { time, camera: {yaw, pitch, fov}, objects: [ {hDeg, vDeg, scale, depth} ] }
+        let selectedKeyframeIndex = null;
+        let isDraggingKeyframe = false;
+        let draggedKeyframeIndex = null;
+        let draggedMarkerElement = null;
+
+        const playBtn = document.getElementById('playBtn');
+        const keyBtn = document.getElementById('keyBtn');
+        const timelineBar = document.getElementById('timelineBar');
+        const timelineTrack = document.getElementById('timelineTrack');
+        const playhead = document.getElementById('playhead');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const durationInput = document.getElementById('durationInput');
+        const delKeyBtn = document.getElementById('delKeyBtn');
+        let isDraggingTimeline = false;
+
+        // Carrega o Panorama de Fundo (Suporta Sequência)
+        async function handleBgSelection(e) {
+            // Filtra apenas arquivos de imagem caso a pasta contenha outros arquivos
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) return;
+
+            files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+            const loader = new THREE.TextureLoader();
+            const loadTexture = (file) => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        loader.load(event.target.result, (texture) => {
+                            texture.mapping = THREE.EquirectangularReflectionMapping;
+                            texture.colorSpace = THREE.SRGBColorSpace;
+                            resolve(texture);
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            const textures = await Promise.all(files.map(file => loadTexture(file)));
+            
+            if (textures.length > 1) {
+                bgSequence.textures = textures;
+                bgSequence.currentFrame = 0;
+                bgSequence.timer = 0;
+                scene.background = textures[0];
+            } else {
+                bgSequence.textures = [];
+                scene.background = textures[0];
+            }
+            if (!isPlaying) renderer.render(scene, camera);
+        }
+
+        bgInput.addEventListener('change', handleBgSelection);
+        bgFolderInput.addEventListener('change', handleBgSelection);
+
+        // Funções de conversão de tempo (Formato After Effects HH:MM:SS)
+        function secondsToTimecode(totalSeconds, includeMs = false) {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = Math.floor(totalSeconds % 60);
+            const base = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            if (!includeMs) return base;
+            const ms = Math.floor((totalSeconds % 1) * 100);
+            return `${base}.${ms.toString().padStart(2, '0')}`;
+        }
+
+        function timecodeToSeconds(tc) {
+            const parts = tc.split(':').map(parseFloat);
+            if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+            if (parts.length === 2) return (parts[0] * 60) + parts[1];
+            return parts[0] || 0;
+        }
+
+        // Adiciona um novo objeto ou sequência à cena
+        async function handleCharSelection(e) {
+            // Filtra apenas arquivos de imagem
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) return;
+
+            // Ordena os arquivos numericamente (frame1, frame2, frame10...)
+            files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+            const loader = new THREE.TextureLoader();
+            const loadTexture = (file) => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        loader.load(event.target.result, (texture) => {
+                            texture.colorSpace = THREE.SRGBColorSpace;
+                            resolve(texture);
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            // Carrega todas as texturas da sequência
+            const textures = await Promise.all(files.map(file => loadTexture(file)));
+            const firstTexture = textures[0];
+            
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: firstTexture, 
+                transparent: true, 
+                side: THREE.DoubleSide,
+                depthWrite: false 
+            });
+            
+            const novoObjeto = new THREE.Mesh(geometry, material);
+            
+            // Metadados do objeto
+            novoObjeto.userData.aspect = firstTexture.image.width / firstTexture.image.height;
+            novoObjeto.userData.filename = files.length > 1 ? `[Seq] ${files[0].name}` : files[0].name;
+            
+            // Configura a animação se for uma sequência
+            if (textures.length > 1) {
+                novoObjeto.userData.isSequence = true;
+                novoObjeto.userData.textures = textures;
+                novoObjeto.userData.currentFrame = 0;
+                novoObjeto.userData.timer = 0;
+            }
+
+            let currentYawDeg = (yaw * 180 / Math.PI) % 360;
+            novoObjeto.userData.hDeg = -currentYawDeg;
+            let hDeg = (yaw * 180 / Math.PI) % 360;
+            if (hDeg > 180) hDeg -= 360;
+            if (hDeg <= -180) hDeg += 360;
+            novoObjeto.userData.hDeg = hDeg;
+            novoObjeto.userData.vDeg = (pitch * 180 / Math.PI);
+            novoObjeto.userData.scale = 25;
+            novoObjeto.userData.depth = 10;
+            novoObjeto.userData.rotX = 0;
+            novoObjeto.userData.rotY = 0;
+            novoObjeto.userData.rotZ = 0;
+
+            scene.add(novoObjeto);
+            objetosList.push(novoObjeto);
+
+            // Sincroniza o novo objeto com keyframes que já existem
+            keyframes.forEach(kf => {
+                // Se o keyframe for anterior ao tempo do upload, a mídia deve ser invisível
+                const isBefore = kf.time < currentTime;
+                kf.objects.push({
+                    hDeg: novoObjeto.userData.hDeg,
+                    vDeg: novoObjeto.userData.vDeg,
+                    scale: novoObjeto.userData.scale,
+                    depth: novoObjeto.userData.depth,
+                    visible: !isBefore,
+                    rotX: 0, rotY: 0, rotZ: 0
+                });
+            });
+
+            // Se estamos no meio da timeline e não há um ponto de partida (tempo 0),
+            // criamos um agora para definir que o objeto era invisível antes deste momento.
+            if (currentTime > 0 && !keyframes.find(k => k.time === 0)) {
+                keyframes.push({
+                    time: 0,
+                    camera: { yaw, pitch, fov: currentFov },
+                    objects: objetosList.map((obj, i) => ({
+                        hDeg: obj.userData.hDeg, vDeg: obj.userData.vDeg,
+                        scale: obj.userData.scale, depth: obj.userData.depth,
+                        visible: i === objetosList.length - 1 ? false : obj.visible,
+                        rotX: 0, rotY: 0, rotZ: 0
+                    }))
+                });
+                keyframes.sort((a, b) => a.time - b.time);
+            }
+
+            // Adiciona um keyframe no tempo atual para gravar o estado "visível" a partir de agora
+            addKeyframe();
+
+            indexSelecionado = objetosList.length - 1;
+            atualizarSlidersParaObjeto(novoObjeto);
+            posicionarObjeto(novoObjeto);
+            applyAnimation(); // Atualiza a cena imediatamente para refletir a visibilidade
+
+            // Reseta o input para permitir carregar o mesmo arquivo novamente se desejar
+            e.target.value = '';
+        }
+
+        charInput.addEventListener('change', handleCharSelection);
+        charFolderInput.addEventListener('change', handleCharSelection);
+
+        function atualizarUILista() {
+            layersList.innerHTML = '';
+            objetosList.forEach((obj, index) => {
+                const item = document.createElement('div');
+                item.className = `layer-item ${index === indexSelecionado ? 'active' : ''}`;
+                
+                const nameLabel = document.createElement('span');
+                nameLabel.style.flex = "1";
+                nameLabel.textContent = obj.userData.filename || `Objeto ${index + 1}`;
+                nameLabel.onclick = () => {
+                    indexSelecionado = index;
+                    atualizarSlidersParaObjeto(obj);
+                };
+                item.appendChild(nameLabel);
+
+                const visBtn = document.createElement('button');
+                visBtn.innerHTML = obj.visible ? '👁️' : '🕶️';
+                visBtn.className = 'vis-layer-btn';
+                visBtn.title = 'Esconder/Mostrar';
+                visBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    obj.visible = !obj.visible;
+                    atualizarUILista();
+                    if (!isPlaying) renderer.render(scene, camera);
+                };
+                item.appendChild(visBtn);
+
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = '&times;';
+                delBtn.className = 'remove-layer-btn';
+                delBtn.title = 'Remover Camada';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removerCamada(index);
+                };
+                item.appendChild(delBtn);
+
+                layersList.appendChild(item);
+            });
+        }
+
+        function removerCamada(index) {
+            const obj = objetosList[index];
+            scene.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+            objetosList.splice(index, 1);
+            keyframes.forEach(kf => kf.objects.splice(index, 1));
+
+            if (indexSelecionado === index) indexSelecionado = null;
+            else if (indexSelecionado > index) indexSelecionado--;
+
+            atualizarUILista();
+            applyAnimation();
+            renderKeyframes(); // Remove os marcadores visuais da timeline
+            recalcularDuracaoFinal(true); // Atualiza a duração e a renderização da cena
+        }
+
+        function atualizarSlidersParaObjeto(obj) {
+            angleH.value = Math.round(obj.userData.hDeg);
+            angleV.value = Math.round(obj.userData.vDeg);
+            objScale.value = obj.userData.scale;
+            objDepth.value = obj.userData.depth;
+            rotX.value = Math.round(obj.userData.rotX || 0);
+            rotY.value = Math.round(obj.userData.rotY || 0);
+            rotZ.value = Math.round(obj.userData.rotZ || 0);
+
+            atualizarUILista();
+        }
+
+        function posicionarObjeto(obj) {
+            if (!obj) return;
+
+            const hRad = (parseFloat(obj.userData.hDeg) * Math.PI) / 180;
+            const vRad = (parseFloat(obj.userData.vDeg) * Math.PI) / 180;
+            const dist = parseFloat(obj.userData.depth);
+
+            obj.position.x = dist * Math.sin(hRad) * Math.cos(vRad);
+            obj.position.y = dist * Math.sin(vRad);
+            obj.position.z = -dist * Math.cos(hRad) * Math.cos(vRad);
+
+            const baseScale = parseFloat(obj.userData.scale) / 10;
+            obj.scale.set(baseScale * obj.userData.aspect, baseScale, 1);
+
+            // Garante que o plano sempre esteja virado para o centro (câmera)
+            obj.lookAt(0, 0, 0);
+            obj.rotateX(THREE.MathUtils.degToRad(obj.userData.rotX || 0));
+            obj.rotateY(THREE.MathUtils.degToRad(obj.userData.rotY || 0));
+            obj.rotateZ(THREE.MathUtils.degToRad(obj.userData.rotZ || 0));
+        }
+
+        // Evento ao mudar os sliders (Ajuste manual)
+        function onSliderInput() {
+            if (indexSelecionado !== null && objetosList[indexSelecionado]) {
+                const obj = objetosList[indexSelecionado];
+                obj.userData.hDeg = Number(angleH.value);
+                obj.userData.vDeg = Number(angleV.value);
+                obj.userData.scale = Number(objScale.value);
+                obj.userData.depth = Number(objDepth.value);
+
+                // Lógica de trava (snap) no zero para rotações
+                let rx = Number(rotX.value);
+                let ry = Number(rotY.value);
+                let rz = Number(rotZ.value);
+                const threshold = 10; // Sensibilidade da trava (graus)
+                if (Math.abs(rx) < threshold) { rx = 0; rotX.value = 0; }
+                if (Math.abs(ry) < threshold) { ry = 0; rotY.value = 0; }
+                if (Math.abs(rz) < threshold) { rz = 0; rotZ.value = 0; }
+
+                obj.userData.rotX = rx;
+                obj.userData.rotY = ry;
+                obj.userData.rotZ = rz;
+                posicionarObjeto(obj);
+            }
+        }
+
+        function recalcularDuracaoFinal(shouldApply = false) {
+            const lastKeyTime = keyframes.length > 0 ? keyframes[keyframes.length - 1].time : 0;
+            if (lastKeyTime > duration) {
+                duration = lastKeyTime;
+            }
+            durationInput.value = secondsToTimecode(duration, true);
+            if (currentTime > duration) {
+                currentTime = duration;
+            }
+            updateTimelineUI(shouldApply); 
+        }
+
+        durationInput.addEventListener('change', () => {
+            const newSeconds = timecodeToSeconds(durationInput.value);
+            if (!isNaN(newSeconds) && newSeconds > 0) {
+                duration = newSeconds;
+                // Garante que a duração comporte o último keyframe existente
+                const lastKeyTime = keyframes.length > 0 ? keyframes[keyframes.length - 1].time : 0;
+                if (lastKeyTime > duration) duration = lastKeyTime;
+            }
+            durationInput.value = secondsToTimecode(duration, true);
+            updateTimelineUI(true);
+        });
+
+        angleH.addEventListener('input', onSliderInput);
+        angleV.addEventListener('input', onSliderInput);
+        objScale.addEventListener('input', onSliderInput);
+        objDepth.addEventListener('input', onSliderInput);
+        rotX.addEventListener('input', onSliderInput);
+        rotY.addEventListener('input', onSliderInput);
+        rotZ.addEventListener('input', onSliderInput);
+
+        // Lógica de Timeline
+        function addKeyframe() {
+            // Remove keyframe existente no mesmo tempo
+            keyframes = keyframes.filter(k => Math.abs(k.time - currentTime) > 0.1);
+
+            const state = {
+                time: currentTime,
+                camera: { yaw, pitch, fov: currentFov },
+                objects: objetosList.map(obj => ({
+                    hDeg: obj.userData.hDeg,
+                    vDeg: obj.userData.vDeg,
+                    scale: obj.userData.scale,
+                    depth: obj.userData.depth,
+                    visible: obj.visible,
+                    rotX: obj.userData.rotX || 0,
+                    rotY: obj.userData.rotY || 0,
+                    rotZ: obj.userData.rotZ || 0
+                }))
+            };
+
+            keyframes.push(state);
+            keyframes.sort((a, b) => a.time - b.time);
+            selectedKeyframeIndex = null; 
+            recalcularDuracaoFinal();
+            renderKeyframes();
+        }
+
+        function renderKeyframes() {
+            const existing = timelineTrack.querySelectorAll('.keyframe-marker');
+            existing.forEach(e => e.remove());
+            keyframes.forEach((k, index) => {
+                const marker = document.createElement('div');
+                marker.className = `keyframe-marker ${index === selectedKeyframeIndex ? 'selected' : ''}`;
+                marker.style.left = `${k.time * pps}px`;
+                marker.onpointerdown = (e) => {
+                    marker.setPointerCapture(e.pointerId);
+                    e.stopPropagation(); // Impede o scrubbing ao selecionar o keyframe
+                    selectedKeyframeIndex = index;
+                    isDraggingKeyframe = true;
+                    draggedKeyframeIndex = index;
+                    draggedMarkerElement = marker;
+                    currentTime = k.time;
+                    updateTimelineUI();
+                    renderKeyframes();
+                };
+                timelineTrack.appendChild(marker);
+            });
+        }
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function applyAnimation(updateSliders = true) {
+            if (keyframes.length < 1) return;
+
+            // Encontra os dois keyframes ao redor do tempo atual
+            let prev = keyframes[0];
+            let next = keyframes[keyframes.length - 1];
+
+            // Busca os keyframes vizinhos para interpolação
+            for (let i = 0; i < keyframes.length; i++) {
+                if (keyframes[i].time <= currentTime) prev = keyframes[i];
+                if (keyframes[i].time >= currentTime) { next = keyframes[i]; break; }
+            }
+
+            let t = (next.time === prev.time) ? 0 : (currentTime - prev.time) / (next.time - prev.time);
+            
+            // Interpola Câmera
+            yaw = lerp(prev.camera.yaw, next.camera.yaw, t);
+            pitch = lerp(prev.camera.pitch, next.camera.pitch, t);
+            currentFov = lerp(prev.camera.fov, next.camera.fov, t);
+            camera.fov = currentFov;
+            camera.updateProjectionMatrix();
+            updateCameraRotation();
+
+            // Interpola Objetos
+            objetosList.forEach((obj, i) => {
+                if (prev.objects[i] && next.objects[i]) {
+                    obj.userData.hDeg = lerp(prev.objects[i].hDeg, next.objects[i].hDeg, t);
+                    obj.userData.vDeg = lerp(prev.objects[i].vDeg, next.objects[i].vDeg, t);
+                    obj.userData.scale = lerp(prev.objects[i].scale, next.objects[i].scale, t);
+                    obj.userData.depth = lerp(prev.objects[i].depth, next.objects[i].depth, t);
+                    // Visibilidade agora é "Hold": mantém o estado do keyframe anterior até chegar no próximo
+                    obj.visible = (prev.objects[i].visible !== false);
+                    obj.userData.rotX = lerp(prev.objects[i].rotX || 0, next.objects[i].rotX || 0, t);
+                    obj.userData.rotY = lerp(prev.objects[i].rotY || 0, next.objects[i].rotY || 0, t);
+                    obj.userData.rotZ = lerp(prev.objects[i].rotZ || 0, next.objects[i].rotZ || 0, t);
+                    posicionarObjeto(obj);
+                }
+            });
+
+            // Só atualiza os sliders visuais se estivermos dando Play ou Scrubbing
+            if (updateSliders && indexSelecionado !== null) atualizarSlidersParaObjeto(objetosList[indexSelecionado]);
+        }
+
+        function updateCameraRotation() {
+            const target = new THREE.Vector3();
+            target.x = Math.sin(yaw) * Math.cos(pitch);
+            target.y = Math.sin(pitch);
+            target.z = -Math.cos(yaw) * Math.cos(pitch);
+            camera.lookAt(target);
+        }
+
+        playBtn.onclick = (e) => { 
+            isPlaying = !isPlaying; 
+            playBtn.textContent = isPlaying ? "Pausar" : "Play"; 
+        };
+        keyBtn.onclick = addKeyframe;
+        delKeyBtn.onclick = () => {
+            if (selectedKeyframeIndex !== null) {
+                keyframes.splice(selectedKeyframeIndex, 1);
+                selectedKeyframeIndex = null;
+                renderKeyframes();
+                recalcularDuracaoFinal(true);
+                applyAnimation();
+            }
+        };
+
+        promptBtn.onclick = () => {
+            const prompt = "Spherical equirectangular 360-degree projection, seamless full panorama, [... descreva sua imagem aqui...], 8k UHD resolution, hyper-realistic, photorealistic, cinematic lighting, sharp focus across entire image, zero depth of field blur, immersive virtual reality environment, highly detailed textures, masterpiece quality, high-end 3D render --ar 2:1";
+            
+            // Fallback para garantir que funcione em arquivos locais (file://)
+            const textArea = document.createElement("textarea");
+            textArea.value = prompt;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                const originalText = promptBtn.textContent;
+                promptBtn.textContent = "Copiado!";
+                setTimeout(() => promptBtn.textContent = originalText, 2000);
+            } catch (err) {
+                console.error('Erro ao copiar prompt: ', err);
+            }
+            document.body.removeChild(textArea);
+        };
+
+        photoBtn.onclick = () => {
+            const exportW = 1920;
+            const exportH = 1080;
+            const originalSize = new THREE.Vector2();
+            renderer.getSize(originalSize);
+            const originalAspect = camera.aspect;
+
+            // Configura temporariamente para Full HD
+            renderer.setSize(exportW, exportH, false);
+            camera.aspect = exportW / exportH;
+            camera.updateProjectionMatrix();
+
+            renderer.render(scene, camera);
+            const link = document.createElement('a');
+            link.download = `snapshot_${new Date().getTime()}.png`;
+            link.href = renderer.domElement.toDataURL('image/png');
+            link.click();
+
+            // Restaura o tamanho original da interface
+            renderer.setSize(originalSize.x, originalSize.y, false);
+            camera.aspect = originalAspect;
+            camera.updateProjectionMatrix();
+            renderer.render(scene, camera);
+        };
+
+        function updateTimeFromMouseEvent(e) {
+            const rect = timelineBar.getBoundingClientRect();
+            const x = e.clientX - rect.left + timelineBar.scrollLeft;
+            currentTime = Math.max(0, x / pps);
+            selectedKeyframeIndex = null; // Limpa seleção ao arrastar o tempo
+            updateTimelineUI();
+            renderKeyframes();
+        }
+
+        timelineTrack.addEventListener('pointerdown', (e) => {
+            isDraggingTimeline = true;
+            timelineTrack.setPointerCapture(e.pointerId);
+            updateTimeFromMouseEvent(e);
+            e.preventDefault(); // Impede a seleção de objetos/texto
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (isDraggingTimeline) {
+                updateTimeFromMouseEvent(e);
+            } else if (isDraggingKeyframe && draggedKeyframeIndex !== null) {
+                const rect = timelineBar.getBoundingClientRect();
+                const x = e.clientX - rect.left + timelineBar.scrollLeft;
+                let newTime = Math.max(0, x / pps);
+
+                const movingKeyframe = keyframes[draggedKeyframeIndex];
+                movingKeyframe.time = newTime;
+                
+                // Move apenas o marcador visual atual para manter a fluidez
+                if (draggedMarkerElement) {
+                    draggedMarkerElement.style.left = `${newTime * pps}px`;
+                }
+
+                currentTime = newTime;
+
+                // Reordena internamente para a interpolação funcionar, mas não renderiza tudo de novo
+                keyframes.sort((a, b) => a.time - b.time);
+                draggedKeyframeIndex = keyframes.indexOf(movingKeyframe);
+                selectedKeyframeIndex = draggedKeyframeIndex;
+                recalcularDuracaoFinal(true);
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            if (isDraggingKeyframe) {
+                renderKeyframes(); // Renderização final para organizar os z-index e estados
+            }
+            isDraggingTimeline = false;
+            isDraggingKeyframe = false;
+            draggedKeyframeIndex = null;
+            draggedMarkerElement = null;
+        });
+
+        function updateTimelineUI(shouldApplyAnim = true) {
+            const totalWidth = duration * pps;
+            timelineTrack.style.width = `${totalWidth}px`;
+            const playheadPos = currentTime * pps;
+            playhead.style.left = `${playheadPos}px`;
+            timeDisplay.textContent = secondsToTimecode(currentTime, true);
+
+            // Auto-scroll: Centraliza o scroll no playhead durante play ou arraste
+            if (isPlaying || isDraggingTimeline || isDraggingKeyframe) {
+                const containerWidth = timelineBar.clientWidth;
+                timelineBar.scrollLeft = playheadPos - (containerWidth / 2);
+            }
+
+            if (!isPlaying && shouldApplyAnim) applyAnimation(true);
+        }
+
+        // Zoom via Scroll do Mouse
+        workspace.addEventListener('wheel', (e) => {
+            if (!scene.background) return;
+            // Aumentamos o limite para 90, que é o padrão de visão periférica em softwares 3D
+            currentFov += e.deltaY * 0.05; 
+            currentFov = Math.max(10, Math.min(90, currentFov)); 
+            camera.fov = currentFov;
+            camera.updateProjectionMatrix();
+        });
+
+        // Clique para Selecionar ou Navegar
+        let isPointerDown = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let initialPinchDist = 0;
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            isPointerDown = true;
+            if (e.pointerType === 'mouse') {
+                if (e.button === 0) renderer.domElement.requestPointerLock();
+            } else {
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
+            }
+        });
+
+        // Lógica de Pinch Zoom (Dois dedos)
+        workspace.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                initialPinchDist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+            }
+        }, { passive: false });
+
+        workspace.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && initialPinchDist > 0) {
+                const dist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                const diff = initialPinchDist - dist;
+                
+                currentFov += diff * 0.1;
+                currentFov = Math.max(10, Math.min(90, currentFov));
+                camera.fov = currentFov;
+                camera.updateProjectionMatrix();
+                
+                initialPinchDist = dist;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            initialPinchDist = 0;
+        });
+
+        window.addEventListener('pointerup', () => {
+            isPointerDown = false;
+        });
+
+        // Movimentação do ponteiro (Mouse ou Touch)
+        window.addEventListener('pointermove', (e) => {
+            const isLocked = document.pointerLockElement === renderer.domElement;
+            
+            if (isLocked) {
+                yaw += e.movementX * 0.0015;
+                pitch -= e.movementY * 0.0015;
+            } else if (isPointerDown && (e.pointerType === 'touch' || e.pointerType === 'pen')) {
+                // Melhoria na detecção de movimento para touch
+                const movementX = e.clientX - lastTouchX;
+                const movementY = e.clientY - lastTouchY;
+                
+                yaw -= movementX * 0.005;
+                pitch += movementY * 0.005;
+                
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
+            } else {
+                return;
+            }
+
+            pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, pitch));
+            updateCameraRotation();
+        });
+
+        // Controle da câmera via teclado (Seta para cima e para baixo)
+        window.addEventListener('keydown', (e) => {
+            const step = 0.05; // Sensibilidade do movimento
+            if (e.key === 'ArrowUp') {
+                pitch += step; // Move a visão para cima (céu)
+            } else if (e.key === 'ArrowDown') {
+                pitch -= step; // Move a visão para baixo (chão)
+            } else {
+                return;
+            }
+            // Aplica os limites para não ultrapassar o topo ou o fundo do cenário
+            pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, pitch));
+            updateCameraRotation();
+        });
+
+        function onWindowResize() {
+            const containerW = workspace.clientWidth;
+            const containerH = workspace.clientHeight;
+            let targetW, targetH;
+            if (containerW / containerH > 16 / 9) {
+                targetH = containerH * 0.95; 
+                targetW = targetH * (16 / 9);
+            } else {
+                targetW = containerW * 0.90;
+                targetH = targetW * (9 / 16);
+            }
+
+            camera.aspect = 16 / 9;
+            camera.updateProjectionMatrix();
+            renderer.setSize(targetW, targetH);
+        }
+
+        // Impedir que cliques em controles disparem a timeline
+        document.querySelectorAll('input, button, .ui-section').forEach(el => {
+            el.addEventListener('pointerdown', (e) => e.stopPropagation());
+        });
+
+        async function exportVideo() {
+            if (keyframes.length < 2) return alert("Crie pelo menos 2 keyframes!");
+
+            isExporting = true;
+            isPlaying = false;
+            playBtn.textContent = "Play";
+            
+            const curtain = document.getElementById('render-curtain'), 
+                  bar = document.getElementById('bar'),
+                  status = document.getElementById('render-status');
+            curtain.style.display = 'flex'; 
+            
+            const exportW = 1920; // Força Full HD na exportação
+            const exportH = 1080; 
+            
+            const originalSize = new THREE.Vector2();
+            renderer.getSize(originalSize);
+            const originalAspect = camera.aspect;
+            const originalTime = currentTime;
+
+            renderer.setSize(exportW, exportH, false);
+            camera.aspect = exportW / exportH;
+            camera.updateProjectionMatrix();
+
+            try {
+                const fps = 24;
+                const totalFrames = Math.round(duration * fps);
+                const muxer = new WebMMuxer.Muxer({
+                    target: new WebMMuxer.ArrayBufferTarget(),
+                    video: { codec: 'V_VP9', width: exportW, height: exportH, frameRate: fps }
+                });
+
+                const videoEncoder = new VideoEncoder({
+                    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                    error: e => console.error(e)
+                });
+
+                videoEncoder.configure({
+                    codec: 'vp09.00.10.08', width: exportW, height: exportH,
+                    bitrate: 12_000_000 
+                });
+
+                for (let i = 0; i < totalFrames; i++) {
+                    if (!isExporting) break;
+
+                    while (videoEncoder.encodeQueueSize > 30) {
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+
+                    const progress = Math.min(100, Math.round((i / totalFrames) * 100));
+                    bar.style.width = `${progress}%`;
+                    status.innerText = `PROCESSANDO FRAME ${i} DE ${totalFrames} (${progress}%)`;
+
+                    currentTime = i / fps;
+                    applyAnimation(false);
+                    objetosList.forEach(obj => {
+                        if (obj.userData.isSequence) {
+                            const frameIdx = Math.floor(currentTime * 24) % obj.userData.textures.length;
+                            obj.material.map = obj.userData.textures[frameIdx];
+                        }
+                    });
+                    // Atualiza sequência de fundo na exportação
+                    if (bgSequence.textures.length > 1) {
+                        const bgFrameIdx = Math.floor(currentTime * 24) % bgSequence.textures.length;
+                        scene.background = bgSequence.textures[bgFrameIdx];
+                    }
+                    renderer.render(scene, camera);
+                    const frame = new VideoFrame(renderer.domElement, { timestamp: (i * 1000000) / fps });
+                    videoEncoder.encode(frame, { keyFrame: i % 48 === 0 });
+                    frame.close();
+                    await new Promise(r => setTimeout(r, 0));
+                }
+                await videoEncoder.flush();
+                muxer.finalize();
+                const blob = new Blob([muxer.target.buffer], { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `video3d.webm`; a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (err) { alert("Erro: " + err.message); console.error(err);
+            } finally {
+                renderer.setSize(originalSize.x, originalSize.y, false); camera.aspect = originalAspect; camera.updateProjectionMatrix();
+                currentTime = originalTime; applyAnimation(true); curtain.style.display = 'none';
+                isExporting = false;
+            }
+        }
+        exportVideoBtn.onclick = exportVideo;
+
+        window.addEventListener('resize', onWindowResize);
+
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            if (isExporting) return; // Impede renderização e lógica de tempo durante a exportação
+            const delta = clock.getDelta();
+
+            if (isPlaying) {
+                currentTime += delta;
+                if (currentTime >= duration) currentTime = 0;
+                applyAnimation();
+                updateTimelineUI(false); // Já aplicamos a animação acima
+            }
+
+            // Atualiza sequência de fundo (Automático e sem piscar)
+            if (bgSequence.textures.length > 1) {
+                // Usa o tempo real do sistema para rodar independente do Play
+                const frameIdx = Math.floor((performance.now() / 1000) * 24) % bgSequence.textures.length;
+                if (bgSequence.currentFrame !== frameIdx) {
+                    bgSequence.currentFrame = frameIdx;
+                    scene.background = bgSequence.textures[frameIdx];
+                }
+            }
+
+            // Atualiza sequências de imagens para criar o efeito de vídeo
+            objetosList.forEach(obj => {
+                if (obj.userData.isSequence) {
+                    const frameIdx = Math.floor((performance.now() / 1000) * 24) % obj.userData.textures.length;
+                    if (obj.userData.currentFrame !== frameIdx) {
+                        obj.userData.currentFrame = frameIdx;
+                        obj.material.map = obj.userData.textures[frameIdx];
+                    }
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+        animate();
+        updateTimelineUI();
+    </script>
+</body>
+</html>

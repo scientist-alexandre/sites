@@ -1,0 +1,2659 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VFX Studio</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webm-muxer@3.0.1/build/webm-muxer.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #000000;
+            --bg-panel: #111111;
+            --accent: #ffffff;
+            --accent-dim: #888888;
+            --text-main: #ffffff;
+            --border: #222222;
+            --ui-gray: #333333;
+        }
+        
+        body {
+            margin: 0;
+            background: var(--bg-deep);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            grid-template-rows: 1fr 200px;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            grid-row: 1 / 3;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            background: #0a0a0a;
+        }
+
+        .sidebar-header h1 {
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin: 0;
+        }
+
+        .scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 20px 80px 20px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .effect-card {
+            background: #171717;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid #222;
+        }
+        
+        .vfx-content {
+            display: none;
+            padding-top: 10px;
+        }
+
+        .effect-card h3 {
+            margin: 0 0 12px 0;
+            font-size: 11px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--accent);
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .effect-card h3:hover {
+            color: #fff;
+            opacity: 0.8;
+        }
+
+        .label-group { margin-bottom: 12px; }
+
+        label {
+            display: block;
+            font-size: 10px;
+            color: #888;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .brush-preview {
+            height: 4px;
+            background: var(--accent);
+            margin-top: 5px;
+            border-radius: 2px;
+            transition: 0.2s;
+        }
+
+        label span { color: var(--text-main); }
+
+        .btn-primary {
+            background: var(--accent);
+            color: black;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-primary:hover { opacity: 0.8; }
+
+        .btn-trigger {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid #444;
+            padding: 10px;
+            border-radius: 4px;
+            min-height: 40px;
+            width: 100%;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-top: 5px;
+            transition: 0.2s;
+        }
+        .btn-trigger:hover {
+            background: var(--accent);
+            color: black;
+        }
+
+        @media (max-width: 1024px) {
+            body {
+                grid-template-columns: 240px 1fr;
+            }
+        }
+
+        .btn-record {
+            background: #000;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+            margin-top: 10px;
+        }
+        .btn-record.active {
+            background: #ff0000;
+            color: black;
+        }
+
+        #viewport {
+            grid-column: 2;
+            grid-row: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center; 
+            background: radial-gradient(circle, #151515 0%, #000 100%);
+            overflow: hidden;
+            border-bottom: 1px solid #222;
+            min-width: 0; /* Impede que o conteúdo interno quebre o grid */
+        }
+
+        #canvas-container {
+            width: 1456px;
+            height: 728px;
+            background: #000;
+            box-shadow: 0 0 100px rgba(0,0,0,0.8);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transform-origin: center;
+            transition: opacity 0.3s ease;
+        }
+
+        #status-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 10px;
+            letter-spacing: 1px;
+            background: rgba(0,0,0,0.8);
+            padding: 8px 15px;
+            border-radius: 4px;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            display: none;
+            z-index: 1000;
+        }
+
+        .button-row .btn-trigger {
+            margin-top: 0;
+            flex: 1;
+        }
+
+        #timeline-container {
+            grid-column: 2;
+            background: #0d0d0d;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            user-select: none;
+            min-width: 0; /* Crucial para conter a timeline */
+        }
+
+        #timeline-header {
+            height: 40px;
+            background: #151515;
+            border-bottom: 1px solid #222;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 20px;
+            font-size: 11px;
+            color: #aaa;
+        }
+
+        #timeline-track {
+            flex: 1;
+            position: relative;
+            background-color: #111;
+            overflow: auto; /* Permite scroll X e Y */
+        }
+
+        #timeline-content {
+            position: relative;
+            height: 400px; /* Aumentado para permitir scroll vertical */
+            min-width: 100%;
+            background-image: linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+            background-size: 200px 100%; /* Ajustado para o novo PPS de 200px */
+        }
+
+        .timeline-tick {
+            position: absolute;
+            bottom: 5px;
+            font-size: 9px;
+            color: #444;
+            pointer-events: none;
+        }
+
+        #scrubber {
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 1px;
+            background: var(--accent);
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        #scrubber::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -6px;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 10px solid var(--accent);
+        }
+
+        .btn-transport {
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        .btn-transport:hover { background: #333; }
+        .btn-transport.playing {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .keyframe-diamond {
+            position: absolute;
+            top: 50%;
+            width: 18px;
+            height: 18px;
+            background: var(--accent);
+            transform: translate(-50%, -50%) rotate(45deg);
+            border: 2px solid #000;
+            cursor: pointer;
+        }
+        .keyframe-diamond.impact { background: var(--accent-dim); }
+        .keyframe-diamond:hover { transform: translate(-50%, -50%) rotate(45deg) scale(1.3); }
+
+        .time-input {
+            background: #000;
+            border: 1px solid #333;
+            color: var(--accent);
+            font-family: monospace;
+            padding: 2px 5px;
+            height: 30px;
+            width: 40px;
+            text-align: center;
+        }
+
+        #empty-msg { position: absolute; opacity: 0.3; font-size: 14px; }
+        
+        canvas { 
+            width: 100% !important; 
+            height: 100% !important; 
+            display: block;
+            touch-action: none; /* Impede gestos do tablet de interferirem no canvas */
+        }
+        input[type="file"] { width: 100%; }
+        
+        .import-section {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        /* Checkbox Customizado para Touchscreen */
+        input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 6px;
+            cursor: pointer;
+            position: relative;
+            transition: 0.2s;
+            flex-shrink: 0;
+        }
+        input[type="checkbox"]:checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        input[type="checkbox"]:checked::after {
+            content: '✓';
+            position: absolute;
+            color: black;
+            font-size: 16px;
+            font-weight: bold;
+            left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        input[type="range"] { 
+            width: 100%; 
+            height: 35px; /* Aumenta a área de toque do slider */
+            accent-color: var(--accent); 
+        }
+    </style>
+</head>
+<body>
+
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <h1>FX Processor Studio</h1>
+        </div>
+
+        <div class="scroll-area">
+            <div class="import-section">
+                <label style="display: block; font-size: 9px; color: #555; margin-bottom: 12px; letter-spacing: 2px;">SOURCE IMAGE</label>
+                <label for="upload" class="btn-primary">Importar Imagem</label>
+                <input type="file" id="upload" accept="image/*" style="display: none;">
+            </div>
+
+            <div class="effect-card">
+                <h3>Zoom Infinito (Loop) <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Ativo <input type="checkbox" id="toggle-zoom"></label>
+                    </div>
+                    <div class="label-group">
+                        <label>Velocidade <span id="val-zoom-speed">0</span></label>
+                        <input type="range" id="zoom-speed" min="-100" max="100" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Zoom Máximo <span id="val-zoom-max">1.5</span></label>
+                        <input type="range" id="zoom-max" min="1.0" max="3.0" step="0.1" value="1.5">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-zoom" style="border-color: #00ccff; color: #00ccff;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Iluminar Imagem <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Intensidade <span id="val-global-light-intensity">1.0</span></label>
+                        <input type="range" id="global-light-intensity" min="0" max="5" step="0.1" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Cor da Luz</label>
+                        <input type="color" id="global-light-color" value="#ffffff" style="width: 100%; height: 30px; border: none; background: none; cursor: pointer;">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-global-light" style="border-color: #ff00ff; color: #ff00ff;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Cenário (Scrolling) <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Velocidade Horizontal <span id="val-scroll-speed">0</span></label>
+                        <input type="range" id="scroll-speed" min="-1000" max="1000" step="1" value="0">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-scroll" style="border-color: #00ff88; color: #00ff88;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Vento (Folhagens) <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Pintar Área <input type="checkbox" id="toggle-wind-edit"></label>
+                    </div>
+                    <div class="label-group">
+                        <label>Tamanho Pincel <span id="val-wind-brush">25</span></label>
+                        <input type="range" id="wind-brush-size" min="10" max="100" value="25">
+                    </div>
+                    <div class="label-group">
+                        <label>Força <span id="val-wind-strength">10</span></label>
+                        <input type="range" id="wind-strength" min="0" max="100" step="1" value="10">
+                    </div>
+                    <div class="label-group">
+                        <label>Velocidade <span id="val-wind-speed">15</span></label>
+                        <input type="range" id="wind-speed" min="0" max="100" step="1" value="15">
+                    </div>
+                    <div class="label-group">
+                        <label>Direção do Vento</label>
+                        <div style="display: flex; gap: 10px; font-size: 8px; color: #666; margin-bottom: 4px; text-transform: uppercase;">
+                            <span style="flex: 1;">(Esq. ↔ Dir.)</span>
+                            <span style="flex: 1;">(Cima ↔ Baixo)</span>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="range" id="wind-dir-x" title="Horizontal" min="-1" max="1" step="0.1" value="1">
+                            <input type="range" id="wind-dir-y" title="Vertical" min="-1" max="1" step="0.1" value="0.3">
+                        </div>
+                    </div>
+                    <div class="button-row" style="gap: 5px; display: flex;">
+                        <button class="btn-trigger" id="btn-clear-wind" style="font-size: 8px;">Limpar Máscara</button>
+                        <button class="btn-trigger" id="btn-kf-wind" style="border-color: #00ffff; color: #00ffff; flex: 2;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Ondulação <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Ativo <input type="checkbox" id="toggle-ripple"></label>
+                    </div>
+                    <div class="label-group">
+                        <label>Intensidade <span id="val-ripple-strength">40</span></label>
+                        <input type="range" id="ripple-strength" min="0" max="500" value="40">
+                    </div>
+                    <div class="label-group">
+                        <label>Velocidade <span id="val-ripple-speed">1.0</span></label>
+                        <input type="range" id="ripple-speed" min="0.1" max="5.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-preview-ripple">Preview</button>
+                        <button class="btn-trigger" id="btn-kf-ripple" style="border-color: var(--accent);">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Camera Shake <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Ativo <input type="checkbox" id="toggle-shake"></label>
+                    </div>
+                    <div class="label-group">
+                        <label>Força <span id="val-shake-strength">0</span></label>
+                        <input type="range" id="shake-strength" min="0" max="100" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Ângulo <span id="val-shake-angle">0</span>°</label>
+                        <input type="range" id="shake-angle" min="0" max="360" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Velocidade <span id="val-shake-speed">10</span></label>
+                        <input type="range" id="shake-speed" min="1" max="100" value="10">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-shake" style="border-color: #ff5500; color: #ff5500;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Fogo Procedural <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Gerenciar Chamas</label>
+                        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                            <select id="fire-selector" style="flex: 1; background: #000; color: #fff; border: 1px solid #444; height: 30px; font-size: 10px; border-radius: 4px;"></select>
+                            <button class="btn-primary" id="btn-add-fire" style="padding: 0 12px; height: 30px;">+</button>
+                            <button class="btn-primary" id="btn-remove-fire" style="padding: 0 12px; height: 30px; background: #c0392b;">-</button>
+                        </div>
+                    </div>
+                    <div class="label-group">
+                        <label>Posição (X / Y)</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="range" id="fire-pos-x" min="0" max="1" step="0.01" value="0.5">
+                            <input type="range" id="fire-pos-y" min="0" max="1" step="0.01" value="0.5">
+                        </div>
+                    </div>
+                    <div class="label-group">
+                        <label>Tamanho <span id="val-fire-size">1.0</span></label>
+                        <input type="range" id="fire-size" min="0.1" max="3.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="label-group">
+                        <label>Intensidade/Calor <span id="val-fire-int">1.0</span></label>
+                        <input type="range" id="fire-intensity" min="0" max="2.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-fire" style="border-color: #e67e22; color: #e67e22;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Iluminação<i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Gerenciar Luzes</label>
+                        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                            <select id="light-selector" style="flex: 1; background: #000; color: #fff; border: 1px solid #444; height: 30px; font-size: 10px; border-radius: 4px;"></select>
+                            <button class="btn-primary" id="btn-add-light" style="padding: 0 12px; height: 30px;">+</button>
+                            <button class="btn-primary" id="btn-remove-light" style="padding: 0 12px; height: 30px; background: #c0392b;">-</button>
+                        </div>
+                        <label>Ativo <input type="checkbox" id="toggle-light"></label>
+                    </div>
+                    <div class="label-group">
+                        <label>Posição (Esq. ↔ Dir. / Cima ↔ Baixo)</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="range" id="light-pos-x" min="-1" max="2" step="0.01" value="0.5">
+                            <input type="range" id="light-pos-y" min="-1" max="2" step="0.01" value="0.2">
+                        </div>
+                    </div>
+                    <div class="label-group">
+                        <label>Direção <span id="val-light-angle">90</span>°</label>
+                        <input type="range" id="light-angle" min="0" max="360" value="90">
+                    </div>
+                    <div class="label-group">
+                        <label>Tamanho / Alcance <span id="val-light-size">0.5</span></label>
+                        <input type="range" id="light-size" min="0.1" max="2.0" step="0.05" value="0.5">
+                    </div>
+                    <div class="label-group">
+                        <label>Abertura do Feixe <span id="val-light-spread">0.5</span></label>
+                        <input type="range" id="light-spread" min="0" max="1" step="0.01" value="0.5">
+                    </div>
+                    <div class="label-group">
+                        <label>Espessura da Fonte <span id="val-light-source">0.00</span></label>
+                        <input type="range" id="light-source" min="0" max="0.5" step="0.01" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Fogo <span id="val-light-flicker">0.00</span></label>
+                        <input type="range" id="light-flicker" min="0" max="1" step="0.01" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Cor da Luz</label>
+                        <input type="color" id="light-color" value="#ffffff" style="width: 100%; height: 30px; border: none; background: none; cursor: pointer;">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-light" style="border-color: #fffb00; color: #fffb00;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Impacto na Água <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Força do Impacto <span id="val-exp-strength">300</span></label>
+                        <input type="range" id="exp-strength" min="1" max="1000" value="300">
+                    </div>
+                    <div class="label-group">
+                        <label>Ondulação (Intensidade) <span id="val-exp-ripple-strength">40</span></label>
+                        <input type="range" id="exp-ripple-strength" min="0" max="500" value="40">
+                    </div>
+                    <div class="label-group">
+                        <label>Ondulação (Velocidade) <span id="val-exp-ripple-speed">1.0</span></label>
+                        <input type="range" id="exp-ripple-speed" min="0.1" max="5.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="label-group">
+                        <label>Velocidade do Impacto <span id="val-exp-speed">1.0</span></label>
+                        <input type="range" id="exp-speed" min="0.01" max="3.0" step="0.01" value="1.0">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-preview-impact">Preview</button>
+                        <button class="btn-trigger" id="btn-kf-impact" style="border-color: var(--accent-dim); color: var(--accent-dim);">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Correção de Cor <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Contraste <span id="val-contrast">1.00</span></label>
+                        <input type="range" id="contrast" min="0" max="2" step="0.01" value="1">
+                    </div>
+                    <div class="label-group">
+                        <label>Intensidade Branco <span id="val-white">1.00</span></label>
+                        <input type="range" id="white-level" min="0" max="2" step="0.01" value="1">
+                    </div>
+                    <div class="label-group">
+                        <label>Intensidade Preto <span id="val-black">0.00</span></label>
+                        <input type="range" id="black-level" min="-1" max="1" step="0.01" value="0">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-color" style="border-color: #ffcc00; color: #ffcc00;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Vinheta <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Ativo <input type="checkbox" id="toggle-vignette"></label>
+                    </div>
+                    <div class="label-group">
+                        <label>Intensidade <span id="val-vignette-strength">0.50</span></label>
+                        <input type="range" id="vignette-strength" min="0" max="1" step="0.01" value="0.5">
+                    </div>
+                    <div class="label-group">
+                        <label>Tamanho <span id="val-vignette-size">0.30</span></label>
+                        <input type="range" id="vignette-size" min="0" max="1" step="0.01" value="0.3">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-vignette" style="border-color: #aa00ff; color: #aa00ff;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="effect-card">
+                <h3>Fumaça / Neblina <i class="fas fa-chevron-down" style="font-size: 8px; transition: 0.3s;"></i></h3>
+                <div class="vfx-content">
+                    <div class="label-group">
+                        <label>Quantidade <span id="val-vapor-progress">0</span>%</label>
+                        <input type="range" id="vapor-progress" min="0" max="100" value="0">
+                    </div>
+                    <div class="label-group">
+                        <label>Velocidade <span id="val-vapor-speed">1.0</span></label>
+                        <input type="range" id="vapor-speed" min="0.1" max="5.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="label-group">
+                        <label>Cor da Fumaça</label>
+                        <input type="color" id="vapor-color" value="#ffffff" style="width: 100%; height: 30px; border: none; background: none; cursor: pointer;">
+                    </div>
+                    <div class="button-row">
+                        <button class="btn-trigger" id="btn-kf-vapor" style="border-color: #888888; color: #ffffff;">◆ Add Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; text-align: center; display: flex; flex-direction: column; gap: 8px;">
+                <button class="btn-primary btn-record" id="btn-render" style="width: 100%; padding: 12px;">EXPORTAR VÍDEO (WEBM)</button>
+                <button class="btn-primary" id="btn-render-png" style="width: 100%; padding: 12px; background: #e67e22;">EXPORTAR SEQ. PNG</button>
+                <div style="font-size: 9px; color: #555; text-align: center;">2:1 (1456x728) • 24 FPS • WebM ou Sequência PNG</div>
+            </div>
+        </div>
+    </aside>
+
+    <main id="viewport">
+        <div id="status-indicator">● RENDERING: <span id="timer">0</span>s</div>
+        <div id="empty-msg">Workspace Vazio</div>
+        <button id="toggle-3d" style="position: absolute; top: 15px; left: 15px; z-index: 1000; background: rgba(0,0,0,0.8); color: #fff; border: 1px solid #444; padding: 8px 15px; font-size: 10px; cursor: pointer; border-radius: 4px; display: none; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; transition: 0.2s;">Preview 3D: OFF</button>
+        <div id="three-container" style="display:none; width:100%; height:100%; position: absolute; top: 0; left: 0; cursor: move;"></div>
+        <div id="canvas-container"></div>
+    </main>
+
+    <footer id="timeline-container">
+        <div id="timeline-header">
+            <button id="btn-reset" class="btn-transport" title="Ir para o Início">|◀</button>
+            <button id="btn-play" class="btn-transport">Play</button>
+            <div style="font-family: monospace; color: var(--accent); font-size: 14px; min-width: 80px;" id="time-display">00:00.00</div>
+            <div style="flex: 1"></div>
+            <div>DURAÇÃO TOTAL: <input type="number" id="render-duration" class="time-input" value="10" min="1">s</div>
+        </div>
+        <div id="timeline-track">
+            <div id="timeline-content">
+                <div id="scrubber"></div>
+                <div id="keyframes-wrapper"></div>
+                <div id="ruler-ticks"></div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let app, sprite, rippleMap, rippleFilter, impactFilter, impactSprite, vaporFilter, vignetteFilter, colorFilter, windFilter, globalLightFilter, fireNoiseTex;
+        let lightFilters = []; // Array para múltiplos filtros de luz
+        let fireFilters = []; // Array para múltiplos filtros de fogo
+        let zoomContainer, zoomLayers = [], maskTexture, maskSprite, maskBrush, maskBlur;
+        let count = 0;
+        let explosionActive = false;
+        let explosionProgress = 0;
+        let vaporActive = false;
+        let currentTime = 0;
+        let isDraggingScrubber = false;
+        let isPlaying = false;
+        let isPaintingMask = false;
+        let lastPlayTime = 0;
+        const NUM_ZOOM_LAYERS = 3;
+        const ZOOM_MIN = 1.0; // Imagem original (100%)
+        const PPS = 200; // Pixels Per Second - Aumentado para maior precisão/distância
+
+        // --- SISTEMA PREVIEW 3D ---
+        let isPreview3D = false;
+        let threeScene, threeCamera, threeRenderer, threeTexture;
+        let threeYaw = 0, threePitch = 0;
+
+        // Listener Global de Interação 3D (Idêntico ao Estúdio 3D)
+        window.addEventListener('pointermove', (e) => {
+            if (!isPreview3D || !threeRenderer) return;
+            
+            const isLocked = document.pointerLockElement === threeRenderer.domElement;
+            
+            if (isLocked) {
+                threeYaw += e.movementX * 0.0015;
+                threePitch -= e.movementY * 0.0015;
+            } else if (e.buttons === 1) { // Arrastando com o mouse
+                threeYaw += e.movementX * 0.003;
+                threePitch -= e.movementY * 0.003;
+            } else {
+                return;
+            }
+
+            // Limita o ângulo vertical para não "dar a volta" no cenário
+            threePitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, threePitch));
+        });
+
+        function setupThree() {
+            const container = document.getElementById('three-container');
+            if (!threeRenderer) {
+                threeScene = new THREE.Scene();
+                threeCamera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                
+                threeRenderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+                threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Limita a densidade de pixels
+                threeRenderer.setSize(container.clientWidth, container.clientHeight);
+                threeRenderer.outputColorSpace = THREE.SRGBColorSpace;
+                container.appendChild(threeRenderer.domElement);
+
+                // Ativa o Pointer Lock ao clicar no canvas (Entrar na cena)
+                threeRenderer.domElement.addEventListener('mousedown', (e) => {
+                    if (e.button === 0) {
+                        threeRenderer.domElement.requestPointerLock();
+                    }
+                });
+
+                window.addEventListener('resize', () => {
+                    if (threeRenderer) {
+                        threeRenderer.setSize(container.clientWidth, container.clientHeight);
+                        threeCamera.aspect = container.clientWidth / container.clientHeight;
+                        threeCamera.updateProjectionMatrix();
+                    }
+                });
+            }
+
+            // Garante que a textura do PIXI seja mapeada corretamente como fundo 360
+            const texture = new THREE.CanvasTexture(app.view);
+            texture.mapping = THREE.EquirectangularReflectionMapping; 
+            texture.colorSpace = THREE.SRGBColorSpace;
+            threeTexture = texture;
+            threeScene.background = threeTexture;
+        }
+
+        document.getElementById('toggle-3d').onclick = () => {
+            isPreview3D = !isPreview3D;
+            const btn = document.getElementById('toggle-3d');
+            document.getElementById('three-container').style.display = isPreview3D ? 'block' : 'none';
+            document.getElementById('canvas-container').style.opacity = isPreview3D ? '0' : '1';
+            // Impede que o canvas 2D bloqueie os cliques no 3D
+            document.getElementById('canvas-container').style.pointerEvents = isPreview3D ? 'none' : 'auto';
+            btn.innerText = isPreview3D ? "Preview 3D: ON" : "Preview 3D: OFF";
+            if (isPreview3D) setupThree();
+        };
+
+        const settings = {
+            rippleActive: false,
+            rippleStrength: 40,
+            rippleSpeed: 1.0,
+            expStrength: 300,
+            expSpeed: 1.0,
+            expRippleStrength: 40,
+            expRippleSpeed: 1.0,
+            vaporProgress: 0,
+            vaporSpeed: 0.5,
+            vaporColor: '#ffffff',
+            scrollSpeed: 0,
+            zoomActive: false,
+            zoomSpeed: 0,
+            zoomMax: 1.5,
+            shakeActive: false,
+            shakeStrength: 0,
+            shakeAngle: 0,
+            shakeSpeed: 10,
+            vignetteActive: false,
+            vignetteStrength: 0.5,
+            vignetteSize: 0.3,
+            contrast: 1.0,
+            whiteLevel: 1.0,
+            blackLevel: 0.0,
+            windStrength: 0.5,
+            windSpeed: 0.5,
+            windDirX: 1.0,
+            windDirY: 0.3,
+            lights: [{ active: false, posX: 0.5, posY: 0.2, angle: 90, size: 0.5, spread: 0.5, source: 0, flicker: 0, color: '#ffffff' }],
+            selectedLightIndex: 0,
+            fires: [],
+            selectedFireIndex: 0,
+            globalLightIntensity: 0.0,
+            globalLightColor: '#ffffff',
+            renderDuration: 10,
+            keyframes: []
+        };
+
+        const windShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform sampler2D uMask;
+            uniform sampler2D uNoise;
+            uniform float uTime;
+            uniform float uStrength;
+            uniform float uSpeed;
+            uniform float uDuration;
+            uniform vec2 uDirection;
+
+            void main() {
+                float mask = texture2D(uMask, vTextureCoord).r;
+                if (mask <= 0.01) {
+                     gl_FragColor = texture2D(uSampler, vTextureCoord);
+                     return;
+                }
+
+                // Para um loop perfeito, calculamos um número inteiro de oscilações baseado na velocidade e duração.
+                float cycles = max(1.0, floor(uSpeed * uDuration + 0.5));
+                float phase = uTime / uDuration;
+                
+                float angle = phase * 6.28318 * cycles;
+                
+                // Variação espacial para que diferentes partes da imagem não se movam em bloco rígido.
+                float spatialOffset = (vTextureCoord.x * 3.0 + vTextureCoord.y * 2.0) * 1.2;
+                
+                // Movimento principal de balanço + harmônico de "ondulação" (shiver).
+                // Ambos são baseados em 'cycles' inteiros, garantindo continuidade total no loop.
+                float sway = sin(angle + spatialOffset);
+                sway += sin(angle * 2.0 + spatialOffset * 1.5) * 0.25;
+
+                // uStrength 1.0 (~100 no slider) gera um deslocamento suave de aproximadamente 1 a 2cm.
+                float dist = sway * uStrength * mask * 0.025;
+                vec2 uv = vTextureCoord + (uDirection * dist);
+                gl_FragColor = texture2D(uSampler, uv);
+            }
+        `;
+
+        const lightShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform vec2 uPos;
+            uniform float uAngle;
+            uniform float uSize;
+            uniform float uSpread;
+            uniform float uSourceSize;
+            uniform float uTime;
+            uniform float uFlicker;
+            uniform vec3 uColor;
+
+            void main() {
+                float aspect = 2.0; // Proporção 2:1
+                vec2 p = vTextureCoord - uPos;
+                
+                // FIX: Continuidade Horizontal 360° (Equirretangular)
+                if (p.x > 0.5) p.x -= 1.0;
+                else if (p.x < -0.5) p.x += 1.0;
+                
+                p.x *= aspect;
+                
+                float angleRad = uAngle * 0.0174533;
+                vec2 dir = vec2(cos(angleRad), sin(angleRad));
+
+                float distAlong = dot(p, dir);
+                
+                // Ruído multicamada para simular chamas realistas
+                float wave1 = sin(distAlong * 45.0 - uTime * 6.28318 * 5.0) * 0.02;
+                float wave2 = cos(distAlong * 22.0 - uTime * 6.28318 * 3.0 + 1.2) * 0.03;
+                float wave3 = sin(distAlong * 12.0 - uTime * 6.28318 * 2.0 + 2.5) * 0.04;
+                
+                // A turbulência aumenta com a distância para simular o balanço das pontas das chamas
+                float noise = (wave1 + wave2 + wave3) * uFlicker * (0.3 + max(0.0, distAlong) * 2.0);
+                
+                // FIX: Se estiver "atrás" da origem (distAlong < 0), calculamos a distância radial ao ponto uPos.
+                // Isso cria o arredondamento da fonte baseado no uSourceSize.
+                float distAcross = ((distAlong < 0.0) ? length(p) : length(p - distAlong * dir)) + noise;
+
+                // uSourceSize agora controla a largura real do feixe no início
+                float currentWidth = uSourceSize + (max(0.0, distAlong) * uSpread);
+                float cone = smoothstep(currentWidth, currentWidth * 0.5, distAcross);
+                
+                // FIX: Ajustamos o falloff para permitir que a borda arredondada apareça sem cortes secos
+                float falloff = smoothstep(uSize, -uSourceSize, distAlong);
+
+                // Oscilação errática e veloz de intensidade (flicker de fogo)
+                float pulse = 1.0 + (sin(uTime * 6.28318 * 10.0) * cos(uTime * 6.28318 * 5.0) * 0.2 * uFlicker);
+                vec4 tex = texture2D(uSampler, vTextureCoord);
+                gl_FragColor = vec4(tex.rgb + (uColor * cone * falloff * pulse), tex.a);
+            }
+        `;
+
+        
+        const fireShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform sampler2D uNoise;
+            uniform vec2 uPos;
+            uniform float uSize;
+            uniform float uIntensity;
+            uniform float uTime;
+
+            void main() {
+                vec2 uv = vTextureCoord;
+                vec2 p = uv - uPos;
+                
+                // Fix 360 horizontal wrap
+                if (p.x > 0.5) p.x -= 1.0;
+                else if (p.x < -0.5) p.x += 1.0;
+                
+                p.x *= 2.0; // Aspect ratio fix
+                float scale = uSize + 0.01;
+                p /= scale;
+
+                float y = -p.y;
+
+                // Sincronização com o movimento da iluminação (Flicker Waves)
+                // Copiando as frequências de oscilação do lightShader
+                float t = uTime * 6.28318;
+                float w1 = sin(y * 5.0 - t * 2.0) * 0.03;
+                float w2 = cos(y * 10.0 - t * 3.0 + 1.2) * 0.02;
+                float flickerWaves = (w1 + w2) * (0.4 + y);
+                
+                // Aplica o balanço lateral sincronizado
+                p.x += flickerWaves;
+
+                // Geometria do Fogo (Triângulo Orgânico)
+                float fireWidthFactor = pow(max(0.0, 1.0 - y), 0.8);
+                float fireShape = smoothstep(0.45 * fireWidthFactor, 0.0, abs(p.x));
+                fireShape *= smoothstep(-0.05, 0.15, y) * smoothstep(1.0, 0.7, y); 
+
+                // Geometria da Fumaça (Expansiva para cima)
+                float smokeY = y - 0.3;
+                float smokeWidth = 0.4 * (1.0 + smokeY * 0.8);
+                float smokeShape = smoothstep(smokeWidth, 0.0, abs(p.x + flickerWaves * 0.6));
+                smokeShape *= smoothstep(0.2, 0.9, y) * smoothstep(2.5, 1.2, y);
+                
+                // Ruídos Orgânicos Diferenciados
+                vec2 nUV = vTextureCoord * 1.5;
+                float noiseT = uTime * 2.0;
+                float n = texture2D(uNoise, nUV + vec2(0.0, noiseT * 0.5)).r * 0.6 + texture2D(uNoise, nUV * 2.0 - vec2(0.0, noiseT)).r * 0.3;
+                float sn = texture2D(uNoise, nUV * 0.8 + vec2(uTime * 0.1, noiseT * 0.3)).r;
+
+                float fireVal = fireShape * n * 3.5;
+                float smokeVal = smokeShape * sn * 1.5 * uIntensity;
+                
+                // Cores Principais
+                vec3 fireCol = mix(vec3(0.9, 0.2, 0.0), vec3(1.0, 0.8, 0.2), fireVal);
+                if(fireVal > 0.8) fireCol = mix(fireCol, vec3(1.0, 1.0, 0.9), (fireVal - 0.8) * 2.0);
+                vec3 smokeCol = vec3(0.08, 0.08, 0.08); // Cinza muito escuro (carvão)
+                
+                // Núcleo AZUL - Pequeno e firme na base
+                float blueMask = smoothstep(0.15, 0.0, length(p + vec2(0.0, 0.12))) * n * 3.0;
+                vec3 blueCore = vec3(0.0, 0.4, 1.0) * blueMask;
+
+                vec4 tex = texture2D(uSampler, vTextureCoord);
+                
+                // Glow Ambiente
+                float glowMask = smoothstep(1.8, 0.0, length(p * vec2(1.0, 0.6)));
+                vec3 glowCol = vec3(1.0, 0.4, 0.1) * glowMask * 0.5 * uIntensity;
+                
+                vec3 fireBody = (fireCol * fireVal) * (0.4 + uIntensity * 0.6);
+                
+                // Composição: Fundo -> Fumaça (Interpolada) -> Fogo/Glow (Aditivo)
+                vec3 finalRGB = mix(tex.rgb, smokeCol, smokeVal);
+                finalRGB += fireBody + blueCore + glowCol;
+                
+                gl_FragColor = vec4(finalRGB, tex.a);
+            }
+        `;
+
+        const globalLightShader = `
+    varying vec2 vTextureCoord;
+    uniform sampler2D uSampler;
+    uniform vec3 uColor;
+    uniform float uIntensity;
+
+    void main() {
+        vec4 tex = texture2D(uSampler, vTextureCoord);
+        
+        // Se o pixel for totalmente transparente, retorna ele mesmo (performance)
+        if (tex.a < 0.01) {
+            gl_FragColor = tex;
+            return;
+        }
+
+        float glow = 0.0;
+        float totalWeight = 0.0;
+        float radius = uIntensity * 0.03; 
+        
+        // Amostragem apenas do Alpha para criar o brilho (Glow)
+        for(float i = 1.0; i <= 16.0; i++) {
+            float angle = i * 2.39996;
+            float dist = (i / 16.0) * radius;
+            vec2 offset = vec2(cos(angle), sin(angle)) * dist;
+            
+            // FIX: Wrap Horizontal para amostragem de brilho na emenda 360
+            vec2 sampleUV = vTextureCoord + offset;
+            sampleUV.x = fract(sampleUV.x);
+            float sampleAlpha = texture2D(uSampler, sampleUV).a;
+            
+            float weight = 1.0 - (i / 16.0);
+            glow += sampleAlpha * weight;
+            totalWeight += weight;
+        }
+        
+        glow /= totalWeight;
+
+        // Calcula a cor final: Cor original + Brilho aditivo
+        // Aumentamos o brilho proporcionalmente ao alpha do glow
+        vec3 finalColor = tex.rgb + (uColor * glow * uIntensity);
+        
+        // Garante que o alpha final seja o da imagem original ou a expansão do brilho
+        float finalAlpha = max(tex.a, glow * uIntensity);
+        
+        gl_FragColor = vec4(finalColor, finalAlpha);
+    }
+`;
+
+        const vaporShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform sampler2D uNoise;
+            uniform float uThreshold; // Quantidade (Agora controla a Opacidade Global)
+            uniform float uTime;
+            uniform float uDuration;
+            uniform float uSpeed;
+            uniform vec3 uColor;
+
+            float sampleNoise(vec2 uv) {
+                return texture2D(uNoise, mod(uv, 4.0)).r;
+            }
+
+            void main() {
+                vec4 color = texture2D(uSampler, vTextureCoord);
+                vec2 uv = vTextureCoord;
+                
+                // Distorção de ruído para variar a densidade espacial
+                float distortion = sampleNoise(uv * 1.2 + uTime * 0.05) * 0.4;
+                
+                // Efeito de Ondas Brutais (Undulation)
+                // Criamos oscilações em frequências diferentes para gerar o movimento de "ondas"
+                float waveX = sin(uv.y * 3.5 + uTime * 1.5) * 0.5;
+                float waveY = cos(uv.x * 2.5 + uTime * 1.2) * 0.4;
+                
+                float rise = uTime; 
+                float drift = uTime * 0.6; 
+                
+                // FIX: Garantir que o drift horizontal não quebre a continuidade
+                uv.x = fract(uv.x);
+                vec2 pUV = vec2(uv.x * 15.0 + drift + distortion + waveX, 
+                                uv.y * 5.0 + rise + distortion + waveY);
+                
+                float n = sampleNoise(pUV * 2.0 + 0.33) * 0.25;
+                n += sampleNoise(pUV * 4.0 + 0.66) * 0.125;
+                n += sampleNoise(pUV * 8.0) * 0.0625;
+                n += sampleNoise(pUV * 16.0) * 0.03125;
+                n += sampleNoise(pUV * 32.0) * 0.0156;
+                
+                n = pow(n * 1.6, 1.1); 
+                
+                // Suavizamos o gradiente para não "cortar" visualmente quando em alta velocidade
+                float verticalGradient = smoothstep(0.3, 1.0, uv.y);
+                
+                // 5. Opacidade controlada com um teto menor para ser "sutil"
+                float finalAlpha = n * verticalGradient * uThreshold * 3.0;
+
+                // 6. Shading e Cor
+                float shading = smoothstep(0.15, 0.7, n);
+                vec3 smokeColor = mix(uColor * 0.5, uColor, shading);
+
+                color.rgb = mix(color.rgb, smokeColor, finalAlpha);
+                
+                gl_FragColor = color;
+            }
+        `;
+
+        const vignetteShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform float uStrength;
+            uniform float uSize;
+
+            void main() {
+                vec4 color = texture2D(uSampler, vTextureCoord);
+                
+                // FIX: Vinheta em ambiente 360 deve afetar apenas os polos (Y) 
+                // para não criar uma mancha preta fixa na visão do usuário
+                float distY = abs(vTextureCoord.y - 0.5) * 2.0;
+                float distX = abs(vTextureCoord.x - 0.5) * 2.0;
+                // No 3D, a vinheta funciona melhor como um escurecimento de teto/chão
+                float dist = length(vec2(distX * 0.2, distY)); 
+                
+                // Cálculo de vinheta mais robusto
+                // O uSize agora empurra o início do escurecimento
+                float start = (1.0 - uSize) * 0.7;
+                float vignette = smoothstep(start, 0.8, dist);
+                
+                // Aplicamos uma curva de potência para um degradee suave e misturamos com preto (vec3(0.0))
+                // Isso garante que a vinheta cubra a neblina branca
+                color.rgb = mix(color.rgb, vec3(0.0), vignette * uStrength);
+                gl_FragColor = color;
+            }
+        `;
+
+        const colorCorrectionShader = `
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            uniform float uContrast;
+            uniform float uWhite;
+            uniform float uBlack;
+
+            void main() {
+                vec4 tex = texture2D(uSampler, vTextureCoord);
+                vec3 color = tex.rgb;
+                
+                // Aplicar Pretos (offset) e Brancos (ganho)
+                color = (color - uBlack) * uWhite;
+                // Aplicar Contraste linear
+                color = (color - 0.5) * uContrast + 0.5;
+                
+                gl_FragColor = vec4(clamp(color, 0.0, 1.0), tex.a);
+            }
+        `;
+
+        function createRadialTexture() {
+            const size = 1024;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = 'rgb(128,128,128)';
+            ctx.fillRect(0, 0, size, size);
+            
+            const center = size / 2;
+            ctx.lineWidth = 4;
+            
+            for (let r = 10; r < center - 50; r += 10) {
+                const intensity = Math.sin(r * 0.2) * 127;
+                const color = Math.floor(128 + intensity);
+                // Apenas tons de cinza para o DisplacementMap
+                const hexVal = color.toString(16).padStart(2, '0');
+                ctx.strokeStyle = `#${hexVal}${hexVal}${hexVal}`;
+                
+                if (color === 128) continue;
+
+                ctx.beginPath();
+                ctx.arc(center, center, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            return PIXI.Texture.from(canvas);
+        }
+
+        function createNoiseTexture() {
+            const size = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            for(let i=0; i<size; i++) {
+                for(let j=0; j<size; j++) {
+                    const v = Math.random() * 255;
+                    ctx.fillStyle = `rgb(${v},${v},${v})`;
+                    ctx.fillRect(i,j,1,1);
+                }
+            }
+            const tex = PIXI.Texture.from(canvas);
+            tex.baseTexture.wrapMode = PIXI.WRAP_MODES.REPEAT;
+            return tex;
+        }
+
+        function setupZoomLayers(texture) {
+            if (!zoomContainer) return;
+            zoomContainer.removeChildren();
+            zoomLayers = [];
+
+            for (let i = 0; i < NUM_ZOOM_LAYERS; i++) {
+                const s = new PIXI.TilingSprite(texture, 1456, 728);
+                // Armazena o offset inicial para distribuir as camadas no loop
+                s.initialZOffset = i / NUM_ZOOM_LAYERS;
+                s.zProgress = s.initialZOffset;
+                zoomContainer.addChild(s);
+                zoomLayers.push(s);
+            }
+        }
+
+        function initPixi(imageURL) {
+            if(document.getElementById('empty-msg')) document.getElementById('empty-msg').style.display = 'none';
+            if (app) app.destroy(true, { children: true, texture: true, baseTexture: true });
+
+            app = new PIXI.Application({
+                width: 1456, height: 728,
+                backgroundAlpha: 0,
+                preserveDrawingBuffer: true,
+                resolution: 1, // Garante 1920x1080 exatos independente do monitor
+                autoDensity: false
+            });
+
+            document.getElementById('canvas-container').innerHTML = "";
+            document.getElementById('canvas-container').appendChild(app.view);
+            document.getElementById('toggle-3d').style.display = 'block';
+
+            zoomContainer = new PIXI.Container();
+            app.stage.addChild(zoomContainer);
+
+            // FIX: Trava a área dos filtros no tamanho da tela. 
+            // Isso impede que a luz "pule" quando o conteúdo interno se move ou ondula.
+            app.stage.filterArea = app.screen;
+
+            // FIX: Alinha as coordenadas dos filtros com a tela para precisão absoluta ao pintar
+            if (zoomContainer) zoomContainer.filterArea = app.screen;
+
+            // Setup Mascara de Vento
+            maskTexture = PIXI.RenderTexture.create({ width: 1456, height: 728 });
+            maskSprite = new PIXI.Sprite(maskTexture);
+            
+            // Criação de um pincel macio (Soft Brush) usando gradiente radial
+            const bCanvas = document.createElement('canvas');
+            bCanvas.width = 128;
+            bCanvas.height = 128;
+            const bCtx = bCanvas.getContext('2d');
+            const grad = bCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            bCtx.fillStyle = grad;
+            bCtx.fillRect(0, 0, 128, 128);
+            
+            maskBrush = new PIXI.Sprite(PIXI.Texture.from(bCanvas));
+            maskBrush.anchor.set(0.5);
+            maskBlur = new PIXI.filters.BlurFilter(4);
+            
+            app.stage.eventMode = 'static';
+            app.stage.on('pointerdown', (e) => { if(document.getElementById('toggle-wind-edit').checked) { isPaintingMask = true; paintMask(e); } }, { passive: false });
+            app.stage.on('pointermove', (e) => { if(isPaintingMask) paintMask(e); }, { passive: false });
+            window.addEventListener('pointerup', () => isPaintingMask = false);
+
+            const texture = PIXI.Texture.from(imageURL);
+            // Trocado para Sprite comum para evitar repetição (multiplicação)
+            sprite = new PIXI.TilingSprite(texture, 1456, 728);
+            
+            const onTextureLoaded = () => {
+                if (texture.width <= 1) return; // Garante que a imagem já tenha dimensões reais
+
+                // Cálculo de Aspect Fit: Imagem inteira na tela sem cortes nem repetições
+                const ratio = Math.min(1456 / texture.width, 728 / texture.height);
+                sprite.tileScale.set(ratio);
+                // Centraliza a textura inicialmente
+                sprite.tilePosition.x = (1456 - texture.width * ratio) / 2;
+                sprite.tilePosition.y = (728 - texture.height * ratio) / 2;
+                
+                setupZoomLayers(texture);
+            };
+
+            texture.baseTexture.wrapMode = PIXI.WRAP_MODES.REPEAT; // Necessário para o scroll infinito
+            if (texture.baseTexture.hasLoaded) onTextureLoaded();
+            else texture.baseTexture.on('loaded', onTextureLoaded);
+
+            rippleMap = PIXI.Sprite.from('https://pixijs.com/assets/pixi-filters/displacement_map_repeat.jpg');
+            rippleMap.texture.baseTexture.wrapMode = PIXI.WRAP_MODES.REPEAT;
+            rippleFilter = new PIXI.DisplacementFilter(rippleMap);
+
+            impactSprite = new PIXI.Sprite(createRadialTexture());
+            impactSprite.anchor.set(0.5);
+            impactSprite.x = app.screen.width / 2;
+            impactSprite.y = app.screen.height / 2;
+            impactSprite.scale.set(0);
+            impactFilter = new PIXI.DisplacementFilter(impactSprite);
+
+            vaporFilter = new PIXI.Filter(null, vaporShader, {
+                uThreshold: 0,
+                uNoise: createNoiseTexture(),
+                uTime: 0,
+                uDuration: settings.renderDuration,
+                uSpeed: 1.0,
+                uColor: [1, 1, 1]
+            });
+
+            vignetteFilter = new PIXI.Filter(null, vignetteShader, {
+                uStrength: 0.5,
+                uSize: 0.3
+            });
+
+            colorFilter = new PIXI.Filter(null, colorCorrectionShader, {
+                uContrast: 1.0,
+                uWhite: 1.0,
+                uBlack: 0.0
+            });
+
+            windFilter = new PIXI.Filter(null, windShader, {
+                uMask: maskTexture,
+                uNoise: createNoiseTexture(),
+                uTime: 0,
+                uDuration: settings.renderDuration,
+                uStrength: 1.0,
+                uSpeed: 1.0,
+                uDirection: new PIXI.Point(1, 0.3)
+            });
+
+            fireNoiseTex = createNoiseTexture();
+            globalLightFilter = new PIXI.Filter(null, globalLightShader, {
+                uColor: [1, 1, 1],
+                uIntensity: 0.0,
+                uFilterClamp: [0, 0, 1, 1]
+            });
+            globalLightFilter.padding = 300; // Essencial para permitir que o brilho apareça fora da imagem
+
+            app.stage.addChild(sprite);
+            app.stage.addChild(rippleMap);
+            app.stage.addChild(impactSprite);
+
+            // Filtros de conteúdo (efeitos que afetam a imagem em si)
+            const contentFilters = [rippleFilter, impactFilter, windFilter];
+            sprite.filters = contentFilters;
+            zoomContainer.filters = contentFilters;
+
+            // FIX: Agora que o sprite existe, configuramos a área de filtro com segurança
+            sprite.filterArea = app.screen;
+            zoomContainer.filterArea = app.screen;
+
+            // Filtros Globais (pós-processamento aplicado sobre tudo na tela)
+            updateFiltersArray();
+
+            // Ticker Restaurado: Mantém a animação "Ao Vivo" mesmo com o Play parado
+            app.ticker.add(() => {
+                if (!isPlaying) {
+                    // Incrementa o progresso do impacto manual (Preview)
+                    // Incrementa o progresso do impacto manual (Preview) com limite de segurança
+                    if (explosionActive) {
+                        explosionProgress += 0.016 * settings.expSpeed; 
+                        if (explosionProgress >= 1) {
+                            explosionActive = false;
+                        }
+                        if (explosionProgress >= 1) explosionActive = false;
+                    }
+                    // Incrementa um contador global apenas para o visual "ao vivo"
+                    count += 0.04 * settings.rippleSpeed;
+                    // FIX: Mantém o contador dentro de um limite para evitar perda de precisão em tablets
+                    count = (count + 0.04 * settings.rippleSpeed) % 10000;
+                    applySettingsToCanvas(true); 
+                }
+
+                // Renderiza o loop do Three.js se o preview estiver ativo
+                if (isPreview3D && threeRenderer) {
+                    threeTexture.needsUpdate = true;
+                    const target = new THREE.Vector3();
+                    target.x = Math.sin(threeYaw) * Math.cos(threePitch);
+                    target.y = Math.sin(threePitch);
+                    target.z = -Math.cos(threeYaw) * Math.cos(threePitch);
+                    threeCamera.lookAt(target);
+                    threeRenderer.render(threeScene, threeCamera);
+                }
+            });
+
+            const resizePreview = () => {
+                const viewport = document.getElementById('viewport');
+                const scale = Math.min(viewport.clientWidth / 1456, viewport.clientHeight / 728) * 0.95;
+                document.getElementById('canvas-container').style.transform = `translate(-50%, -50%) scale(${scale})`;
+            };
+            window.addEventListener('resize', resizePreview); resizePreview();
+            updateLightSelector();
+        }
+
+        function updateFiltersArray() {
+            if (!app) return;
+            const activeLightFilters = lightFilters.filter((f, i) => settings.lights[i] && settings.lights[i].active);
+            const activeFireFilters = fireFilters.filter((f, i) => settings.fires[i]);
+            app.stage.filters = [colorFilter, globalLightFilter, vaporFilter, ...activeLightFilters, ...activeFireFilters, vignetteFilter];
+        }
+
+        function updateLightSelector() {
+            const sel = document.getElementById('light-selector');
+            sel.innerHTML = "";
+            settings.lights.forEach((_, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = `Luz ${i + 1}`;
+                sel.appendChild(opt);
+            });
+            sel.value = settings.selectedLightIndex;
+        }
+
+        function updateFireSelector() {
+            const sel = document.getElementById('fire-selector');
+            sel.innerHTML = "";
+            settings.fires.forEach((_, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = `Fogo ${i + 1}`;
+                sel.appendChild(opt);
+            });
+            sel.value = settings.selectedFireIndex;
+        }
+
+        document.getElementById('btn-add-fire').onclick = () => {
+            settings.fires.push({ posX: 0.5, posY: 0.5, size: 1.0, intensity: 1.0 });
+            settings.selectedFireIndex = settings.fires.length - 1;
+            updateFireSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('btn-remove-fire').onclick = () => {
+            if (settings.fires.length === 0) return;
+            settings.fires.splice(settings.selectedFireIndex, 1);
+            settings.selectedFireIndex = Math.max(0, settings.selectedFireIndex - 1);
+            updateFireSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('fire-selector').onchange = (e) => {
+            settings.selectedFireIndex = parseInt(e.target.value);
+            seek(currentTime);
+        };
+
+        document.getElementById('btn-add-light').onclick = () => {
+            settings.lights.push({
+                active: true, posX: 0.5, posY: 0.2, angle: 90, size: 0.5, 
+                spread: 0.5, source: 0, flicker: 0, color: '#ffffff'
+            });
+            settings.selectedLightIndex = settings.lights.length - 1;
+            updateLightSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('btn-remove-light').onclick = () => {
+            if (settings.lights.length <= 1) return;
+            settings.lights.splice(settings.selectedLightIndex, 1);
+            settings.selectedLightIndex = Math.max(0, settings.selectedLightIndex - 1);
+            updateLightSelector();
+            seek(currentTime);
+        };
+
+        document.getElementById('light-selector').onchange = (e) => {
+            settings.selectedLightIndex = parseInt(e.target.value);
+            seek(currentTime);
+        };
+
+        function paintMask(e) {
+            const pos = e.getLocalPosition(app.stage);
+            const size = parseInt(document.getElementById('wind-brush-size').value);
+
+            maskBrush.width = size;
+            maskBrush.height = size;
+            maskBrush.position.copyFrom(pos);
+            app.renderer.render(maskBrush, { renderTexture: maskTexture, clear: false });
+        }
+
+        // Listeners UI
+        document.getElementById('upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => initPixi(ev.target.result);
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('ripple-strength').addEventListener('input', (e) => {
+            settings.rippleStrength = parseInt(e.target.value);
+            document.getElementById('val-ripple-strength').innerText = settings.rippleStrength;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('ripple-speed').addEventListener('input', (e) => {
+            settings.rippleSpeed = parseFloat(e.target.value);
+            document.getElementById('val-ripple-speed').innerText = settings.rippleSpeed.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('scroll-speed').addEventListener('input', (e) => {
+            settings.scrollSpeed = parseInt(e.target.value);
+            document.getElementById('val-scroll-speed').innerText = settings.scrollSpeed;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('toggle-ripple').addEventListener('change', (e) => {
+            settings.rippleActive = e.target.checked;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('toggle-zoom').addEventListener('change', (e) => {
+            settings.zoomActive = e.target.checked;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('zoom-speed').addEventListener('input', (e) => {
+            settings.zoomSpeed = parseInt(e.target.value);
+            document.getElementById('val-zoom-speed').innerText = settings.zoomSpeed;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('zoom-max').addEventListener('input', (e) => {
+            settings.zoomMax = parseFloat(e.target.value);
+            document.getElementById('val-zoom-max').innerText = settings.zoomMax.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('exp-strength').addEventListener('input', (e) => {
+            settings.expStrength = parseFloat(e.target.value);
+            document.getElementById('val-exp-strength').innerText = settings.expStrength;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('exp-ripple-strength').addEventListener('input', (e) => {
+            settings.expRippleStrength = parseInt(e.target.value);
+            document.getElementById('val-exp-ripple-strength').innerText = settings.expRippleStrength;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('exp-ripple-speed').addEventListener('input', (e) => {
+            settings.expRippleSpeed = parseFloat(e.target.value);
+            document.getElementById('val-exp-ripple-speed').innerText = settings.expRippleSpeed.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('exp-speed').addEventListener('input', (e) => {
+            settings.expSpeed = parseFloat(e.target.value);
+            document.getElementById('val-exp-speed').innerText = settings.expSpeed.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('wind-brush-size').addEventListener('input', (e) => {
+            document.getElementById('val-wind-brush').innerText = e.target.value;
+        });
+
+        document.getElementById('wind-strength').addEventListener('input', (e) => {
+            settings.windStrength = parseInt(e.target.value);
+            document.getElementById('val-wind-strength').innerText = settings.windStrength;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('wind-speed').addEventListener('input', (e) => {
+            settings.windSpeed = parseInt(e.target.value);
+            document.getElementById('val-wind-speed').innerText = settings.windSpeed;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('wind-dir-x').addEventListener('input', (e) => {
+            settings.windDirX = parseFloat(e.target.value);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('wind-dir-y').addEventListener('input', (e) => {
+            settings.windDirY = parseFloat(e.target.value);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('vapor-progress').addEventListener('input', (e) => {
+            settings.vaporProgress = parseInt(e.target.value) / 100;
+            document.getElementById('val-vapor-progress').innerText = e.target.value;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('vapor-speed').addEventListener('input', (e) => {
+            settings.vaporSpeed = parseFloat(e.target.value);
+            document.getElementById('val-vapor-speed').innerText = settings.vaporSpeed.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('vapor-color').addEventListener('input', (e) => {
+            settings.vaporColor = e.target.value;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('toggle-shake').addEventListener('change', (e) => {
+            settings.shakeActive = e.target.checked;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('shake-strength').addEventListener('input', (e) => {
+            settings.shakeStrength = parseInt(e.target.value);
+            document.getElementById('val-shake-strength').innerText = settings.shakeStrength;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('shake-angle').addEventListener('input', (e) => {
+            settings.shakeAngle = parseInt(e.target.value);
+            document.getElementById('val-shake-angle').innerText = settings.shakeAngle;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('shake-speed').addEventListener('input', (e) => {
+            settings.shakeSpeed = parseInt(e.target.value);
+            document.getElementById('val-shake-speed').innerText = settings.shakeSpeed;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('toggle-vignette').addEventListener('change', (e) => {
+            settings.vignetteActive = e.target.checked;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('vignette-strength').addEventListener('input', (e) => {
+            settings.vignetteStrength = parseFloat(e.target.value);
+            document.getElementById('val-vignette-strength').innerText = settings.vignetteStrength.toFixed(2);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('vignette-size').addEventListener('input', (e) => {
+            settings.vignetteSize = parseFloat(e.target.value);
+            document.getElementById('val-vignette-size').innerText = settings.vignetteSize.toFixed(2);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('contrast').addEventListener('input', (e) => {
+            settings.contrast = parseFloat(e.target.value);
+            document.getElementById('val-contrast').innerText = settings.contrast.toFixed(2);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('white-level').addEventListener('input', (e) => {
+            settings.whiteLevel = parseFloat(e.target.value);
+            document.getElementById('val-white').innerText = settings.whiteLevel.toFixed(2);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('black-level').addEventListener('input', (e) => {
+            settings.blackLevel = parseFloat(e.target.value);
+            document.getElementById('val-black').innerText = settings.blackLevel.toFixed(2);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('toggle-light').addEventListener('change', (e) => {
+            settings.lights[settings.selectedLightIndex].active = e.target.checked;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('light-pos-x').addEventListener('input', (e) => { settings.lights[settings.selectedLightIndex].posX = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('light-pos-y').addEventListener('input', (e) => { settings.lights[settings.selectedLightIndex].posY = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('light-angle').addEventListener('input', (e) => { 
+            settings.lights[settings.selectedLightIndex].angle = parseInt(e.target.value); 
+            document.getElementById('val-light-angle').innerText = settings.lightAngle;
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('light-size').addEventListener('input', (e) => { 
+            settings.lights[settings.selectedLightIndex].size = parseFloat(e.target.value); 
+            document.getElementById('val-light-size').innerText = settings.lightSize.toFixed(2);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('light-spread').addEventListener('input', (e) => { 
+            settings.lights[settings.selectedLightIndex].spread = parseFloat(e.target.value); 
+            document.getElementById('val-light-spread').innerText = settings.lightSpread.toFixed(2);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('light-source').addEventListener('input', (e) => { 
+            settings.lights[settings.selectedLightIndex].source = parseFloat(e.target.value); 
+            document.getElementById('val-light-source').innerText = settings.lightSource.toFixed(2);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('light-flicker').addEventListener('input', (e) => { 
+            settings.lights[settings.selectedLightIndex].flicker = parseFloat(e.target.value); 
+            document.getElementById('val-light-flicker').innerText = settings.lightFlicker.toFixed(2);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('light-color').addEventListener('input', (e) => { settings.lights[settings.selectedLightIndex].color = e.target.value; if(!isPlaying) applySettingsToCanvas(); });
+
+        document.getElementById('global-light-intensity').addEventListener('input', (e) => {
+            settings.globalLightIntensity = parseFloat(e.target.value);
+            document.getElementById('val-global-light-intensity').innerText = settings.globalLightIntensity.toFixed(1);
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('global-light-color').addEventListener('input', (e) => {
+            settings.globalLightColor = e.target.value;
+            if (!isPlaying) applySettingsToCanvas();
+        });
+
+        document.getElementById('fire-pos-x').addEventListener('input', (e) => { settings.fires[settings.selectedFireIndex].posX = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('fire-pos-y').addEventListener('input', (e) => { settings.fires[settings.selectedFireIndex].posY = parseFloat(e.target.value); if(!isPlaying) applySettingsToCanvas(); });
+        document.getElementById('fire-size').addEventListener('input', (e) => { 
+            settings.fires[settings.selectedFireIndex].size = parseFloat(e.target.value); 
+            document.getElementById('val-fire-size').innerText = settings.fires[settings.selectedFireIndex].size.toFixed(1);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+        document.getElementById('fire-intensity').addEventListener('input', (e) => { 
+            settings.fires[settings.selectedFireIndex].intensity = parseFloat(e.target.value); 
+            document.getElementById('val-fire-int').innerText = settings.fires[settings.selectedFireIndex].intensity.toFixed(1);
+            if(!isPlaying) applySettingsToCanvas(); 
+        });
+
+        document.getElementById('btn-kf-fire').addEventListener('click', () => {
+            addKeyframe({
+                type: 'fire',
+                time: currentTime,
+                fires: JSON.parse(JSON.stringify(settings.fires))
+            });
+        });
+
+        document.getElementById('btn-kf-light').addEventListener('click', () => {
+            addKeyframe({
+                type: 'light',
+                time: currentTime,
+                lights: JSON.parse(JSON.stringify(settings.lights)) // Captura o estado de todas as luzes
+            });
+        });
+
+        document.getElementById('btn-kf-global-light').addEventListener('click', () => {
+            addKeyframe({
+                type: 'globalLight',
+                time: currentTime,
+                globalLightIntensity: settings.globalLightIntensity,
+                globalLightColor: settings.globalLightColor
+            });
+        });
+
+        document.getElementById('render-duration').addEventListener('change', (e) => {
+            let val = parseInt(e.target.value) || 1;
+            settings.renderDuration = val;
+            if (currentTime > val) currentTime = val;
+            updateRuler();
+            updateKeyframesUI();
+            updateScrubberUI();
+        });
+
+        // Interação com Timeline
+        const track = document.getElementById('timeline-track');
+        const content = document.getElementById('timeline-content');
+        const scrubber = document.getElementById('scrubber');
+
+        function updateRuler() {
+            const ruler = document.getElementById('ruler-ticks');
+            ruler.innerHTML = "";
+            
+            const totalWidth = settings.renderDuration * PPS;
+            content.style.width = totalWidth + 'px';
+
+            for (let i = 0; i <= settings.renderDuration; i++) {
+                const tick = document.createElement('div');
+                tick.className = 'timeline-tick';
+                tick.style.left = (i * PPS) + 2 + 'px';
+                tick.innerText = i + 's';
+                ruler.appendChild(tick);
+            }
+        }
+        updateRuler();
+
+        function updateScrubberUI(updateInputs = true) {
+            const pos = currentTime * PPS;
+            scrubber.style.left = `${pos}px`;
+            document.getElementById('time-display').innerText = `00:${currentTime.toFixed(2).replace('.',':').padStart(5, '0')}`;
+            seek(currentTime, updateInputs);
+            
+            // Auto-scroll para manter a agulha visível
+            if (isPlaying || isDraggingScrubber) {
+                const scrollLeft = track.scrollLeft;
+                const trackWidth = track.clientWidth;
+                const padding = 100; // Margem para começar o scroll antes de bater na borda
+                if (pos > scrollLeft + trackWidth - padding) track.scrollLeft = pos - trackWidth + padding;
+                if (pos < scrollLeft + padding) track.scrollLeft = Math.max(0, pos - padding);
+            }
+        }
+
+        track.addEventListener('pointerdown', (e) => {
+            if (isPlaying) togglePlay(); // Para a reprodução imediatamente ao interagir
+            isDraggingScrubber = true;
+            handleTimelineInteraction(e);
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (isDraggingScrubber) handleTimelineInteraction(e);
+        });
+
+        window.addEventListener('pointerup', () => {
+            if (isDraggingScrubber) {
+                isDraggingScrubber = false;
+                updateScrubberUI(true); // Sincroniza os inputs da interface ao soltar o mouse
+            }
+        });
+
+        function handleTimelineInteraction(e) {
+            const rect = content.getBoundingClientRect();
+            let x = e.clientX - rect.left; 
+            currentTime = Math.max(0, Math.min(x / PPS, settings.renderDuration)); 
+            updateScrubberUI(false); // Não atualiza inputs pesados durante o arraste para manter a fluidez
+        }
+
+        // Controle de Play/Pause
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('btn-play');
+            btn.innerText = isPlaying ? "Stop" : "Play";
+            btn.classList.toggle('playing', isPlaying);
+            
+            if (isPlaying) {
+                if (currentTime >= settings.renderDuration) currentTime = 0;
+                lastPlayTime = performance.now();
+                requestAnimationFrame(playLoop);
+            }
+        }
+
+        function playLoop(now) {
+            if (!isPlaying) return;
+            const delta = (now - lastPlayTime) / 1000;
+            lastPlayTime = now;
+            currentTime += delta;
+            
+            if (currentTime >= settings.renderDuration) {
+                currentTime = 0; // Reinicia o tempo para criar o efeito de loop
+            }
+            updateScrubberUI();
+            requestAnimationFrame(playLoop);
+        }
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            if (isPlaying) togglePlay(); // Para a reprodução se estiver ativo
+            currentTime = 0;
+            track.scrollLeft = 0; // Reseta o scroll da timeline
+            threeYaw = 0; // Reseta a rotação horizontal 3D
+            threePitch = 0; // Reseta a rotação vertical 3D
+            updateScrubberUI();
+        });
+
+        document.getElementById('btn-play').addEventListener('click', togglePlay);
+
+        document.getElementById('btn-preview-ripple').addEventListener('click', () => {
+            if (!sprite) return;
+            settings.rippleActive = true;
+            document.getElementById('toggle-ripple').checked = true;
+        });
+
+        document.getElementById('btn-preview-impact').addEventListener('click', () => {
+            if (!sprite) return;
+            explosionProgress = 0;
+            explosionActive = true;
+        });
+
+        // Adicionar Keyframe de Ondulação
+        document.getElementById('btn-kf-ripple').addEventListener('click', (e) => {
+            addKeyframe({
+                type: 'ripple',
+                time: currentTime,
+                rippleActive: document.getElementById('toggle-ripple').checked,
+                rippleStrength: settings.rippleStrength,
+                rippleSpeed: settings.rippleSpeed
+            });
+        });
+
+        // Adicionar Keyframe de Scroll
+        document.getElementById('btn-kf-scroll').addEventListener('click', () => {
+            addKeyframe({
+                type: 'scroll',
+                time: currentTime,
+                scrollSpeed: settings.scrollSpeed
+            });
+        });
+
+        // Adicionar Keyframe de Zoom
+        document.getElementById('btn-kf-zoom').addEventListener('click', () => {
+            addKeyframe({
+                type: 'zoom',
+                time: currentTime,
+                zoomActive: settings.zoomActive,
+                zoomSpeed: settings.zoomSpeed,
+                zoomMax: settings.zoomMax
+            });
+        });
+
+        document.getElementById('btn-clear-wind').addEventListener('click', () => {
+            if (!app || !maskTexture) return;
+            const clearGraphics = new PIXI.Graphics().beginFill(0x000000).drawRect(0,0,1920,1080).endFill();
+            app.renderer.render(clearGraphics, { renderTexture: maskTexture, clear: true });
+        });
+
+        document.getElementById('btn-kf-wind').addEventListener('click', () => {
+            addKeyframe({
+                type: 'wind',
+                time: currentTime,
+                windStrength: settings.windStrength,
+                windSpeed: settings.windSpeed,
+                windDirX: settings.windDirX,
+                windDirY: settings.windDirY
+            });
+        });
+
+        document.getElementById('btn-kf-shake').addEventListener('click', () => {
+            addKeyframe({
+                type: 'shake',
+                time: currentTime,
+                shakeActive: document.getElementById('toggle-shake').checked,
+                shakeStrength: settings.shakeStrength,
+                shakeAngle: settings.shakeAngle,
+                shakeSpeed: settings.shakeSpeed
+            });
+        });
+
+        // Adicionar Keyframe de Impacto
+        document.getElementById('btn-kf-impact').addEventListener('click', () => {
+            addKeyframe({
+                type: 'impact',
+                time: currentTime,
+                expStrength: parseFloat(document.getElementById('exp-strength').value),
+                expRippleStrength: settings.expRippleStrength,
+                expRippleSpeed: settings.expRippleSpeed,
+                expSpeed: settings.expSpeed
+            });
+        });
+
+        document.getElementById('btn-kf-vignette').addEventListener('click', () => {
+            addKeyframe({
+                type: 'vignette',
+                time: currentTime,
+                vignetteActive: settings.vignetteActive,
+                vignetteStrength: settings.vignetteStrength,
+                vignetteSize: settings.vignetteSize
+            });
+        });
+
+        document.getElementById('btn-kf-color').addEventListener('click', () => {
+            addKeyframe({
+                type: 'color',
+                time: currentTime,
+                contrast: settings.contrast,
+                whiteLevel: settings.whiteLevel,
+                blackLevel: settings.blackLevel
+            });
+        });
+
+        // Adicionar Keyframe de Vapor
+        document.getElementById('btn-kf-vapor').addEventListener('click', () => {
+            addKeyframe({
+                type: 'vapor',
+                time: currentTime,
+                vaporProgress: settings.vaporProgress,
+                vaporSpeed: settings.vaporSpeed,
+                vaporColor: settings.vaporColor
+            });
+        });
+
+        function addKeyframe(kf) {
+            settings.keyframes.push(kf);
+            settings.keyframes.sort((a, b) => a.time - b.time);
+            
+            updateKeyframesUI();
+        }
+
+        function updateKeyframesUI() {
+            const container = document.getElementById('keyframes-wrapper');
+            container.innerHTML = "";
+
+            const typeLabels = {
+                'zoom': 'Zoom Infinito (Loop)',
+                'scroll': 'Cenário (Scrolling)',
+                'wind': 'Vento (Folhagens)',
+                'ripple': 'Ondulação',
+                'shake': 'Camera Shake',
+                'impact': 'Impacto na Água',
+                'color': 'Correção de Cor',
+                'light': 'Iluminação',
+                'globalLight': 'Iluminar Imagem',
+                'vignette': 'Vinheta',
+                'vapor': 'Fumaça / Neblina'
+            };
+
+            // Define posições verticais fixas em pixels para criar trilhas e permitir scroll
+            const typePositions = {
+                'vapor': '40px',
+                'ripple': '80px',
+                'scroll': '120px',
+                'zoom': '160px',
+                'wind': '200px',
+                'shake': '240px',
+                'light': '280px',
+                'globalLight': '300px',
+                'impact': '340px',
+                'vignette': '360px',
+                'color': '380px'
+            };
+
+            settings.keyframes.forEach((kf, index) => {
+                const div = document.createElement('div');
+                let extraClass = '';
+                if (kf.type === 'impact') extraClass = 'impact';
+                if (kf.type === 'scroll') div.style.backgroundColor = '#00ff88';
+                if (kf.type === 'zoom') div.style.backgroundColor = '#00ccff';
+                if (kf.type === 'wind') div.style.backgroundColor = '#00ffff';
+                if (kf.type === 'shake') div.style.backgroundColor = '#ff5500';
+                if (kf.type === 'vignette') div.style.backgroundColor = '#aa00ff';
+                if (kf.type === 'color') div.style.backgroundColor = '#ffcc00';
+                if (kf.type === 'light') div.style.backgroundColor = '#fffb00';
+                if (kf.type === 'globalLight') div.style.backgroundColor = '#ff00ff';
+                if (kf.type === 'vapor') {
+                    div.style.backgroundColor = '#ffffff'; // Cor branca para neblina na timeline
+                }
+                div.className = `keyframe-diamond ${extraClass}`;
+                div.style.left = `${kf.time * PPS}px`;
+                
+                // Aplica a posição vertical baseada no tipo para evitar sobreposição
+                div.style.top = typePositions[kf.type] || '50%';
+                
+                div.title = typeLabels[kf.type] || kf.type.toUpperCase();
+                div.onclick = (e) => { e.stopPropagation(); removeKeyframe(index); };
+                container.appendChild(div);
+            });
+        }
+
+        window.removeKeyframe = (index) => {
+            settings.keyframes.splice(index, 1);
+            updateKeyframesUI();
+        };
+
+        function hexToRgb(hex) {
+            const r = parseInt(hex.slice(1, 3), 16) / 255;
+            const g = parseInt(hex.slice(3, 5), 16) / 255;
+            const b = parseInt(hex.slice(5, 7), 16) / 255;
+            return [r, g, b];
+        }
+
+        function getInterpolatedValue(time, prop, type = 'ripple') {
+            const kfs = settings.keyframes.filter(k => k.type === type && k[prop] !== undefined);
+            if (kfs.length === 0) return settings[prop];
+            
+            if (time <= kfs[0].time) return kfs[0][prop];
+            if (time >= kfs[kfs.length - 1].time) return kfs[kfs.length - 1][prop];
+
+            for (let i = 0; i < kfs.length - 1; i++) {
+                if (time >= kfs[i].time && time <= kfs[i+1].time) {
+                    if (type === 'fire' && prop === 'fires') {
+                        const f0 = kfs[i].fires;
+                        const f1 = kfs[i+1].fires;
+                        const ratio = (time - kfs[i].time) / (kfs[i+1].time - kfs[i].time);
+                        return f1.map((fire1, idx) => {
+                            const fire0 = f0[idx] || fire1;
+                            return {
+                                posX: fire0.posX + (fire1.posX - fire0.posX) * ratio,
+                                posY: fire0.posY + (fire1.posY - fire0.posY) * ratio,
+                                size: fire0.size + (fire1.size - fire0.size) * ratio,
+                                intensity: fire0.intensity + (fire1.intensity - fire0.intensity) * ratio
+                            };
+                        });
+                    }
+
+                    if (type === 'light' && prop === 'lights') {
+                        const l0 = kfs[i].lights;
+                        const l1 = kfs[i+1].lights;
+                        const ratio = (time - kfs[i].time) / (kfs[i+1].time - kfs[i].time);
+                        
+                        return l1.map((light1, idx) => {
+                            const light0 = l0[idx] || light1; // Fallback se a luz não existia no KF anterior
+                            const toHex = (n) => Math.round(n * 255).toString(16).padStart(2, '0');
+                            const c0 = hexToRgb(light0.color);
+                            const c1 = hexToRgb(light1.color);
+                            
+                            return {
+                                active: light0.active,
+                                posX: light0.posX + (light1.posX - light0.posX) * ratio,
+                                posY: light0.posY + (light1.posY - light0.posY) * ratio,
+                                angle: light0.angle + (light1.angle - light0.angle) * ratio,
+                                size: light0.size + (light1.size - light0.size) * ratio,
+                                spread: light0.spread + (light1.spread - light0.spread) * ratio,
+                                source: light0.source + (light1.source - light0.source) * ratio,
+                                flicker: light0.flicker + (light1.flicker - light0.flicker) * ratio,
+                                color: `#${toHex(c0[0] + (c1[0]-c0[0])*ratio)}${toHex(c0[1] + (c1[1]-c0[1])*ratio)}${toHex(c0[2] + (c1[2]-c0[2])*ratio)}`
+                            };
+                        });
+                    }
+
+                    const t0 = kfs[i].time; 
+                    const t1 = kfs[i+1].time;
+                    const v0 = kfs[i][prop];
+                    const v1 = kfs[i+1][prop];
+                    
+                    if (typeof v0 === 'boolean') return v0; // Toggles não interpolam, apenas mudam
+
+                    // Interpolação de Cor (Hex)
+                    if (prop === 'lightColor' || prop === 'globalLightColor' || prop === 'vaporColor') {
+                        const c0 = hexToRgb(v0);
+                        const c1 = hexToRgb(v1);
+                        const ratio = (time - t0) / (t1 - t0);
+                        const r = Math.round((c0[0] + (c1[0] - c0[0]) * ratio) * 255);
+                        const g = Math.round((c0[1] + (c1[1] - c0[1]) * ratio) * 255);
+                        const b = Math.round((c0[2] + (c1[2] - c0[2]) * ratio) * 255);
+                        const toHex = (n) => n.toString(16).padStart(2, '0');
+                        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+                    }
+
+                    const ratio = (time - t0) / (t1 - t0);
+                    return v0 + (v1 - v0) * ratio;
+                }
+            }
+            return kfs[kfs.length - 1][prop];
+        }
+
+        // Aplica os valores atuais de 'settings' nos filtros do Pixi
+        function applySettingsToCanvas(isLivePreview = false) {
+            if (!sprite) return;
+            
+            const animTime = isLivePreview ? (performance.now() / 1000) : currentTime;
+            const duration = settings.renderDuration;
+
+            // Scroll de Cenário em Loop (Sincronizado com tempo e duração)
+            const tex = sprite.texture;
+            const baseRatio = Math.min(1456 / tex.width, 728 / tex.height);
+            const scrollCycles = Math.round((settings.scrollSpeed * duration) / (tex.width * baseRatio));
+            const scrollOffset = (animTime / duration) * scrollCycles * (tex.width * baseRatio);
+
+            if (settings.zoomActive && zoomLayers.length > 0) {
+                sprite.visible = false;
+                zoomContainer.visible = true;
+                
+                const texture = zoomLayers[0].texture;
+                const baseScale = Math.max(1920 / texture.width, 1080 / texture.height);
+                const cycleSpeed = (settings.zoomSpeed / 100) * 1;
+
+                // Cálculo determinístico para Loop Perfeito:
+                // Definimos uma quantidade inteira de ciclos baseada na velocidade e duração.
+                let totalZoomCycles = Math.floor(Math.abs(cycleSpeed) * duration + 0.5);
+                if (totalZoomCycles < 1) totalZoomCycles = 1;
+                let zoomDirection = cycleSpeed >= 0 ? 1 : -1;
+
+                zoomLayers.forEach(s => {
+                    // Proporção do tempo atual (0 a 1) multiplicada por ciclos inteiros
+                    let timePhase = animTime / duration;
+                    let progress = (timePhase * totalZoomCycles * zoomDirection) + s.initialZOffset;
+                    s.zProgress = ((progress % 1) + 1) % 1;
+                    const scaleValue = baseScale * Math.pow(settings.zoomMax, s.zProgress);
+                    s.tileScale.set(scaleValue);
+                    
+                    // Centraliza + Scroll
+                    s.tilePosition.x = (1456 - tex.width * scaleValue) / 2 + scrollOffset;
+                    s.tilePosition.y = (728 - tex.height * scaleValue) / 2;
+                    
+                    // Transição Senoidal: Cria um cross-fade perfeito entre as 2 camadas.
+                    // Quando uma está no pico de opacidade (centro), a outra está totalmente invisível (reiniciando).
+                    s.alpha = Math.pow(Math.sin(s.zProgress * Math.PI), 0.7);
+                });
+
+                // Reordena camadas: as menores (no fundo) ficam por trás
+                zoomContainer.children.sort((a, b) => a.zProgress - b.zProgress);
+            } else {
+                sprite.visible = true;
+                zoomContainer.visible = false;
+
+                sprite.tilePosition.x = (1456 - tex.width * baseRatio) / 2 + scrollOffset;
+            }
+
+            // Cálculo de Ripple Determinístico e em Loop (Texture size 2048)
+            const rippleCycles = Math.floor(duration * 2.0 * settings.rippleSpeed);
+            const rippleX = (animTime / duration) * rippleCycles * 2048;
+            const rippleY = rippleX * 0.5;
+            const internalCount = (animTime / duration) * rippleCycles * 6.28318;
+
+            rippleMap.x = rippleX % 2048;
+            rippleMap.y = rippleY % 2048;
+
+            // Lógica de Camera Shake
+            if (settings.shakeActive && settings.shakeStrength > 0) {
+                // Sincroniza o tremor para terminar onde começou (0)
+                // Usamos shakeSpeed para definir quantos ciclos ocorrem na duração total
+                const shakeCycles = Math.max(1, Math.floor(settings.shakeSpeed * duration / 5.0));
+                const t = (animTime / duration) * shakeCycles * Math.PI * 2.0;
+                
+                const angleRad = (settings.shakeAngle * Math.PI) / 180;
+
+                // Lissajous que sempre fecha em 0,0 quando t é múltiplo de 2PI
+                const p1 = Math.sin(t);
+                const p2 = Math.sin(t * 2.0); // Usar 2.0 em vez de 1.5 garante loop no final de 2PI
+                
+                const dx = p1 * settings.shakeStrength;
+                const dy = p2 * (settings.shakeStrength * 0.7); // O "cruzamento" é 70% da força total
+
+                // Rotacionamos esse par de coordenadas (dx, dy) conforme o ângulo desejado
+                app.stage.x = Math.cos(angleRad) * dx - Math.sin(angleRad) * dy;
+                app.stage.y = Math.sin(angleRad) * dx + Math.cos(angleRad) * dy;
+            } else {
+                app.stage.x = 0;
+                app.stage.y = 0;
+            }
+
+            if (settings.rippleActive) {
+                const s = settings.rippleStrength;
+                rippleFilter.scale.set(s + Math.sin(internalCount) * (s * 0.2));
+            } else {
+                rippleFilter.scale.set(0);
+            }
+
+            // Lógica de Impacto: Prioriza Preview Manual ou Keyframes da Timeline
+            let activeProgress = -1;
+            let activeStrength = settings.expStrength;
+            let activeSpeed = settings.expSpeed;
+
+            if (isLivePreview && explosionActive) {
+                // Usando progresso do botão Preview
+                activeProgress = Math.min(explosionProgress, 1.0);
+            } else {
+                // Usando Keyframes da Timeline
+                const recentImpact = [...settings.keyframes]
+                    .filter(kf => kf.type === 'impact' && kf.time <= currentTime)
+                    .sort((a,b) => b.time - a.time)[0];
+                
+                if (recentImpact) {
+                    const elapsed = currentTime - recentImpact.time;
+                    activeProgress = Math.min(elapsed * recentImpact.expSpeed, 1.0);
+                    activeStrength = recentImpact.expStrength;
+                }
+            }
+
+            if (activeProgress >= 0 && activeProgress < 1.0) {
+                impactSprite.scale.set(activeProgress * 8);
+                const power = Math.pow(1 - activeProgress, 2) * activeStrength;
+                impactFilter.scale.set(power);
+            } else {
+                // Reseta o estado quando não há impacto ativo
+                impactFilter.scale.set(0);
+                impactSprite.scale.set(0);
+            }
+
+            // Aplica Vaporização
+            // Garantimos que o deslocamento final seja um múltiplo de 4.0 para o loop do ruído ser perfeito
+            const vaporCycles = Math.max(1, Math.round(settings.vaporSpeed * duration * 0.1));
+            
+            vaporFilter.uniforms.uThreshold = settings.vaporProgress;
+            vaporFilter.uniforms.uTime = (animTime / duration) * (vaporCycles * 4.0);
+            vaporFilter.uniforms.uDuration = duration;
+            vaporFilter.uniforms.uSpeed = settings.vaporSpeed;
+            vaporFilter.uniforms.uColor = hexToRgb(settings.vaporColor);
+
+            // Aplica Vento
+            windFilter.uniforms.uTime = animTime;
+            windFilter.uniforms.uDuration = duration;
+            // Mapeia os valores de 0-100 para escalas úteis ao shader
+            windFilter.uniforms.uStrength = settings.windStrength / 100.0;
+            windFilter.uniforms.uSpeed = settings.windSpeed / 50.0;
+            windFilter.uniforms.uDirection.x = settings.windDirX;
+            windFilter.uniforms.uDirection.y = settings.windDirY;
+
+            // Visualização da Máscara ao editar
+            if (document.getElementById('toggle-wind-edit').checked) {
+                if (!app.stage.children.includes(maskSprite)) {
+                    app.stage.addChild(maskSprite);
+                    maskSprite.alpha = 0.6;
+                    maskSprite.tint = 0x00ffff; // Cyan para feedback visual de "frio/vento"
+                }
+            } else if (app.stage.children.includes(maskSprite)) { app.stage.removeChild(maskSprite); }
+
+            // Aplica Vinheta
+            if (settings.vignetteActive) {
+                vignetteFilter.uniforms.uStrength = settings.vignetteStrength;
+                vignetteFilter.uniforms.uSize = settings.vignetteSize;
+                vignetteFilter.enabled = true;
+            } else {
+                vignetteFilter.enabled = false;
+            }
+
+            // Aplica Fogo Procedural
+            while (fireFilters.length < settings.fires.length) {
+                fireFilters.push(new PIXI.Filter(null, fireShader, {
+                    uNoise: fireNoiseTex, uPos: [0.5, 0.5], uSize: 1.0, uIntensity: 1.0, uTime: 0
+                }));
+            }
+            settings.fires.forEach((fire, i) => {
+                const f = fireFilters[i];
+                f.uniforms.uPos = [fire.posX, fire.posY];
+                f.uniforms.uSize = fire.size * 0.3; // Aumentado para o slider ter mais impacto
+                f.uniforms.uIntensity = fire.intensity;
+                f.uniforms.uTime = animTime;
+            });
+
+            // Aplica Iluminação Dinâmica (Múltiplas Luzes)
+            while (lightFilters.length < settings.lights.length) {
+                lightFilters.push(new PIXI.Filter(null, lightShader, {
+                    uPos: [0.5, 0.2], uAngle: 90, uSize: 0.5, uSpread: 0.5, 
+                    uSourceSize: 0, uTime: 0, uFlicker: 0, uColor: [1, 1, 1]
+                }));
+            }
+
+            settings.lights.forEach((l, i) => {
+                const f = lightFilters[i];
+                if (l.active) {
+                    f.uniforms.uPos = [l.posX, l.posY];
+                    f.uniforms.uAngle = l.angle;
+                    f.uniforms.uSize = l.size;
+                    f.uniforms.uSpread = l.spread;
+                    f.uniforms.uSourceSize = l.source;
+                    f.uniforms.uTime = animTime / duration; 
+                    f.uniforms.uFlicker = l.flicker;
+                    f.uniforms.uColor = hexToRgb(l.color);
+                }
+            });
+            updateFiltersArray();
+
+            // Aplica Iluminação Global
+            globalLightFilter.uniforms.uIntensity = settings.globalLightIntensity;
+            globalLightFilter.uniforms.uColor = hexToRgb(settings.globalLightColor);
+
+            // Aplica Correção de Cor
+            colorFilter.uniforms.uContrast = settings.contrast;
+            colorFilter.uniforms.uWhite = settings.whiteLevel;
+            colorFilter.uniforms.uBlack = settings.blackLevel;
+        }
+
+        function seek(time, updateUI = true) {
+            if (!sprite) return;
+            currentTime = time;
+
+            // 1. Atualizar settings a partir dos keyframes (Interpolação)
+            settings.rippleActive = getInterpolatedValue(time, 'rippleActive', 'ripple');
+            settings.rippleStrength = getInterpolatedValue(time, 'rippleStrength', 'ripple');
+            settings.rippleSpeed = getInterpolatedValue(time, 'rippleSpeed', 'ripple');
+            settings.expStrength = getInterpolatedValue(time, 'expStrength', 'impact');
+            settings.expRippleStrength = getInterpolatedValue(time, 'expRippleStrength', 'impact');
+            settings.expRippleSpeed = getInterpolatedValue(time, 'expRippleSpeed', 'impact');
+            settings.expSpeed = getInterpolatedValue(time, 'expSpeed', 'impact');
+            settings.vaporProgress = getInterpolatedValue(time, 'vaporProgress', 'vapor');
+            settings.vaporSpeed = getInterpolatedValue(time, 'vaporSpeed', 'vapor');
+            settings.vaporColor = getInterpolatedValue(time, 'vaporColor', 'vapor');
+            settings.scrollSpeed = getInterpolatedValue(time, 'scrollSpeed', 'scroll');
+            settings.zoomActive = getInterpolatedValue(time, 'zoomActive', 'zoom');
+            settings.zoomSpeed = getInterpolatedValue(time, 'zoomSpeed', 'zoom');
+            settings.zoomMax = getInterpolatedValue(time, 'zoomMax', 'zoom');
+            settings.shakeActive = getInterpolatedValue(time, 'shakeActive', 'shake');
+            settings.shakeStrength = getInterpolatedValue(time, 'shakeStrength', 'shake');
+            settings.shakeAngle = getInterpolatedValue(time, 'shakeAngle', 'shake');
+            settings.shakeSpeed = getInterpolatedValue(time, 'shakeSpeed', 'shake');
+            settings.vignetteActive = getInterpolatedValue(time, 'vignetteActive', 'vignette');
+            settings.vignetteStrength = getInterpolatedValue(time, 'vignetteStrength', 'vignette');
+            settings.vignetteSize = getInterpolatedValue(time, 'vignetteSize', 'vignette');
+            settings.contrast = getInterpolatedValue(time, 'contrast', 'color');
+            settings.whiteLevel = getInterpolatedValue(time, 'whiteLevel', 'color');
+            settings.blackLevel = getInterpolatedValue(time, 'blackLevel', 'color');
+            settings.lights = getInterpolatedValue(time, 'lights', 'light');
+            settings.fires = getInterpolatedValue(time, 'fires', 'fire');
+            settings.globalLightIntensity = getInterpolatedValue(time, 'globalLightIntensity', 'globalLight');
+            settings.globalLightColor = getInterpolatedValue(time, 'globalLightColor', 'globalLight');
+            settings.windStrength = getInterpolatedValue(time, 'windStrength', 'wind');
+            settings.windSpeed = getInterpolatedValue(time, 'windSpeed', 'wind');
+            settings.windDirX = getInterpolatedValue(time, 'windDirX', 'wind');
+            settings.windDirY = getInterpolatedValue(time, 'windDirY', 'wind');
+
+            // OTIMIZAÇÃO: Não atualizar inputs da UI durante o play para não travar a linha do tempo
+            if (updateUI && !isPlaying) {
+                const curF = settings.fires[settings.selectedFireIndex];
+                const curL = settings.lights[settings.selectedLightIndex] || settings.lights[0];
+                document.getElementById('toggle-ripple').checked = settings.rippleActive;
+                document.getElementById('ripple-strength').value = settings.rippleStrength;
+                document.getElementById('val-ripple-strength').innerText = Math.round(settings.rippleStrength);
+                document.getElementById('ripple-speed').value = settings.rippleSpeed;
+                document.getElementById('val-ripple-speed').innerText = settings.rippleSpeed.toFixed(1);
+                document.getElementById('val-exp-strength').innerText = Math.round(settings.expStrength);
+                document.getElementById('exp-strength').value = settings.expStrength;
+                document.getElementById('exp-ripple-strength').value = settings.expRippleStrength;
+                document.getElementById('val-exp-ripple-strength').innerText = Math.round(settings.expRippleStrength);
+                document.getElementById('exp-ripple-speed').value = settings.expRippleSpeed;
+                document.getElementById('val-exp-ripple-speed').innerText = settings.expRippleSpeed.toFixed(1);
+                document.getElementById('exp-speed').value = settings.expSpeed;
+                document.getElementById('val-exp-speed').innerText = settings.expSpeed.toFixed(1);
+                document.getElementById('vapor-progress').value = settings.vaporProgress * 100;
+                document.getElementById('val-vapor-progress').innerText = Math.round(settings.vaporProgress * 100);
+                document.getElementById('vapor-speed').value = settings.vaporSpeed;
+                document.getElementById('val-vapor-speed').innerText = settings.vaporSpeed.toFixed(1);
+                document.getElementById('vapor-color').value = settings.vaporColor;
+                document.getElementById('scroll-speed').value = settings.scrollSpeed;
+                document.getElementById('val-scroll-speed').innerText = Math.round(settings.scrollSpeed);
+                document.getElementById('toggle-zoom').checked = settings.zoomActive;
+                document.getElementById('zoom-speed').value = settings.zoomSpeed;
+                document.getElementById('val-zoom-speed').innerText = Math.round(settings.zoomSpeed);
+                document.getElementById('zoom-max').value = settings.zoomMax;
+                document.getElementById('val-zoom-max').innerText = settings.zoomMax.toFixed(1);
+                document.getElementById('toggle-shake').checked = settings.shakeActive;
+                document.getElementById('shake-strength').value = settings.shakeStrength;
+                document.getElementById('val-shake-strength').innerText = Math.round(settings.shakeStrength);
+                document.getElementById('shake-angle').value = settings.shakeAngle;
+                document.getElementById('val-shake-angle').innerText = Math.round(settings.shakeAngle);
+                document.getElementById('shake-speed').value = settings.shakeSpeed;
+                document.getElementById('val-shake-speed').innerText = Math.round(settings.shakeSpeed);
+                document.getElementById('toggle-vignette').checked = settings.vignetteActive;
+                document.getElementById('vignette-strength').value = settings.vignetteStrength;
+                document.getElementById('val-vignette-strength').innerText = settings.vignetteStrength.toFixed(2);
+                document.getElementById('vignette-size').value = settings.vignetteSize;
+                document.getElementById('val-vignette-size').innerText = settings.vignetteSize.toFixed(2);
+                document.getElementById('contrast').value = settings.contrast;
+                document.getElementById('val-contrast').innerText = settings.contrast.toFixed(2);
+                if (curF) {
+                    document.getElementById('fire-pos-x').value = curF.posX;
+                    document.getElementById('fire-pos-y').value = curF.posY;
+                    document.getElementById('fire-size').value = curF.size;
+                    document.getElementById('val-fire-size').innerText = curF.size.toFixed(1);
+                    document.getElementById('fire-intensity').value = curF.intensity;
+                    document.getElementById('val-fire-int').innerText = curF.intensity.toFixed(1);
+                }
+                document.getElementById('white-level').value = settings.whiteLevel;
+                document.getElementById('val-white').innerText = settings.whiteLevel.toFixed(2);
+                document.getElementById('black-level').value = settings.blackLevel;
+                document.getElementById('val-black').innerText = settings.blackLevel.toFixed(2);
+                document.getElementById('toggle-light').checked = curL.active;
+                document.getElementById('light-pos-x').value = curL.posX;
+                document.getElementById('light-pos-y').value = curL.posY;
+                document.getElementById('light-angle').value = curL.angle;
+                document.getElementById('val-light-angle').innerText = Math.round(curL.angle);
+                document.getElementById('light-size').value = curL.size;
+                document.getElementById('val-light-size').innerText = curL.size.toFixed(2);
+                document.getElementById('light-spread').value = curL.spread;
+                document.getElementById('val-light-spread').innerText = curL.spread.toFixed(2);
+                document.getElementById('light-source').value = curL.source;
+                document.getElementById('val-light-source').innerText = curL.source.toFixed(2);
+                document.getElementById('light-flicker').value = curL.flicker;
+                document.getElementById('val-light-flicker').innerText = curL.flicker.toFixed(2);
+                document.getElementById('light-color').value = curL.color;
+                document.getElementById('global-light-intensity').value = settings.globalLightIntensity;
+                document.getElementById('val-global-light-intensity').innerText = settings.globalLightIntensity.toFixed(1);
+                document.getElementById('global-light-color').value = settings.globalLightColor;
+                document.getElementById('wind-strength').value = settings.windStrength;
+                document.getElementById('val-wind-strength').innerText = Math.round(settings.windStrength);
+                document.getElementById('wind-speed').value = settings.windSpeed;
+                document.getElementById('val-wind-speed').innerText = Math.round(settings.windSpeed);
+                document.getElementById('wind-dir-x').value = settings.windDirX;
+                document.getElementById('wind-dir-y').value = settings.windDirY;
+            }
+
+            // Garante que se o canvas mudar (re-import), o 3D pegue a nova referência
+            if (isPreview3D) setupThree();
+
+            applySettingsToCanvas();
+        }
+
+        // --- EXPORTAÇÃO DE VÍDEO VIA WEBCODECS + WEBM-MUXER ---
+        async function startSequence() {
+            if (!app) return alert("Carregue uma imagem primeiro.");
+
+            const btn = document.getElementById('btn-render');
+            const originalText = btn.innerText;
+            const statusLabel = document.getElementById('status-indicator');
+            const timerDisplay = document.getElementById('timer');
+            
+            if (isPlaying) togglePlay();
+            
+            // 1. Configurar o Target para memória (ArrayBuffer)
+            const target = new WebMMuxer.ArrayBufferTarget();
+
+            btn.disabled = true;
+            btn.innerText = "INICIANDO...";
+            statusLabel.style.display = 'block';
+
+            const width = 1456;
+            const height = 728;
+            const fps = 24;
+            const totalDuration = parseFloat(document.getElementById('render-duration').value) || 5;
+            const totalFrames = Math.round(totalDuration * fps);
+
+            // 2. Configurar o Muxer (WebMMuxer)
+            const muxer = new WebMMuxer.Muxer({
+                target: target,
+                video: {
+                    codec: 'V_VP9',
+                    width: width,
+                    height: height,
+                    frameRate: fps
+                }
+            });
+
+            // 3. Configurar o VideoEncoder (WebCodecs)
+            const videoEncoder = new VideoEncoder({
+                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                error: e => console.error(e)
+            });
+
+            videoEncoder.configure({
+                codec: 'vp09.00.10.08', // VP9 Profile 0
+                width: width,
+                height: height,
+                bitrate: 12_000_000, // 12 Mbps (Igual ao Studio Alexandre)
+            });
+
+            try {
+                app.ticker.stop();
+                
+                for (let i = 0; i < totalFrames; i++) {
+                    const currentTimeSec = i / fps;
+
+                    // Otimização de memória: impede que a fila de codificação sature o navegador
+                    // Semelhante ao motor do Video Editor e Desenhar
+                    while (videoEncoder.encodeQueueSize > 10) {
+                        await new Promise(r => setTimeout(r, 50));
+                    }
+
+                    if (i % 5 === 0) { // Atualiza a cada 5 frames para maior fluidez
+                        const pct = Math.round((i / totalFrames) * 100);
+                        timerDisplay.innerText = `${pct}%`;
+                        btn.innerText = `⏳ ${pct}%`;
+                        await new Promise(r => setTimeout(r, 0)); // Evita travamento da UI
+                    }
+
+                    seek(currentTimeSec, false);
+                    app.renderer.render(app.stage);
+
+                    try {
+                        // Captura o frame do canvas e envia para o codificador
+                        const frame = new VideoFrame(app.view, { timestamp: (i * 1_000_000 / fps) });
+                        videoEncoder.encode(frame, { keyFrame: i % 48 === 0 }); // Keyframe otimizado
+                        frame.close(); // Liberação imediata de memória
+                    } catch (e) {
+                        console.warn("Erro ao codificar frame:", i, e);
+                    }
+                }
+
+                await videoEncoder.flush();
+                muxer.finalize();
+
+                // 4. Trigger download automático
+                const blob = new Blob([target.buffer], { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'fx-studio-export.webm';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                btn.innerText = "CONCLUÍDO!";
+            } catch (err) {
+                console.error("Erro na exportação:", err);
+                alert("Falha na exportação: " + err.message);
+            } finally {
+                app.ticker.start();
+                btn.disabled = false;
+                btn.innerText = originalText;
+                statusLabel.style.display = 'none';
+            }
+        }
+
+        document.getElementById('btn-render').addEventListener('click', startSequence);
+
+        // --- EXPORTAÇÃO DE SEQUÊNCIA PNG (TRANSPARENTE) ---
+        async function startPngSequence() {
+            if (!app) return alert("Carregue uma imagem primeiro.");
+
+            try {
+                // Solicita ao usuário que escolha uma pasta para salvar os arquivos
+                const dirHandle = await window.showDirectoryPicker();
+                
+                const btn = document.getElementById('btn-render-png');
+                const originalText = btn.innerText;
+                const statusLabel = document.getElementById('status-indicator');
+                const timerDisplay = document.getElementById('timer');
+
+                if (isPlaying) togglePlay();
+                
+                btn.disabled = true;
+                statusLabel.style.display = 'block';
+
+                const fps = 24;
+                const totalDuration = parseFloat(document.getElementById('render-duration').value) || 5;
+                const totalFrames = Math.round(totalDuration * fps);
+
+                app.ticker.stop();
+
+                for (let i = 0; i < totalFrames; i++) {
+                    const currentTimeSec = i / fps;
+
+                    if (i % 5 === 0) {
+                        const pct = Math.round((i / totalFrames) * 100);
+                        timerDisplay.innerText = `${pct}%`;
+                        btn.innerText = `⏳ ${pct}%`;
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+
+                    seek(currentTimeSec, false);
+                    app.renderer.render(app.stage);
+
+                    // Converte o canvas para Blob PNG (Preserva transparência)
+                    const blob = await new Promise(resolve => app.view.toBlob(resolve, 'image/png'));
+                    const fileName = `frame_${String(i).padStart(5, '0')}.png`;
+                    
+                    // Salva o arquivo na pasta selecionada
+                    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                }
+
+                btn.innerText = "CONCLUÍDO!";
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }, 2000);
+
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error("Erro na exportação PNG:", err);
+                    alert("Falha na exportação: " + err.message);
+                }
+                const btn = document.getElementById('btn-render-png');
+                btn.disabled = false;
+                btn.innerText = "EXPORTAR SEQ. PNG";
+            } finally {
+                if (app) app.ticker.start();
+                document.getElementById('status-indicator').style.display = 'none';
+            }
+        }
+
+        document.getElementById('btn-render-png').addEventListener('click', startPngSequence);
+
+        // --- LÓGICA DE ACORDEÃO PARA A LISTA DE VFX ---
+        document.querySelectorAll('.effect-card h3').forEach(header => {
+            header.addEventListener('click', () => {
+                const content = header.nextElementSibling;
+                const icon = header.querySelector('i');
+                const isCurrentlyOpen = content.style.display === 'block';
+
+                // Fecha todos antes
+                document.querySelectorAll('.vfx-content').forEach(c => c.style.display = 'none');
+                document.querySelectorAll('.effect-card h3 i').forEach(i => i.style.transform = 'rotate(0deg)');
+
+                // Se não estava aberto, abre o atual
+                if (!isCurrentlyOpen) {
+                    content.style.display = 'block';
+                    icon.style.transform = 'rotate(180deg)';
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
