@@ -1083,7 +1083,6 @@
         }
 
         // SISTEMA DE DUPLA MÁSCARA OPACA (DUAL OPAQUE MASKING) 
-        // Separa a cor e o alpha no momento em que finaliza o laço de seleção para resolver o limite gráfico de opacidade.
         function updateSelectionColorAlpha() {
             const w = selectionCanvas.width; const h = selectionCanvas.height;
             selectionColorCanvas.width = w; selectionColorCanvas.height = h;
@@ -1097,12 +1096,10 @@
             
             for (let i = 0; i < sData.data.length; i += 4) {
                 const a = sData.data[i+3];
-                // Imagem opaca colorida (sem alpha original)
                 cData.data[i] = sData.data[i];
                 cData.data[i+1] = sData.data[i+1];
                 cData.data[i+2] = sData.data[i+2];
                 cData.data[i+3] = 255; 
-                // Imagem opaca cinza (carregando o alpha)
                 aData.data[i] = a;
                 aData.data[i+1] = a;
                 aData.data[i+2] = a;
@@ -1126,7 +1123,7 @@
             selectionPath.forEach(p => sCtx.lineTo(p.x, p.y));
             sCtx.clip(); sCtx.drawImage(mainCanvas, 0, 0); sCtx.restore();
 
-            updateSelectionColorAlpha(); // Separa Core & Alpha Channels
+            updateSelectionColorAlpha(); 
 
             ctx.globalCompositeOperation = 'source-over'; 
             ctx.save(); ctx.beginPath(); ctx.moveTo(selectionPath[0].x, selectionPath[0].y);
@@ -1149,7 +1146,6 @@
             drawTransformUI();
         }
 
-        // Faz o warp simultâneo nos buffers separados (Cor Pura + Alpha Puro) fundindo-os com ImageData sem overlay de transparente duplo
         function renderComplexTransform(targetCtx, tool) {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             const points = tool === 'warp' ? warpMesh : selectionCorners;
@@ -1177,7 +1173,6 @@
             const cData = warpColorCtx.getImageData(minX, minY, bw, bh);
             const aData = warpAlphaCtx.getImageData(minX, minY, bw, bh);
             
-            // Recombina RGB puro e Alpha puro
             for (let i = 0; i < cData.data.length; i += 4) { cData.data[i+3] = aData.data[i]; }
             
             sharedUtilCtx.clearRect(0, 0, bw, bh);
@@ -1252,12 +1247,23 @@
             const x = Math.floor(startX); const y = Math.floor(startY);
             if (x < 0 || x >= width || y < 0 || y >= height) return;
 
-            const baseIdx = (y * width + x); const startColor32 = uint32Data[baseIdx];
-            const startR = data[baseIdx]; const startG = data[baseIdx + 1]; const startB = data[baseIdx + 2]; const startA = data[baseIdx + 3];
+            const baseIdx = (y * width + x); 
+            const startColor32 = uint32Data[baseIdx];
+            
+            // CORREÇÃO DO BALDE DE TINTA (Lógica de índices RGB)
+            const startIdx = baseIdx * 4; 
+            const startR = data[startIdx]; 
+            const startG = data[startIdx + 1]; 
+            const startB = data[startIdx + 2]; 
+            const startA = data[startIdx + 3];
+            
             if (Math.abs(startR - fillRGBA.r) < 2 && Math.abs(startG - fillRGBA.g) < 2 && Math.abs(startB - fillRGBA.b) < 2 && Math.abs(startA - fillRGBA.a) < 2) return;
 
             const stack = [[x, y]]; floodFillVisited.fill(0); 
             const fill32 = (fillRGBA.a << 24) | (fillRGBA.b << 16) | (fillRGBA.g << 8) | fillRGBA.r;
+            
+            // Escalar a tolerância para a gama 0-255 e lidar com preenchimento da borda (linha não preenchida)
+            const scaledTolerance = Math.round((tolerance / 100) * 255);
 
             while (stack.length > 0) {
                 const [currX, currY] = stack.pop();
@@ -1266,11 +1272,38 @@
                 floodFillVisited[posIdx] = 1;
 
                 const color32 = uint32Data[posIdx]; const idx = posIdx * 4;
-                const isMatch = tolerance == 0 ? color32 === startColor32 : Math.abs(data[idx] - startR) <= tolerance && Math.abs(data[idx+1] - startG) <= tolerance && Math.abs(data[idx+2] - startB) <= tolerance && Math.abs(data[idx+3] - startA) <= tolerance;
+                const isMatch = tolerance == 0 ? color32 === startColor32 : 
+                    Math.abs(data[idx] - startR) <= scaledTolerance && 
+                    Math.abs(data[idx+1] - startG) <= scaledTolerance && 
+                    Math.abs(data[idx+2] - startB) <= scaledTolerance && 
+                    Math.abs(data[idx+3] - startA) <= scaledTolerance;
+
                 if (isMatch) {
-                    uint32Data[posIdx] = fill32;
+                    // Preenchimento com mistura suave caso esteja preenchendo um fundo transparente sobre uma linha anti-aliasing
+                    if (startA === 0 && data[idx+3] > 0 && data[idx+3] < 255) {
+                        const oldA = data[idx+3] / 255;
+                        const newA = fillRGBA.a / 255;
+                        const outA = oldA + newA * (1 - oldA);
+                        data[idx]   = Math.round((data[idx] * oldA + fillRGBA.r * newA * (1 - oldA)) / outA);
+                        data[idx+1] = Math.round((data[idx+1] * oldA + fillRGBA.g * newA * (1 - oldA)) / outA);
+                        data[idx+2] = Math.round((data[idx+2] * oldA + fillRGBA.b * newA * (1 - oldA)) / outA);
+                        data[idx+3] = Math.round(outA * 255);
+                    } else {
+                        uint32Data[posIdx] = fill32;
+                    }
+                    
                     stack.push([currX + 1, currY]); stack.push([currX - 1, currY]);
                     stack.push([currX, currY + 1]); stack.push([currX, currY - 1]);
+                } else if (startA === 0 && data[idx+3] > 0) {
+                    // SOLUÇÃO PARA A LINHA SEM PREENCHIMENTO: injeta cor sob o pixel da borda serrilhada do pincel
+                    const oldA = data[idx+3] / 255;
+                    const newA = fillRGBA.a / 255;
+                    const outA = oldA + newA * (1 - oldA);
+                    data[idx]   = Math.round((data[idx] * oldA + fillRGBA.r * newA * (1 - oldA)) / outA);
+                    data[idx+1] = Math.round((data[idx+1] * oldA + fillRGBA.g * newA * (1 - oldA)) / outA);
+                    data[idx+2] = Math.round((data[idx+2] * oldA + fillRGBA.b * newA * (1 - oldA)) / outA);
+                    data[idx+3] = Math.round(outA * 255);
+                    // Como não adicionamos à stack aqui, ele evita vazamento do balde, mas cobre perfeitamente a linha
                 }
             }
             ctx.globalCompositeOperation = 'source-over'; ctx.putImageData(imgData, 0, 0); hasUnsavedChanges = true;
